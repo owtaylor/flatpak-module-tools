@@ -1,0 +1,4 @@
+build
+dist
+flatpak_module_tools.egg-info
+*.pyc

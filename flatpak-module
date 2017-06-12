@@ -1,0 +1,33 @@
+#!/usr/bin/python2
+
+import argparse
+from flatpak_module_tools.commands import *
+
+parser = argparse.ArgumentParser()
+
+subparsers = parser.add_subparsers()
+
+subparser = subparsers.add_parser('create-modulemd',
+		                  description='Build a modulemd file for a flatpak application or runtime')
+subparser.add_argument('--template', metavar='TEMPLATE', required=True,
+                       help='template file')
+subparser.add_argument('--package-list', metavar='PACKAGE', required=True,
+                       help='YAML file with list of packages')
+subparser.add_argument('--out', '-o', metavar='OUTFILE', required=True,
+                       help='Output modulemd file')
+subparser.add_argument('--dependency-tree', metavar='DEPENDENCY_TREE',
+                       help='File to write a dependency tree to')
+subparser.set_defaults(command=create_modulemd)
+
+subparser = subparsers.add_parser('create-flatpak',
+                                  description='Build a flatpak bundle from a module')
+subparser.add_argument('--module', metavar='NAME:STREAM', required=True,
+                       help='module to build')
+subparser.add_argument('--info', metavar='INFO_JSON', required=True,
+                       help='json file with metadata')
+subparser.add_argument("--add-local-build", "-l", action='append', dest="local_build_ids", metavar='BUILD_ID')
+subparser.add_argument("--runtime", action='store_true', default=False)
+subparser.set_defaults(command=create_flatpak)
+
+args = parser.parse_args()
+args.command.run(args)
