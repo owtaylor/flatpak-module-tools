@@ -6,14 +6,14 @@ from module_build_service.builder.utils import create_local_repo_from_koji_tag
 from distutils.version import LooseVersion
 from module_build_service import pdc
 
-REPO_F26 = "http://download.devel.redhat.com/pub/fedora/linux/development/26/Everything/x86_64/os/"
-REPO_F26_SOURCE = "http://download.devel.redhat.com/pub/fedora/linux/development/26/Everything/source/tree/"
+REPO_F26 = "https://mirrors.fedoraproject.org/metalink?repo=fedora-26&arch=x86_64"
+REPO_F26_SOURCE = "https://mirrors.fedoraproject.org/metalink?repo=fedora-source-26&arch=x86_64"
 
-REPO_F26_UPDATES = "http://download.devel.redhat.com/pub/fedora/linux/updates/26/x86_64/"
-REPO_F26_UPDATES_SOURCE = "http://download.devel.redhat.com/pub/fedora/linux/updates/26/SRPMS/"
+REPO_F26_UPDATES = "https://mirrors.fedoraproject.org/metalink?repo=updates-f26&arch=x86_64"
+REPO_F26_UPDATES_SOURCE = "https://mirrors.fedoraproject.org/metalink?repo=updates-source-f26&arch=x86_64"
 
-REPO_F26_UPDATES_TESTING = "http://download.devel.redhat.com/pub/fedora/linux/updates/testing/26/x86_64"
-REPO_F26_UPDATES_TESTING_SOURCE = "http://download.devel.redhat.com/pub/fedora/linux/updates/testing/26/SRPMS"
+REPO_F26_UPDATES_TESTING = "https://mirrors.fedoraproject.org/metalink?repo=updates-testing-f26&arch=x86_64"
+REPO_F26_UPDATES_TESTING_SOURCE = "https://mirrors.fedoraproject.org/metalink?repo=updates-testing-source-f26&arch=x86_64"
 
 class PackageInfo(object):
     def __init__(self, mbs_config):
@@ -22,12 +22,12 @@ class PackageInfo(object):
 
         self.base = dnf.Base()
 
-        self._add_repo(self.base, 'f26', REPO_F26)
-        self._add_repo(self.base, 'f26-source', REPO_F26_SOURCE)
-        self._add_repo(self.base, 'f26-updates', REPO_F26_UPDATES)
-        self._add_repo(self.base, 'f26-updates-source', REPO_F26_UPDATES_SOURCE)
-        self._add_repo(self.base, 'f26-updates-testing', REPO_F26_UPDATES_TESTING)
-        self._add_repo(self.base, 'f26-updates-testing-source', REPO_F26_UPDATES_TESTING_SOURCE)
+        self._add_repo(self.base, 'f26', metalink=REPO_F26)
+        self._add_repo(self.base, 'f26-source', metalink=REPO_F26_SOURCE)
+        self._add_repo(self.base, 'f26-updates', metalink=REPO_F26_UPDATES)
+        self._add_repo(self.base, 'f26-updates-source', metalink=REPO_F26_UPDATES_SOURCE)
+        self._add_repo(self.base, 'f26-updates-testing', metalink=REPO_F26_UPDATES_TESTING)
+        self._add_repo(self.base, 'f26-updates-testing-source', metalink=REPO_F26_UPDATES_TESTING_SOURCE)
 
         self._add_module_repo(self.base, 'base-runtime', 'f26', priority=10)
         self._add_module_repo(self.base, 'shared-userspace', 'f26', priority=10)
@@ -57,13 +57,18 @@ class PackageInfo(object):
             self._download_tag(name, stream, tag)
         self._add_repo(base, name + ':' + stream, 'file://' + path, priority=priority)
 
-    def _add_repo(self, base, reponame, repourl, priority=99):
+    def _add_repo(self, base, reponame, repourl=None, metalink=None, priority=99):
         print "Loading", reponame
         if LooseVersion(dnf.__version__) < LooseVersion("2.0.0"):
             repo = dnf.repo.Repo(reponame, self.base.conf.cachedir)
         else:
             repo = dnf.repo.Repo(reponame, self.base.conf)
-        repo.baseurl = repourl
+        if repourl is not None:
+            repo.baseurl = repourl
+        elif metalink is not None:
+            repo.metalink = metalink
+        else:
+            raise RuntimeError("Either baseurl or metalink must be specified")
         repo.priority = priority
         repo.load()
         repo.enable()
