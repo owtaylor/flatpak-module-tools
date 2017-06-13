@@ -171,5 +171,5 @@ def run(args):
         else:
             print ' ', name
 
-    with open(args.outfile, 'w') as f:
+    with open(args.out, 'w') as f:
         f.write(ordered_dump(template, default_flow_style=False, encoding="utf-8"))
