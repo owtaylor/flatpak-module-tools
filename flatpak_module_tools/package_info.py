@@ -9,8 +9,8 @@ from module_build_service import pdc
 REPO_F26 = "https://mirrors.fedoraproject.org/metalink?repo=fedora-26&arch=x86_64"
 REPO_F26_SOURCE = "https://mirrors.fedoraproject.org/metalink?repo=fedora-source-26&arch=x86_64"
 
-REPO_F26_UPDATES = "https://mirrors.fedoraproject.org/metalink?repo=updates-f26&arch=x86_64"
-REPO_F26_UPDATES_SOURCE = "https://mirrors.fedoraproject.org/metalink?repo=updates-source-f26&arch=x86_64"
+REPO_F26_UPDATES = "https://mirrors.fedoraproject.org/metalink?repo=updates-released-f26&arch=x86_64"
+REPO_F26_UPDATES_SOURCE = "https://mirrors.fedoraproject.org/metalink?repo=updates-released-source-f26&arch=x86_64"
 
 REPO_F26_UPDATES_TESTING = "https://mirrors.fedoraproject.org/metalink?repo=updates-testing-f26&arch=x86_64"
 REPO_F26_UPDATES_TESTING_SOURCE = "https://mirrors.fedoraproject.org/metalink?repo=updates-testing-source-f26&arch=x86_64"
