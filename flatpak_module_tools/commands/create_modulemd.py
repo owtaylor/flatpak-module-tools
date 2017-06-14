@@ -1,6 +1,7 @@
 #!/usr/bin/python
 from collections import OrderedDict
 import os
+import pkg_resources
 import sys
 import yaml
 
@@ -8,19 +9,42 @@ from flatpak_module_tools.dep_expander import DepExpander
 from flatpak_module_tools.module_locator import ModuleLocator
 from flatpak_module_tools.package_info import PackageInfo
 from flatpak_module_tools.yaml_utils import ordered_load, ordered_dump
+from flatpak_module_tools.utils import die
 
 def is_modular(reponame):
     return reponame != 'f26' and reponame != 'f26-updates' and reponame != 'f26-updates-testing'
 
 def run(args):
-    with open(args.template) as f:
-        template = ordered_load(f)
+    packages = None
 
-    requires_modules = [('base-runtime', 'f26'), ('shared-userspace', 'f26')]
-    buildrequires_modules = [('bootstrap', 'f26')]
+    if args.from_package:
+        with pkg_resources.resource_stream('flatpak_module_tools', 'app.template.yaml') as f:
+            template = ordered_load(f)
+        if args.template is not None:
+            die("If --from-package is specified, then --template cannot be specified")
 
-    with open(args.package_list) as f:
-        packages = yaml.load(f)
+        if args.package_list is None:
+            packages = {
+                'runtime-roots': [args.from_package]
+            }
+
+        requires_modules = [('flatpak-runtime', 'f26')]
+        buildrequires_modules = [('flatpak-runtime', 'f26'), ('common-build-dependencies', 'f26')]
+    else:
+        if args.template is None:
+            die("Either --from-package or --template must be specified")
+        with open(args.template) as f:
+            template = ordered_load(f)
+
+        requires_modules = [('base-runtime', 'f26'), ('shared-userspace', 'f26')]
+        buildrequires_modules = [('bootstrap', 'f26')]
+
+    if packages is None:
+        if args.package_list is None:
+            die("Either --from-package or --package-list must be specified")
+
+        with open(args.package_list) as f:
+            packages = yaml.safe_load(f)
 
     locator = ModuleLocator()
     if args.local_build_ids:
@@ -35,14 +59,20 @@ def run(args):
     #print sorted(source)
     #print
 
-    template['data']['profiles']['runtime']['rpms'] = sorted(bin | set(packages['extra-runtime-packages']))
+    if args.from_package is not None:
+        profile = 'default'
+    else:
+        profile = 'runtime'
+
+    template['data']['profiles'][profile]['rpms'] = sorted(bin | set(packages.get('extra-runtime-packages', ())))
 
     if args.dependency_tree:
         expander.dump_dependency_tree(bin, args.dependency_tree)
 
-    api = set(n for n in bin if not is_modular(expander.binary[n].reponame))
-    api.update(packages['extra-api'])
-    template['data']['api']['rpms'] = sorted(api)
+    if 'api' in template['data']:
+        api = set(n for n in bin if not is_modular(expander.binary[n].reponame))
+        api.update(packages.get('extra-api', ()))
+        template['data']['api']['rpms'] = sorted(api)
 
     print >>sys.stderr, "Adding extra dependencies needed at application build-time"
     extra_builddep_bin, extra_builddep_source = expander.add_binaries(packages.get('builddep-roots', ()))

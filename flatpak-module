@@ -9,9 +9,11 @@ subparsers = parser.add_subparsers()
 
 subparser = subparsers.add_parser('create-modulemd',
 		                  description='Build a modulemd file for a flatpak application or runtime')
-subparser.add_argument('--template', metavar='TEMPLATE', required=True,
+subparser.add_argument('--from-package', metavar='PACKAGE_NAME',
+                       help='Create an Flatpak application modulemd for the given packaged application')
+subparser.add_argument('--template', metavar='TEMPLATE',
                        help='template file')
-subparser.add_argument('--package-list', metavar='PACKAGE', required=True,
+subparser.add_argument('--package-list', metavar='PACKAGE',
                        help='YAML file with list of packages')
 subparser.add_argument('--out', '-o', metavar='OUTFILE', required=True,
                        help='Output modulemd file')

@@ -1,0 +1,21 @@
+document: modulemd
+version: 1
+data:
+    summary: ''
+    description: ''
+    license:
+        module: [ MIT ]
+    dependencies:
+        buildrequires:
+            flatpak-runtime: f26
+            base-runtime: f26
+            perl: f26
+            common-build-dependencies: f26
+            shared-userspace: f26
+        requires:
+            flatpak-runtime: f26
+    profiles:
+        default:
+            rpms: []
+    components:
+        rpms: []
