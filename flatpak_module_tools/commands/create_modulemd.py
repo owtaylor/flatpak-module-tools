@@ -115,9 +115,6 @@ def run(args):
                         depended_on_by[n] = set()
                     depended_on_by[n].add(name)
 
-        for name in sorted(depended_on_by):
-            print '%s:\ %s' % (name, sorted(depended_on_by[name]))
-
         batch_map = {}
         batch = 0
         while len(batch_map)  < len(names):
@@ -136,7 +133,13 @@ def run(args):
                     found_one = True
 
             if not found_one:
-                print >>sys.stderr, "Can't make progress"
+                print >>sys.stderr, "Can't make progress in sorting by build order. Remaining packages to order:"
+                print >>sys.stderr
+                for name in sorted([x for x in depended_on_by if not x in old_map]):
+                    print >>sys.stderr, '%s:\ %s' % (name, sorted(x for x in depended_on_by[name] if not x in old_map))
+                print >>sys.stderr
+                print >>sys.stderr, "Giving up"
+
                 sys.exit(1)
             batch -= 1
 
