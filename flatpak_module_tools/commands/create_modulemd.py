@@ -36,7 +36,7 @@ def run(args):
         with open(args.template) as f:
             template = ordered_load(f)
 
-        requires_modules = [('base-runtime', 'f26'), ('shared-userspace', 'f26')]
+        requires_modules = [('base-runtime', 'f26'), ('shared-userspace', 'f26'), ('common-build-dependencies', 'f26')]
         buildrequires_modules = [('bootstrap', 'f26')]
 
     if packages is None:
