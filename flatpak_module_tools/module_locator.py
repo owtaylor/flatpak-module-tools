@@ -1,5 +1,6 @@
 import module_build_service as mbs
 
+from collections import OrderedDict
 import os
 import re
 import sys
@@ -168,25 +169,33 @@ class ModuleLocator(object):
             print >>sys.stderr, "Downloading %s:%s to %s" % (build.name, build.stream, build.path)
             create_local_repo_from_koji_tag(self.conf, build.koji_tag, build.path)
 
-    def _get_yum_config_recurse(self, added, path_map, name, stream):
+    def _get_builds_recurse(self, builds, name, stream):
         key = (name, stream)
-        if key in added:
-            return ""
+        if key in builds:
+            return
 
-        config = ""
         build = self.locate(name, stream)
-        added.add(key)
-
-        self.ensure_downloaded(build)
-        cf_item, source_path, dest_path = build.yum_config()
-        config += cf_item
-        path_map[source_path] = dest_path
+        builds[key] = build
 
         for n, s in build.mmd.requires.items():
-            config += self._get_yum_config_recurse(added, path_map, n, s)
-        return config
+            self._get_builds_recurse(builds, n, s)
+
+    def get_builds(self, modules):
+        builds = OrderedDict()
+        for name, stream in modules:
+            self._get_builds_recurse(builds, name, stream)
+
+        return builds
 
     def build_yum_config(self, name, stream):
-        added = set()
+        builds = get_builds([name, stream])
+        config = ""
+
         path_map = {}
-        return self._get_yum_config_recurse(added, path_map, name, stream), path_map
+        for build in builds.values():
+            self.ensure_downloaded(build)
+            cf_item, source_path, dest_path = build.yum_config()
+            config += cf_item
+            path_map[source_path] = dest_path
+
+        return config, path_map

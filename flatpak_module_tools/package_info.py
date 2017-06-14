@@ -16,9 +16,8 @@ REPO_F26_UPDATES_TESTING = "https://mirrors.fedoraproject.org/metalink?repo=upda
 REPO_F26_UPDATES_TESTING_SOURCE = "https://mirrors.fedoraproject.org/metalink?repo=updates-testing-source-f26&arch=x86_64"
 
 class PackageInfo(object):
-    def __init__(self, mbs_config):
-        self.mbs_config = mbs_config
-        self.session = pdc.get_pdc_client_session(self.mbs_config)
+    def __init__(self, locator, requires_modules, buildrequires_modules):
+        self.locator = locator
 
         self.base = dnf.Base()
 
@@ -29,33 +28,20 @@ class PackageInfo(object):
         self._add_repo(self.base, 'f26-updates-testing', metalink=REPO_F26_UPDATES_TESTING)
         self._add_repo(self.base, 'f26-updates-testing-source', metalink=REPO_F26_UPDATES_TESTING_SOURCE)
 
-        self._add_module_repo(self.base, 'base-runtime', 'f26', priority=10)
-        self._add_module_repo(self.base, 'shared-userspace', 'f26', priority=10)
-        self._add_module_repo(self.base, 'perl', 'f26', priority=10)
-        self._add_module_repo(self.base, 'common-build-dependencies', 'f26', priority=10)
-#        self._add_module_repo(self.base, 'bootstrap', 'f26', priority=20)
+        requires_builds = self.locator.get_builds(requires_modules)
+        for key, build in requires_builds.items():
+            name, stream = key
+            locator.ensure_downloaded(build)
+            self._add_repo(self.base, name + ':' + stream, 'file://' + build.path, priority=10)
+
+        buildrequires_builds = self.locator.get_builds(buildrequires_modules)
+        for key, build in buildrequires_builds.items():
+            if not key in requires_builds:
+                name, stream = key
+                locator.ensure_downloaded(build)
+                self._add_repo(self.base, name + ':' + stream, 'file://' + build.path, priority=20)
+
         self.base.fill_sack(load_available_repos=True, load_system_repo=False)
-
-#        self.base = dnf.Base()
-#        self.base.read_all_repos()
-#        dnfpluginscore.lib.enable_source_repos(self.base.repos)
-
-#        self.base.fill_sack(load_system_repo=False)
-
-    def _module_to_tag(self, name, stream):
-        return pdc.get_module_tag(self.session, {'variant_id': name, 'variant_stream': stream, 'variant_type': 'module', 'active': True})
-
-    def _download_tag(self, name, stream, tag):
-        repo_dir = os.path.join(self.mbs_config.cache_dir, "koji_tags", tag)
-        print >>sys.stderr, "Downloading %s:%s to %s" % (name, stream, repo_dir)
-        create_local_repo_from_koji_tag(self.mbs_config, tag, repo_dir)
-
-    def _add_module_repo(self, base, name, stream, priority=99):
-        tag = self._module_to_tag(name, stream)
-        path = os.path.join(self.mbs_config.cache_dir, 'koji_tags', tag)
-        if not os.path.exists(path):
-            self._download_tag(name, stream, tag)
-        self._add_repo(base, name + ':' + stream, 'file://' + path, priority=priority)
 
     def _add_repo(self, base, reponame, repourl=None, metalink=None, priority=99):
         print "Loading", reponame

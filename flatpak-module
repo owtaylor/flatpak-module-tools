@@ -17,6 +17,7 @@ subparser.add_argument('--out', '-o', metavar='OUTFILE', required=True,
                        help='Output modulemd file')
 subparser.add_argument('--dependency-tree', metavar='DEPENDENCY_TREE',
                        help='File to write a dependency tree to')
+subparser.add_argument("--add-local-build", "-l", action='append', dest="local_build_ids", metavar='BUILD_ID')
 subparser.set_defaults(command=create_modulemd)
 
 subparser = subparsers.add_parser('create-flatpak',

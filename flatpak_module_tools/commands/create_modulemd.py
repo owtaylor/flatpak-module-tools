@@ -5,6 +5,7 @@ import sys
 import yaml
 
 from flatpak_module_tools.dep_expander import DepExpander
+from flatpak_module_tools.module_locator import ModuleLocator
 from flatpak_module_tools.package_info import PackageInfo
 from flatpak_module_tools.yaml_utils import ordered_load, ordered_dump
 
@@ -12,26 +13,21 @@ def is_modular(reponame):
     return reponame != 'f26' and reponame != 'f26-updates' and reponame != 'f26-updates-testing'
 
 def run(args):
-    class Config(object):
-        pass
-
-    conf = Config()
-    conf.pdc_url = 'http://pdc.fedoraproject.org/rest_api/v1'
-    conf.pdc_insecure = False
-    conf.pdc_develop = True
-
-    conf.koji_config = '/etc/module-build-service/koji.conf'
-    conf.koji_profile = 'koji'
-
-    conf.cache_dir = os.path.expanduser('~/modulebuild/cache')
-
-    pkgs = PackageInfo(conf)
-
     with open(args.template) as f:
         template = ordered_load(f)
 
+    requires_modules = [('base-runtime', 'f26'), ('shared-userspace', 'f26')]
+    buildrequires_modules = [('bootstrap', 'f26')]
+
     with open(args.package_list) as f:
         packages = yaml.load(f)
+
+    locator = ModuleLocator()
+    if args.local_build_ids:
+        for build_id in args.local_build_ids:
+            locator.add_local_build(build_id)
+
+    pkgs = PackageInfo(locator, requires_modules, buildrequires_modules)
 
     expander = DepExpander(pkgs)
     bin, source = expander.add_binaries(packages['runtime-roots'])
