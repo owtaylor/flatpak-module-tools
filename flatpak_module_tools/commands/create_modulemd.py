@@ -54,6 +54,13 @@ def run(args):
     pkgs = PackageInfo(locator, requires_modules, buildrequires_modules)
 
     expander = DepExpander(pkgs)
+    for package, patterns in packages.get('ignore-requires', {}).items():
+        for pattern in patterns:
+            expander.add_ignore_requires(package, pattern)
+    for package, requirements in packages.get('extra-requires', {}).items():
+        for requirement in requirements:
+            expander.add_extra_requires(package, requirement)
+
     bin, source = expander.add_binaries(packages['runtime-roots'])
     #print "All packages to install:"
     #print sorted(source)

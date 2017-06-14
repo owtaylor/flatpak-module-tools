@@ -29,11 +29,23 @@ class DepExpander(object):
         self.source = {}
         self.source_to_binary = {}
         self.required_by = {}
+        self.extra_requires = {}
+        self.ignore_requires = {}
         self.include_builddeps = False
 
     def binary_to_source(self, binary_name):
         pkg = self.binary[binary_name]
         return hawkey.split_nevra(pkg.sourcerpm).name
+
+    def add_extra_requires(self, package, requirement):
+        if not package in self.extra_requires:
+            self.extra_requires[package] = []
+        self.extra_requires[package].append(requirement)
+
+    def add_ignore_requires(self, package, pattern):
+        if not package in self.extra_requires:
+            self.ignore_requires[package] = []
+        self.ignore_requires[package].append(re.compile(pattern))
 
     def _add_binary_package(self, pkg, new_binaries, new_sources, include_source, required_by):
         self.binary[pkg.name] = pkg
@@ -67,35 +79,55 @@ class DepExpander(object):
 
         raise Exception("No package named " + name)
 
+    def _add_requirement(self, pkg, r, new_binaries, new_sources, include_source):
+        providing = []
+        already_provided = False
+        for p in self.pkgs.base.sack.query().filter(provides=r):
+            if not self.include_builddeps and p.repo.priority == 20:
+                continue
+            #, arch__eq=['x86_64','noarch']
+            if p.arch == 'src':
+                continue
+            if p.name in self.binary:
+                already_provided = True
+            else:
+                providing.append(p)
+        if not already_provided:
+            if len(providing) == 0:
+                raise Exception("Couldn't find package providing " + str(r) + " for " + pkg.name)
+#                print [(p.name, p.version, p.release, p.arch, p.reponame, p.repo.priority) for p in providing]
+            providing.sort(package_cmp)
+#                print [(p.name, p.version, p.release, p.arch, p.reponame, p.repo.priority) for p in providing]
+            self._add_binary_package(providing[0], new_binaries, new_sources, include_source, pkg.name)
+
     def _add_requires(self, pkg, new_binaries, new_sources, include_source):
         requires = pkg.requires
+        ignore_requires = self.ignore_requires.get(pkg.name, ())
         for r in requires:
             if not isinstance(r, basestring):
                 s = str(r)
-                m = re.match('(.*?)\(([^\)]+)\)$', s)
-                if m is not None:
-                    if m.group(2).startswith('armv7hl'):
-                        print >>sys.stderr, "\nRemoving spurious architecture from SRPM: " + str(r)
-                        r = m.group(1)
-            providing = []
-            already_provided = False
-            for p in self.pkgs.base.sack.query().filter(provides=r):
-                if not self.include_builddeps and p.repo.priority == 20:
-                    continue
-                #, arch__eq=['x86_64','noarch']
-                if p.arch == 'src':
-                    continue
-                if p.name in self.binary:
-                    already_provided = True
-                else:
-                    providing.append(p)
-            if not already_provided:
-                if len(providing) == 0:
-                    raise Exception("Couldn't find package providing " + str(r) + " for " + pkg.name)
-#                print [(p.name, p.version, p.release, p.arch, p.reponame, p.repo.priority) for p in providing]
-                providing.sort(package_cmp)
-#                print [(p.name, p.version, p.release, p.arch, p.reponame, p.repo.priority) for p in providing]
-                self._add_binary_package(providing[0], new_binaries, new_sources, include_source, pkg.name)
+            else:
+                s = r
+
+            m = re.match('(.*?)\(([^\)]+)\)$', s)
+            if m is not None:
+                if m.group(2).startswith('armv7hl'):
+                    print >>sys.stderr, "\nRemoving spurious architecture from SRPM: " + str(r)
+                    r = s = m.group(1)
+
+            found_ignore = False
+            for pattern in ignore_requires:
+                m = pattern.match(s)
+                print repr(pattern), s
+                if m and m.end() == len(s):
+                    found_ignore = True
+                    break
+
+            if not found_ignore:
+                self._add_requirement(pkg, r, new_binaries, new_sources, include_source)
+
+        for r in self.extra_requires.get(pkg.name, ()):
+            self._add_requirement(pkg, r, new_binaries, new_sources, include_source)
 
     def _complete_dependencies(self, new_binaries, new_sources, include_source):
         print >>sys.stderr, "Adding dependencies of binary packages"
