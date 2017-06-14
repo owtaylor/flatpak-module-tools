@@ -45,7 +45,7 @@ def run(args):
     template['data']['api']['rpms'] = sorted(api)
 
     print >>sys.stderr, "Adding extra dependencies needed at application build-time"
-    extra_builddep_bin, extra_builddep_source = expander.add_binaries(packages['builddep-roots'])
+    extra_builddep_bin, extra_builddep_source = expander.add_binaries(packages.get('builddep-roots', ()))
 
     bin.update(extra_builddep_bin)
     source.update(extra_builddep_source)
@@ -56,7 +56,7 @@ def run(args):
 
     def get_builddeps(name):
         exp = DepExpander(pkgs)
-        for p in packages['build-order-ignore']:
+        for p in packages.get('build-order-ignore', ()):
             exp.binary[p] = None
         _, source = exp.add_builddeps([name], include_source=True)
         return source
@@ -121,7 +121,7 @@ def run(args):
         if buildorder is not None:
             component['buildorder'] = buildorder
 
-    extra_components = packages['extra-components']
+    extra_components = packages.get('extra-components', {})
 
     for name in sorted(to_build | set(extra_components.keys())):
         if name in extra_components:
@@ -140,7 +140,7 @@ def run(args):
                 rationale = ''
             add_component(name, rationale, ref='f26', buildorder=batch_map[name])
 
-    for package, to_override in packages['overrides'].items():
+    for package, to_override in packages.get('overrides', {}).items():
         for k, v in to_override.items():
             components[package][k] = v
 
