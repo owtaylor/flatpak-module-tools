@@ -1,5 +1,4 @@
 import ConfigParser
-import json
 import os
 import shutil
 import subprocess
@@ -68,13 +67,11 @@ def update_desktop_files(app_id, builddir):
                                                     basename[:-len('.desktop')],
                                                     basename)))
 class FlatpakBuilder(object):
-    def __init__(self, build, jsonfile, workdir, runtime):
+    def __init__(self, build, info, workdir, runtime):
         self.build = build
+        self.info = info
         self.workdir = workdir
         self.runtime = runtime
-
-        with open(jsonfile) as f:
-            self.info = json.load(f)
 
     def _build_runtime(self):
         builddir = os.path.join(self.workdir, "build")

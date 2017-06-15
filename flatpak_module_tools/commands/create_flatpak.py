@@ -24,6 +24,9 @@ def run(args):
     module_name = parts[0]
     module_stream = parts[1]
 
+    with open(args.info) as f:
+        info = json.load(f)
+
     build = locator.locate(module_name, module_stream)
 
     builddir = os.path.expanduser("~/modulebuild/flatpaks")
@@ -38,7 +41,7 @@ def run(args):
     fs_builder = FilesystemBuilder(locator, build, workdir, runtime=args.runtime)
     fs_builder.build_filesystem()
 
-    flatpak_builder = FlatpakBuilder(build, args.info, workdir, runtime=args.runtime)
+    flatpak_builder = FlatpakBuilder(build, info, workdir, runtime=args.runtime)
     flatpak_builder.build_flatpak()
 
 
