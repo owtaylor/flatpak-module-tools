@@ -68,10 +68,15 @@ def run(args):
 
     if args.from_package is not None:
         profile = 'default'
-    else:
-        profile = 'runtime'
+        template['data']['profiles']['default']['rpms'] = sorted(set(packages.get('runtime-roots')) |
+                                                                 set(packages.get('extra-runtime-packages', ())))
 
-    template['data']['profiles'][profile]['rpms'] = sorted(bin | set(packages.get('extra-runtime-packages', ())))
+        main_package = expander.binary[args.from_package]
+        template['data']['summary'] = main_package.summary
+        template['data']['description'] = main_package.description
+    else:
+        template['data']['profiles']['runtime']['rpms'] = sorted(bin |
+                                                                 set(packages.get('extra-runtime-packages', ())))
 
     if args.dependency_tree:
         expander.dump_dependency_tree(bin, args.dependency_tree)
