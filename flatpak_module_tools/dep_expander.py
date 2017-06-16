@@ -118,7 +118,6 @@ class DepExpander(object):
             found_ignore = False
             for pattern in ignore_requires:
                 m = pattern.match(s)
-                print repr(pattern), s
                 if m and m.end() == len(s):
                     found_ignore = True
                     break
