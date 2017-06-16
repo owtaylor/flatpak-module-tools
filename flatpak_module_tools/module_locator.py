@@ -188,7 +188,7 @@ class ModuleLocator(object):
         return builds
 
     def build_yum_config(self, name, stream):
-        builds = get_builds([name, stream])
+        builds = self.get_builds([(name, stream)])
         config = ""
 
         path_map = {}
