@@ -38,7 +38,7 @@ def run(args):
     os.makedirs(workdir)
     print >>sys.stderr, "Writing results to {}".format(workdir)
 
-    fs_builder = FilesystemBuilder(locator, build, workdir, runtime=args.runtime)
+    fs_builder = FilesystemBuilder(locator, build, info, workdir, runtime=args.runtime)
     fs_builder.build_filesystem()
 
     flatpak_builder = FlatpakBuilder(build, info, workdir, runtime=args.runtime)

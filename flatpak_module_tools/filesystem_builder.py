@@ -8,9 +8,10 @@ from utils import check_call
 IMAGEBUILDER = os.path.expanduser("~/go/bin/imagebuilder")
 
 class FilesystemBuilder(object):
-    def __init__(self, locator, build, workdir, runtime):
+    def __init__(self, locator, build, info, workdir, runtime):
         self.locator = locator
         self.build = build
+        self.info = info
         self.workdir = workdir
         self.runtime = runtime
         self.docker_tag = "flatpak-module:{}-{}-{}".format(build.name, build.stream, build.version)
@@ -21,6 +22,14 @@ class FilesystemBuilder(object):
         with open(repofile, "w") as f:
             f.write(config)
         self.path_map = path_map
+
+    def _write_cleanupscript(self):
+        cleanupscript = os.path.join(self.workdir, "cleanup.sh")
+        with open(cleanupscript, "w") as f:
+            for line in self.info.get('cleanup-commands', []):
+                f.write(line)
+                f.write("\n")
+        os.chmod(cleanupscript, 0755)
 
     def _write_dockerfile(self):
         dockerfile = os.path.join(self.workdir, "Dockerfile")
@@ -33,6 +42,8 @@ class FilesystemBuilder(object):
 
 COPY module.repo  /var/tmp/flatpak-build/etc/yum.repos.d/
 RUN dnf -y --nogpgcheck --installroot=/var/tmp/flatpak-build install {}
+COPY cleanup.sh /var/tmp/flatpak-build/tmp/
+RUN chroot /var/tmp/flatpak-build/ /bin/sh /tmp/cleanup.sh
 """.format(" ".join(sorted(packages))))
 
     def _build_image(self):
@@ -138,6 +149,7 @@ RUN dnf -y --nogpgcheck --installroot=/var/tmp/flatpak-build install {}
 
     def build_filesystem(self):
         self._write_repofile()
+        self._write_cleanupscript()
         self._write_dockerfile()
         self._build_image()
         self._export_image()
