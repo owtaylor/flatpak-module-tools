@@ -67,11 +67,12 @@ def update_desktop_files(app_id, builddir):
                                                     basename[:-len('.desktop')],
                                                     basename)))
 class FlatpakBuilder(object):
-    def __init__(self, build, info, workdir, runtime):
+    def __init__(self, build, info, workdir, runtime, oci):
         self.build = build
         self.info = info
         self.workdir = workdir
         self.runtime = runtime
+        self.oci = oci
 
     def _build_runtime(self):
         builddir = os.path.join(self.workdir, "build")
@@ -105,13 +106,16 @@ GI_TYPELIB_PATH=/app/lib64/girepository-1.0
         }
 
         tarfile = os.path.join(self.workdir, 'filesystem.tar.gz')
-        outfile = os.path.join(self.workdir, runtime_id + '.flatpak')
 
         check_call(['ostree', 'commit', '--generate-sizes', '--repo', repo, '--owner-uid=0', '--owner-gid=0', '--no-xattrs', '--branch', runtime_ref, '-s', 'build of ' + runtime_ref, '--tree=tar=' + tarfile, "--tree=dir=" + builddir])
         check_call(['ostree', 'summary', '-u', '--repo', repo])
 
-#    check_call(['flatpak', 'build-bundle', 'exportrepo', '--oci', '--runtime', outfile, runtime_id, runtime_version])
-        check_call(['flatpak', 'build-bundle', repo, '--runtime', outfile, runtime_id, runtime_version])
+        if self.oci:
+            outfile = os.path.join(self.workdir, runtime_id)
+            check_call(['flatpak', 'build-bundle', repo, '--oci', '--runtime', outfile, runtime_id, runtime_version])
+        else:
+            outfile = os.path.join(self.workdir, runtime_id + '.flatpak')
+            check_call(['flatpak', 'build-bundle', repo, '--runtime', outfile, runtime_id, runtime_version])
 
         print >>sys.stderr, 'Wrote', outfile
 
@@ -135,8 +139,12 @@ GI_TYPELIB_PATH=/app/lib64/girepository-1.0
         check_call(['flatpak', 'build-finish'] + self.info['finish-args'] + [builddir])
         check_call(['flatpak', 'build-export', repo, builddir])
 
-        outfile = os.path.join(self.workdir, app_id + '.flatpak')
-        check_call(['flatpak', 'build-bundle', repo, outfile, app_id]) # FIXME version?
+        if self.oci:
+            outfile = os.path.join(self.workdir, app_id)
+            check_call(['flatpak', 'build-bundle', repo, '--oci', outfile, app_id]) # FIXME version?
+        else:
+            outfile = os.path.join(self.workdir, app_id + '.flatpak')
+            check_call(['flatpak', 'build-bundle', repo, outfile, app_id]) # FIXME version?
 
         print >>sys.stderr, 'Wrote', outfile
 

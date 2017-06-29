@@ -30,6 +30,7 @@ subparser.add_argument('--info', metavar='INFO_JSON', required=True,
                        help='json file with metadata')
 subparser.add_argument("--add-local-build", "-l", action='append', dest="local_build_ids", metavar='BUILD_ID')
 subparser.add_argument("--runtime", action='store_true', default=False)
+subparser.add_argument("--oci", action='store_true', default=False)
 subparser.set_defaults(command=create_flatpak)
 
 args = parser.parse_args()

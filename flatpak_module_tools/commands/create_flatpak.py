@@ -41,7 +41,7 @@ def run(args):
     fs_builder = FilesystemBuilder(locator, build, info, workdir, runtime=args.runtime)
     fs_builder.build_filesystem()
 
-    flatpak_builder = FlatpakBuilder(build, info, workdir, runtime=args.runtime)
+    flatpak_builder = FlatpakBuilder(build, info, workdir, runtime=args.runtime, oci=args.oci)
     flatpak_builder.build_flatpak()
 
 
