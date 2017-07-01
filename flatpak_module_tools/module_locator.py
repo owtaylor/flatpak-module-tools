@@ -63,7 +63,7 @@ class ModuleLocator(object):
 
     def __init__(self):
         self.conf = ModuleLocator.Config()
-        self.conf.pdc_url = 'http://pdc.fedoraproject.org/rest_api/v1'
+        self.conf.pdc_url = 'https://pdc.fedoraproject.org/rest_api/v1'
         self.conf.pdc_insecure = False
         self.conf.pdc_develop = True
 
