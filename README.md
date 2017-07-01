@@ -40,12 +40,22 @@ Example:
 
 flatpak-module create-flatpak
 =============================
-The `flatpak-module create-flatpak` builds a flatpak application or runtime
+The `flatpak-module create-flatpak` command builds a flatpak application or runtime
 out of a previously built module.
 
 Example:
 
     flatpak-module create-flatpak --add-local-build flatpak-runtime:f26 --add-local-build eog:f26 --module eog:f26 --info flatpak.json
+
+flatpak-module compose
+======================
+The `flatpak-module compose` command builds a flat single yum repository out of a
+previously built module. This can be used to simulate what module composes in the
+Fedora infrastructure may look like.
+
+Example:
+
+    flatpak-module compose --add-local-build flatpak-runtime:f26 --module flatpak-runtime:f26
 
 LICENSE
 =======

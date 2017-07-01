@@ -33,5 +33,12 @@ subparser.add_argument("--runtime", action='store_true', default=False)
 subparser.add_argument("--oci", action='store_true', default=False)
 subparser.set_defaults(command=create_flatpak)
 
+subparser = subparsers.add_parser('compose',
+                                  description='Create a yum repository for a module')
+subparser.add_argument('--module', metavar='NAME:STREAM', required=True,
+                       help='module to compose')
+subparser.add_argument("--add-local-build", "-l", action='append', dest="local_build_ids", metavar='BUILD_ID')
+subparser.set_defaults(command=compose)
+
 args = parser.parse_args()
 args.command.run(args)
