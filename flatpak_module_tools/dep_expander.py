@@ -23,7 +23,7 @@ def package_cmp(a, b):
         return 1
 
 class DepExpander(object):
-    def __init__(self, pkgs):
+    def __init__(self, pkgs, verbose=False):
         self.pkgs = pkgs
         self.binary = {}
         self.source = {}
@@ -32,6 +32,7 @@ class DepExpander(object):
         self.extra_requires = {}
         self.ignore_requires = {}
         self.include_builddeps = False
+        self.verbose = verbose
 
     def binary_to_source(self, binary_name):
         pkg = self.binary[binary_name]
@@ -52,7 +53,8 @@ class DepExpander(object):
         if required_by:
             self.required_by[pkg.name] = required_by
         new_binaries.add(pkg.name)
-#        print >>sys.stderr, str(pkg), required_by
+        if self.verbose:
+            print >>sys.stderr, str(pkg), required_by
 
         if not include_source:
             return
