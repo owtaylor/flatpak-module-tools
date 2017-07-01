@@ -32,18 +32,18 @@ class PackageInfo(object):
         for key, build in requires_builds.items():
             name, stream = key
             locator.ensure_downloaded(build)
-            self._add_repo(self.base, name + ':' + stream, 'file://' + build.path, priority=10)
+            self._add_repo(self.base, name + ':' + stream, 'file://' + build.path, priority=10, excludepkgs=build.mmd.filter.rpms)
 
         buildrequires_builds = self.locator.get_builds(buildrequires_modules)
         for key, build in buildrequires_builds.items():
             if not key in requires_builds:
                 name, stream = key
                 locator.ensure_downloaded(build)
-                self._add_repo(self.base, name + ':' + stream, 'file://' + build.path, priority=20)
+                self._add_repo(self.base, name + ':' + stream, 'file://' + build.path, priority=20, excludepkgs=build.mmd.filter.rpms)
 
         self.base.fill_sack(load_available_repos=True, load_system_repo=False)
 
-    def _add_repo(self, base, reponame, repourl=None, metalink=None, priority=99):
+    def _add_repo(self, base, reponame, repourl=None, metalink=None, priority=99, excludepkgs=[]):
         print "Loading", reponame
         if LooseVersion(dnf.__version__) < LooseVersion("2.0.0"):
             repo = dnf.repo.Repo(reponame, self.base.conf.cachedir)
@@ -56,6 +56,7 @@ class PackageInfo(object):
         else:
             raise RuntimeError("Either baseurl or metalink must be specified")
         repo.priority = priority
+        repo.excludepkgs = list(excludepkgs)
         repo.load()
         repo.enable()
         base.repos.add(repo)

@@ -17,11 +17,13 @@ class Build(object):
         modulebuild = os.path.expanduser("~/modulebuild")
         assert self.path.startswith(modulebuild)
         dest_path = "/modulebuild" + self.path[len(modulebuild):]
+        exclude = ','.join(self.mmd.filter.rpms)
         cf_item = """[{name}-{stream}]
 name={name}-{stream}
 baseurl=file://{path}
 enabled=1
-""".format(name=self.name, stream=self.stream, path=dest_path)
+excludepkgs={exclude}
+""".format(name=self.name, stream=self.stream, path=dest_path, exclude=exclude)
 
         if self.name == 'base-runtime':
             cf_item += "exclude= gobject-introspection* libpeas*\n"
