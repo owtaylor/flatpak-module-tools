@@ -107,7 +107,7 @@ GI_TYPELIB_PATH=/app/lib64/girepository-1.0
 
         tarfile = os.path.join(self.workdir, 'filesystem.tar.gz')
 
-        check_call(['ostree', 'commit', '--generate-sizes', '--repo', repo, '--owner-uid=0', '--owner-gid=0', '--no-xattrs', '--branch', runtime_ref, '-s', 'build of ' + runtime_ref, '--tree=tar=' + tarfile, "--tree=dir=" + builddir])
+        check_call(['ostree', 'commit', '--repo', repo, '--owner-uid=0', '--owner-gid=0', '--no-xattrs', '--branch', runtime_ref, '-s', 'build of ' + runtime_ref, '--tree=tar=' + tarfile, "--tree=dir=" + builddir])
         check_call(['ostree', 'summary', '-u', '--repo', repo])
 
         if self.oci:
