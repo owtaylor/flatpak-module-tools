@@ -5,54 +5,60 @@ import os
 import re
 import sys
 
-import modulemd
+import gi
+gi.require_version('Modulemd', '1.0')
+from gi.repository import Modulemd
+
+from pdc_client import PDCClient
 
 from module_build_service.builder.utils import create_local_repo_from_koji_tag
-from module_build_service import pdc
 
-from utils import die
+from utils import die, info
+from flatpak_builder import ModuleInfo
 
-class Build(object):
+class Build(ModuleInfo):
     def yum_config(self):
-        modulebuild = os.path.expanduser("~/modulebuild")
-        assert self.path.startswith(modulebuild)
-        dest_path = "/modulebuild" + self.path[len(modulebuild):]
-        exclude = ','.join(self.mmd.filter.rpms)
-        cf_item = """[{name}-{stream}]
+        exclude = ','.join(self.mmd.props.rpm_filter.get())
+
+        return """[{name}-{stream}]
 name={name}-{stream}
 baseurl=file://{path}
 enabled=1
 excludepkgs={exclude}
-""".format(name=self.name, stream=self.stream, path=dest_path, exclude=exclude)
-
-        if self.name == 'base-runtime':
-            cf_item += "exclude= gobject-introspection* libpeas*\n"
-
-        return cf_item, self.path, dest_path
+priority=10
+""".format(name=self.name, stream=self.stream, path=self.path, exclude=exclude)
 
 class LocalBuild(Build):
     def __init__(self, path):
         mmd_path = os.path.join(path, 'modules.yaml')
-        mmds = modulemd.load_all(mmd_path)
+        mmds = Modulemd.Module.new_all_from_file(mmd_path)
         mmd = mmds[0]
+        mmd.upgrade()
+
+        self.name = mmd.props.name
+        self.stream = mmd.props.stream
+        self.version = mmd.props.version
 
         self.path = path
         self.mmd = mmd
-        self.name = mmd.name
-        self.stream = mmd.stream
-        self.version = mmd.version
+
+        self.rpms = [a + '.rpm' for a in mmd.props.rpm_artifacts.get()]
 
     def __repr__(self):
         return '<LocalBuild {name}:{stream}:{version}>'.format(**self.__dict__)
 
 class KojiBuild(Build):
     def __init__(self, module, path):
-        self.koji_tag = module['koji_tag']
+        self.name = module['name']
+        self.stream = module['stream']
+        self.version = module['version']
+
         self.path = path
-        self.mmd = pdc._extract_modulemd(module['modulemd'])
-        self.name = module['variant_id']
-        self.stream = module['variant_version']
-        self.version = module['variant_release']
+        self.mmd = Modulemd.Module.new_from_string(module['modulemd'])
+        # Make sure that we have the v2 'dependencies' format
+        self.mmd.upgrade()
+
+        self.koji_tag = module['koji_tag']
 
     def __repr__(self):
         return '<KojiBuild {name}:{stream}:{version}>'.format(**self.__dict__)
@@ -73,7 +79,11 @@ class ModuleLocator(object):
         self.conf.cache_dir = os.path.expanduser('~/modulebuild/cache')
         self.conf.mock_resultsdir = os.path.expanduser('~/modulebuild/builds')
 
-        self.session = pdc.get_pdc_client_session(self.conf)
+        # The effect of develop=True is that requests to the PDC are made without authentication;
+        # since we our interaction with the PDC is read-only, this is fine for our needs and
+        # makes things simpler.
+        self.pdc_client = PDCClient(server=self.conf.pdc_url, ssl_verify=True, develop=True)
+
         self.local_build_ids = []
         self._local_build_info = None
 
@@ -81,7 +91,7 @@ class ModuleLocator(object):
 
     def download_tag(self, name, stream, tag):
         repo_dir = os.path.join(self.conf.cache_dir, "koji_tags", tag)
-        print >>sys.stderr, "Downloading %s:%s to %s" % (name, stream, repo_dir)
+        info("Downloading %s:%s to %s" % (name, stream, repo_dir))
         create_local_repo_from_koji_tag(self.conf, tag, repo_dir)
 
     def add_local_build(self, build_id):
@@ -149,7 +159,8 @@ class ModuleLocator(object):
         self._local_build_info = result
         return self._local_build_info
 
-    def locate(self, name, stream):
+    def locate(self, name, stream, version=None):
+        # FIXME: handle version
         key = (name, stream)
         if key in self.get_local_build_info():
             return self.get_local_build_info()[key]
@@ -157,10 +168,28 @@ class ModuleLocator(object):
         if key in self._cached_remote_builds:
             return self._cached_remote_builds[key]
 
-        print >>sys.stderr, "Querying PDC for information on %s:%s" % (name, stream)
-        module = pdc.get_module(self.session, {'variant_id': name, 'variant_stream': stream, 'variant_type': 'module', 'active': True})
-        if not module:
-            die("Can't find module for {}:{}".format(name, stream))
+        info("Querying PDC for information on %s:%s" % (name, stream))
+
+        query = {
+            'name': name,
+            'stream': stream,
+            'active': True,
+        }
+
+        if version is not None:
+            query['version'] = version
+
+        retval = self.pdc_client['modules/'](page_size=1,
+                                             fields=['name', 'stream', 'version', 'modulemd', 'rpms', 'koji_tag'],
+                                             ordering='-version',
+                                             **query)
+        # Error handling
+        if len(retval['results']) == 0:
+            raise RuntimeError("Failed to find module in PDC %r" % query)
+        if len(retval['results']) != 1:
+            raise RuntimeError("Multiple modules in the PDC matched %r" % query)
+
+        module = retval['results'][0]
 
         path = os.path.join(self.conf.cache_dir, "koji_tags", module['koji_tag'])
         self._cached_remote_builds[key] = KojiBuild(module, path)
@@ -168,36 +197,34 @@ class ModuleLocator(object):
 
     def ensure_downloaded(self, build):
         if not os.path.exists(build.path):
-            print >>sys.stderr, "Downloading %s:%s to %s" % (build.name, build.stream, build.path)
+            info("Downloading %s:%s to %s" % (build.name, build.stream, build.path))
             create_local_repo_from_koji_tag(self.conf, build.koji_tag, build.path)
 
     def _get_builds_recurse(self, builds, name, stream):
-        key = (name, stream)
-        if key in builds:
-            return
+        if name in builds:
+            build = builds[name]
+            if build.stream != stream:
+                raise RuntimeError("Stream conflict for {}, both {} and {} are required",
+                                   name, build.stream, stream)
+            return build
+
 
         build = self.locate(name, stream)
-        builds[key] = build
+        builds[name] = build
 
-        for n, s in build.mmd.requires.items():
-            self._get_builds_recurse(builds, n, s)
+        dependencies = build.mmd.props.dependencies
+        # A built module should have its dependencies already expanded
+        assert len(dependencies) == 1
 
-    def get_builds(self, modules):
+        for n, required_streams in dependencies[0].props.requires.items():
+            rs = required_streams.get()
+            # should already be expanded to a single stream
+            assert len(rs) == 1
+            self._get_builds_recurse(builds, n, rs[0])
+
+    def get_builds(self, name, stream, version=None):
         builds = OrderedDict()
-        for name, stream in modules:
-            self._get_builds_recurse(builds, name, stream)
+
+        self._get_builds_recurse(builds, name, stream)
 
         return builds
-
-    def build_yum_config(self, name, stream):
-        builds = self.get_builds([(name, stream)])
-        config = ""
-
-        path_map = {}
-        for build in builds.values():
-            self.ensure_downloaded(build)
-            cf_item, source_path, dest_path = build.yum_config()
-            config += cf_item
-            path_map[source_path] = dest_path
-
-        return config, path_map

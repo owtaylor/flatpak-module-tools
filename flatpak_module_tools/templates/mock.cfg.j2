@@ -1,0 +1,39 @@
+config_opts['root'] = 'flatpak-module-{{ arch }}'
+config_opts['target_arch'] = '{{ arch }}'
+config_opts['legal_host_arches'] = ('{{ arch }}',)
+config_opts['chroot_setup_cmd'] = 'install /bin/bash glibc-minimal-langpack shadow-utils tar'
+config_opts['dist'] = 'fc{{ ver }}'  # only useful for --resultdir variable subst
+config_opts['extra_chroot_dirs'] = [ '/run/lock', ]
+config_opts['releasever'] = '{{ ver }}'
+config_opts['plugin_conf']['root_cache_enable'] = False
+
+config_opts['package_manager'] = 'dnf'
+
+config_opts['yum.conf'] = """
+[main]
+keepcache=1
+debuglevel=2
+reposdir=/dev/null
+logfile=/var/log/yum.log
+retries=20
+obsoletes=1
+gpgcheck=0
+assumeyes=1
+syslog_ident=mock
+syslog_device=
+install_weak_deps=0
+metadata_expire=0
+best=1
+includepkgs={{includepkgs|join(',')}}
+
+# repos
+
+[fedora]
+name=fedora
+baseurl=https://kojipkgs.fedoraproject.org/repos/f{{ ver }}-build/latest/$basearch/
+priority=20
+
+{% for repo in repos %}
+{{ repo }}
+{%- endfor %}
+"""
