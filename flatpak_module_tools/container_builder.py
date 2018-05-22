@@ -70,7 +70,7 @@ class ContainerBuilder(object):
 
         source = FlatpakSourceInfo(self.flatpak_yaml, builds, base_build, self.module_spec.profile)
 
-        builder = FlatpakBuilder(source, workdir)
+        builder = FlatpakBuilder(source, workdir, ".")
 
         env = jinja2.Environment(loader=jinja2.PackageLoader('flatpak_module_tools', 'templates'),
                                  autoescape=False)
