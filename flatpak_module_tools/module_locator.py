@@ -9,12 +9,12 @@ import gi
 gi.require_version('Modulemd', '1.0')
 from gi.repository import Modulemd
 
-from pdc_client import PDCClient
-
+import koji
 from module_build_service.builder.utils import create_local_repo_from_koji_tag
 
-from utils import die, info
+from utils import die, info, ModuleSpec
 from flatpak_builder import ModuleInfo
+from get_module_builds import get_module_builds
 
 class Build(ModuleInfo):
     def yum_config(self):
@@ -48,41 +48,53 @@ class LocalBuild(Build):
         return '<LocalBuild {name}:{stream}:{version}>'.format(**self.__dict__)
 
 class KojiBuild(Build):
-    def __init__(self, module, path):
-        self.name = module['name']
-        self.stream = module['stream']
-        self.version = module['version']
+    def __init__(self, mmd, path, koji_tag):
+        self.name = mmd.props.name
+        self.stream = mmd.props.stream
+        self.version = mmd.props.version
 
         self.path = path
-        self.mmd = Modulemd.Module.new_from_string(module['modulemd'])
-        # Make sure that we have the v2 'dependencies' format
-        self.mmd.upgrade()
+        self.mmd = mmd
 
-        self.koji_tag = module['koji_tag']
+        self.koji_tag = koji_tag
 
     def __repr__(self):
         return '<KojiBuild {name}:{stream}:{version}>'.format(**self.__dict__)
+
+
+def get_module_info(module_name, stream, version=None, koji_config=None, koji_profile='koji'):
+    builds = get_module_builds(module_name, stream, version=version,
+                               koji_config=koji_config, koji_profile=koji_profile)
+
+    if len(builds) == 0:
+        raise RuntimeError("No module builds found for {}"
+                           .format(ModuleSpec(module_name, stream, version).to_str()))
+    elif len(builds) > 1:
+        raise RuntimeError("Multiple builds against different contexts found for {}"
+                           .format(ModuleSpec(module_name, stream, version).to_str()))
+    build = builds[0]
+
+    modulemd_str = build['extra']['typeinfo']['module']['modulemd_str']
+    mmd = Modulemd.Module.new_from_string(modulemd_str)
+    # Make sure that we have the v2 'dependencies' format
+    mmd.upgrade()
+
+    return mmd, build['extra']['typeinfo']['module']['content_koji_tag']
+
 
 class ModuleLocator(object):
     class Config(object):
         pass
 
-    def __init__(self):
+    def __init__(self, staging=False):
+        self.staging = staging
         self.conf = ModuleLocator.Config()
-        self.conf.pdc_url = 'https://pdc.fedoraproject.org/rest_api/v1'
-        self.conf.pdc_insecure = False
-        self.conf.pdc_develop = True
 
         self.conf.koji_config = '/etc/module-build-service/koji.conf'
-        self.conf.koji_profile = 'koji'
+        self.conf.koji_profile = 'staging' if staging else 'koji'
 
         self.conf.cache_dir = os.path.expanduser('~/modulebuild/cache')
         self.conf.mock_resultsdir = os.path.expanduser('~/modulebuild/builds')
-
-        # The effect of develop=True is that requests to the PDC are made without authentication;
-        # since we our interaction with the PDC is read-only, this is fine for our needs and
-        # makes things simpler.
-        self.pdc_client = PDCClient(server=self.conf.pdc_url, ssl_verify=True, develop=True)
 
         self.local_build_ids = []
         self._local_build_info = None
@@ -168,31 +180,15 @@ class ModuleLocator(object):
         if key in self._cached_remote_builds:
             return self._cached_remote_builds[key]
 
-        info("Querying PDC for information on %s:%s" % (name, stream))
+        info("Querying Koji for information on %s:%s" % (name, stream))
 
-        query = {
-            'name': name,
-            'stream': stream,
-            'active': True,
-        }
+        modulemd, koji_tag = get_module_info(name, stream,
+                                             version=version,
+                                             koji_config=self.conf.koji_config,
+                                             koji_profile=self.conf.koji_profile)
 
-        if version is not None:
-            query['version'] = version
-
-        retval = self.pdc_client['modules/'](page_size=1,
-                                             fields=['name', 'stream', 'version', 'modulemd', 'rpms', 'koji_tag'],
-                                             ordering='-version',
-                                             **query)
-        # Error handling
-        if len(retval['results']) == 0:
-            raise RuntimeError("Failed to find module in PDC %r" % query)
-        if len(retval['results']) != 1:
-            raise RuntimeError("Multiple modules in the PDC matched %r" % query)
-
-        module = retval['results'][0]
-
-        path = os.path.join(self.conf.cache_dir, "koji_tags", module['koji_tag'])
-        self._cached_remote_builds[key] = KojiBuild(module, path)
+        path = os.path.join(self.conf.cache_dir, "koji_tags", koji_tag)
+        self._cached_remote_builds[key] = KojiBuild(modulemd, path, koji_tag)
         return self._cached_remote_builds[key]
 
     def ensure_downloaded(self, build):
@@ -201,6 +197,10 @@ class ModuleLocator(object):
             create_local_repo_from_koji_tag(self.conf, build.koji_tag, build.path)
 
     def _get_builds_recurse(self, builds, name, stream):
+        if name == 'platform':
+            # Pseudo-module doesn't quite exist
+            return
+
         if name in builds:
             build = builds[name]
             if build.stream != stream:
