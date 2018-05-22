@@ -11,10 +11,11 @@ from flatpak_module_tools.module_locator import ModuleLocator
 from flatpak_module_tools.utils import check_call, die, header, important, info, split_module_spec
 
 class ContainerBuilder(object):
-    def __init__(self, containerspec, from_local=False, local_builds=[]):
+    def __init__(self, containerspec, from_local=False, local_builds=[], staging=False):
         self.containerspec = os.path.abspath(containerspec)
         self.from_local = from_local
         self.local_builds = local_builds
+        self.staging = staging
 
         with open(self.containerspec) as f:
             container_yaml = yaml.safe_load(f)
@@ -45,7 +46,7 @@ class ContainerBuilder(object):
 
         module_build_id = self.module_spec.to_str(include_profile=False)
 
-        locator = ModuleLocator()
+        locator = ModuleLocator(staging=self.staging)
         if self.from_local:
             locator.add_local_build(module_build_id)
         for build_id in self.local_builds:
@@ -80,6 +81,7 @@ class ContainerBuilder(object):
 
         template.stream(arch='x86_64',
                         ver='28',
+                        kojipkgs='kojipkgs.stg.fedoraproject.org' if self.staging else 'kojipkgs.fedoraproject.org',
                         includepkgs=builder.get_includepkgs(),
                         repos=repos).dump(output_path)
 

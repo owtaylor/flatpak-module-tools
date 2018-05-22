@@ -30,7 +30,7 @@ includepkgs={{includepkgs|join(',')}}
 
 [fedora]
 name=fedora
-baseurl=https://kojipkgs.fedoraproject.org/repos/f{{ ver }}-build/latest/$basearch/
+baseurl=https://{{ kojipkgs }}/repos/f{{ ver }}-build/latest/$basearch/
 priority=20
 
 {% for repo in repos %}

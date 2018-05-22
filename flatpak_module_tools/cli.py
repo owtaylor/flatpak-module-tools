@@ -65,16 +65,19 @@ def build_module(add_local_build, modulemd, stream):
               help='include a local MBS module build  as a source for the build')
 @click.option('--from-local', is_flag=True,
               help='Use a local build for the module source listed in container.yaml ')
+@click.option('--staging', is_flag=True,
+              help='Use builds from Fedora staging infrastructure')
 @click.option('--containerspec', metavar='CONTAINER_YAML', default='./container.yaml',
               help='Path to container.yaml - defaults to ./container.yaml')
 @click.option('--install', is_flag=True,
               help='automatically install Flatpak for the current user')
-def build_container(add_local_build, from_local, containerspec, install):
+def build_container(add_local_build, from_local, staging, containerspec, install):
     """Build a container from local or remote module"""
 
     container_builder = ContainerBuilder(containerspec=containerspec,
                                          local_builds=add_local_build,
-                                         from_local=from_local)
+                                         from_local=from_local,
+                                         staging=staging)
     tarfile = container_builder.build()
 
     if install:
