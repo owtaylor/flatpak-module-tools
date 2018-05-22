@@ -31,7 +31,9 @@ priority=10
 class LocalBuild(Build):
     def __init__(self, path):
         mmd_path = os.path.join(path, 'modules.yaml')
-        mmds = Modulemd.Module.new_all_from_file(mmd_path)
+        objects = Modulemd.objects_from_file(mmd_path)
+        mmds = [o for o in objects if isinstance(o, Modulemd.Module)]
+
         mmd = mmds[0]
         mmd.upgrade()
 
