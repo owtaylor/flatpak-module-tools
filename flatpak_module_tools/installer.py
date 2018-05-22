@@ -66,7 +66,7 @@ class Installer(object):
             if self.path.startswith("http://") or self.path.startswith("https://"):
                 path = _download_url(self.path, workdir)
             else:
-                path = self.path
+                path = os.path.abspath(self.path)
 
             check_call(['tar', 'xfa', path], cwd=ocidir)
 
