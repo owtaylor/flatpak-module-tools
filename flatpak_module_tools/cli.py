@@ -1,9 +1,9 @@
 import click
 
-from flatpak_module_tools.container_builder import ContainerBuilder
-from flatpak_module_tools.installer import Installer
-from flatpak_module_tools.module_builder import ModuleBuilder
-from flatpak_module_tools.utils import die
+from .container_builder import ContainerBuilder
+from .installer import Installer
+from .module_builder import ModuleBuilder
+from .utils import die
 
 @click.group()
 def cli():

@@ -2,7 +2,8 @@ import click
 import os
 import re
 import subprocess
-from utils import check_call, error, die, header, important, header, info
+
+from .utils import check_call, error, die, header, important, header, info
 
 # ModuleBuilder is a straightforward, simple wrapper around:
 #

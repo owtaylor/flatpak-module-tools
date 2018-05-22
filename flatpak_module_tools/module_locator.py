@@ -12,9 +12,9 @@ from gi.repository import Modulemd
 import koji
 from module_build_service.builder.utils import create_local_repo_from_koji_tag
 
-from utils import die, info, ModuleSpec
-from flatpak_builder import ModuleInfo
-from get_module_builds import get_module_builds
+from .utils import die, info, ModuleSpec
+from .flatpak_builder import ModuleInfo
+from .get_module_builds import get_module_builds
 
 class Build(ModuleInfo):
     def yum_config(self):

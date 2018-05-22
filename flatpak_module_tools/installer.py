@@ -9,7 +9,7 @@ from six.moves.urllib.parse import urlparse
 import click
 import requests
 
-from flatpak_module_tools.utils import check_call, header
+from .utils import check_call, header
 
 def _download_url(url, outdir):
     parts = urlparse(url)

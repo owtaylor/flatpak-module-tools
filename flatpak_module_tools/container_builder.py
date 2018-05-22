@@ -6,9 +6,9 @@ import subprocess
 import sys
 from textwrap import dedent
 
-from flatpak_module_tools.flatpak_builder import FlatpakBuilder, FlatpakSourceInfo
-from flatpak_module_tools.module_locator import ModuleLocator
-from flatpak_module_tools.utils import check_call, die, header, important, info, split_module_spec
+from .flatpak_builder import FlatpakBuilder, FlatpakSourceInfo
+from .module_locator import ModuleLocator
+from .utils import check_call, die, header, important, info, split_module_spec
 
 class ContainerBuilder(object):
     def __init__(self, containerspec, from_local=False, local_builds=[], staging=False):
@@ -53,7 +53,7 @@ class ContainerBuilder(object):
             locator.add_local_build(build_id)
 
         builds = locator.get_builds(self.module_spec.name, self.module_spec.stream, self.module_spec.version)
-        base_build = builds.values()[0]
+        base_build = list(builds.values())[0]
 
         builddir = os.path.expanduser("~/modulebuild/flatpaks")
         workdir = os.path.join(builddir, "{}-{}-{}".format(base_build.name, base_build.stream, base_build.version))
