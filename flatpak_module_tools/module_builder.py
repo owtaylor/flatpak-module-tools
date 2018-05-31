@@ -2,6 +2,7 @@ import click
 import os
 import re
 import subprocess
+import sys
 
 from .utils import check_call, error, die, header, important, header, info
 
@@ -205,6 +206,7 @@ class ModuleBuilder(object):
         else:
             error("mbs-manager build_module_locally failed")
             error("log: {}".format(log_path))
+            sys.exit(1)
 
         self.version = version
 
