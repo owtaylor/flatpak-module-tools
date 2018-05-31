@@ -47,7 +47,7 @@ class Installer(object):
 
             check_call(['ostree', 'init', '--mode=archive-z2', '--repo', self.repodir])
 
-        output = subprocess.check_output(['flatpak', 'remotes', '--user'])
+        output = subprocess.check_output(['flatpak', 'remotes', '--user'], encoding="UTF-8")
         if not 'flatpak-module-tools ' in output:
             check_call(['flatpak', 'remote-add',
                         '--user', '--no-gpg-verify',
@@ -85,7 +85,7 @@ class Installer(object):
         try:
             with open(os.devnull, 'w') as devnull:
                 old_origin = subprocess.check_output(['flatpak', 'info', '--user', '-o', shortref],
-                                                     stderr=devnull).strip()
+                                                     stderr=devnull, encoding="UTF-8").strip()
         except subprocess.CalledProcessError:
             old_origin = None
 

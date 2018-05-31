@@ -130,7 +130,7 @@ class ModuleLocator(object):
             pass
 
         # Sort with the biggest version first
-        builds.sort(lambda a, b: -cmp(a[2], b[2]))
+        builds.sort(key=lambda x: x[2], reverse=True)
 
         result = {}
 

@@ -36,7 +36,7 @@ class ModuleBuilder(object):
         try:
             with open(os.devnull, 'w') as devnull:
                 return subprocess.check_output(['git', 'rev-parse', '--show-toplevel'],
-                                               stderr=devnull).strip()
+                                               stderr=devnull, encoding="UTF-8").strip()
         except subprocess.CalledProcessError:
             return None
 
@@ -58,7 +58,7 @@ class ModuleBuilder(object):
         try:
             with open(os.devnull, 'w') as devnull:
                 branch = subprocess.check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
-                                                  stderr=devnull).strip()
+                                                  stderr=devnull, encoding="UTF-8").strip()
         except subprocess.CalledProcessError:
             branch = None
 
