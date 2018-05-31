@@ -100,9 +100,7 @@ class ModuleBuilder(object):
         for build_id in self.local_builds:
             cmd += ['--add-local-build', build_id]
 
-        process = subprocess.Popen(['mbs-manager', 'build_module_locally',
-                                    '--file', self.modulemd,
-                                    '--stream', self.stream],
+        process = subprocess.Popen(cmd,
                                    bufsize=1,
                                    universal_newlines=True,
                                    stdout=subprocess.PIPE,
