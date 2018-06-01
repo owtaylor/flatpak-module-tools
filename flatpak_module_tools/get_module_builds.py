@@ -24,12 +24,18 @@ def _add_status_and_base_version(session, build):
                 build['fedmod_base_version'] = m.group(1)
                 break
 
+def _add_rpm_list(session, build):
+    archives = session.listArchives(buildID=build['build_id'])
+    assert len(archives) == 1
+    build['fedmod_rpms'] = session.listRPMs(imageID=archives[0]['id'])
+
 def get_module_builds(module_name, stream,
                       version=None,
                       base_version=None,
                       status=None,
                       koji_config=None,
-                      koji_profile='koji'):
+                      koji_profile='koji',
+                      include_rpms=False):
 
     """Return a list of Koji build objects for the specified, or latest
     version of a module. All the returned builds will have the same version,
@@ -105,5 +111,9 @@ def get_module_builds(module_name, stream,
     if not (base_version is not None or status is not None):
         for b in result:
             _add_status_and_base_version(session, b)
+
+    if include_rpms:
+        for b in result:
+            _add_rpm_list(session, b)
 
     return result

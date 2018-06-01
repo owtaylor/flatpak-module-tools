@@ -50,13 +50,15 @@ class LocalBuild(Build):
         return '<LocalBuild {name}:{stream}:{version}>'.format(**self.__dict__)
 
 class KojiBuild(Build):
-    def __init__(self, mmd, path, koji_tag):
+    def __init__(self, mmd, path, koji_tag, rpms):
         self.name = mmd.props.name
         self.stream = mmd.props.stream
         self.version = mmd.props.version
 
         self.path = path
         self.mmd = mmd
+
+        self.rpms = rpms
 
         self.koji_tag = koji_tag
 
@@ -66,7 +68,8 @@ class KojiBuild(Build):
 
 def get_module_info(module_name, stream, version=None, koji_config=None, koji_profile='koji'):
     builds = get_module_builds(module_name, stream, version=version,
-                               koji_config=koji_config, koji_profile=koji_profile)
+                               koji_config=koji_config, koji_profile=koji_profile,
+                               include_rpms=True)
 
     if len(builds) == 0:
         raise RuntimeError("No module builds found for {}"
@@ -81,7 +84,11 @@ def get_module_info(module_name, stream, version=None, koji_config=None, koji_pr
     # Make sure that we have the v2 'dependencies' format
     mmd.upgrade()
 
-    return mmd, build['extra']['typeinfo']['module']['content_koji_tag']
+    rpms = ['{name}-{epochnum}:{version}-{release}.{arch}.rpm'.format(epochnum=rpm['epoch'] or 0, **rpm)
+            for rpm in build['fedmod_rpms']
+            if rpm['arch'] in ('x86_64', 'noarch')]
+
+    return mmd, build['extra']['typeinfo']['module']['content_koji_tag'], rpms
 
 
 class ModuleLocator(object):
@@ -184,13 +191,13 @@ class ModuleLocator(object):
 
         info("Querying Koji for information on %s:%s" % (name, stream))
 
-        modulemd, koji_tag = get_module_info(name, stream,
-                                             version=version,
-                                             koji_config=self.conf.koji_config,
-                                             koji_profile=self.conf.koji_profile)
+        modulemd, koji_tag, rpms = get_module_info(name, stream,
+                                                   version=version,
+                                                   koji_config=self.conf.koji_config,
+                                                   koji_profile=self.conf.koji_profile)
 
         path = os.path.join(self.conf.cache_dir, "koji_tags", koji_tag)
-        self._cached_remote_builds[key] = KojiBuild(modulemd, path, koji_tag)
+        self._cached_remote_builds[key] = KojiBuild(modulemd, path, koji_tag, rpms)
         return self._cached_remote_builds[key]
 
     def ensure_downloaded(self, build):
