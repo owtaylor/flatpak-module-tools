@@ -13,6 +13,7 @@ FEDORA_TAG_PATTERNS = [(re.compile(p), s) for p, s in [
 
 STATUSES = sorted({s for p, s in FEDORA_TAG_PATTERNS})
 
+
 def _add_status_and_base_version(session, build):
     # Find out where a build is tagged to find its base Fedora version and status
     tags = session.listTags(build=build['build_id'])
@@ -24,24 +25,23 @@ def _add_status_and_base_version(session, build):
                 build['gmb_base_version'] = m.group(1)
                 break
 
+
 def _add_rpm_list(session, build):
     archives = session.listArchives(buildID=build['build_id'])
     assert len(archives) == 1
     build['gmb_rpms'] = session.listRPMs(imageID=archives[0]['id'])
 
-def get_module_builds(module_name, stream,
-                      version=None,
-                      base_version=None,
-                      status=None,
-                      koji_config=None,
-                      koji_profile='koji',
-                      include_rpms=False):
 
-    """Return a list of Koji build objects for the specified, or latest
-    version of a module. All the returned builds will have the same version,
-    but multiple builds with different contexts may be returned due to
-    stream expansion.
+def get_module_builds_for_session(session,
+                                  module_name, stream,
+                                  version=None,
+                                  base_version=None,
+                                  status=None,
+                                  include_rpms=False):
 
+    """Like get_module_builds() but takes and existing Koji session object
+
+    session -- a koji.ClientSession object
     module_name -- the name of the module
     stream -- the stream of the module
     version -- the version of the module. If not specified, the latest
@@ -52,13 +52,10 @@ def get_module_builds(module_name, stream,
     status -- the status of the module in Fedora - can be
        'stable', 'testing', 'candidate', 'pending', or 'signing-ending'. If None,
        builds with all statuses will be returned
-    koji_config -- alternate koji config file to read
-    koji_profile -- alternate koji profile to use
+    include_rpms -- if %TRUE, each returned build will have a 'gmb_rpms' key with
+       the value being a list of dictionaries with information about each RPM
+       built in the module.
     """
-
-    options = koji.read_config(profile_name=koji_profile, user_config=koji_config)
-    session_opts = koji.grab_session_options(options)
-    session = koji.ClientSession(options['server'], session_opts)
 
     package_id = session.getPackageID(module_name)
 
@@ -117,3 +114,45 @@ def get_module_builds(module_name, stream,
             _add_rpm_list(session, b)
 
     return result
+
+
+def get_module_builds(module_name, stream,
+                      version=None,
+                      base_version=None,
+                      status=None,
+                      koji_config=None,
+                      koji_profile='koji',
+                      include_rpms=False):
+
+    """Return a list of Koji build objects for the specified, or latest
+    version of a module. All the returned builds will have the same version,
+    but multiple builds with different contexts may be returned due to
+    stream expansion.
+
+    module_name -- the name of the module
+    stream -- the stream of the module
+    version -- the version of the module. If not specified, the latest
+       version will be used.
+    base_version -- the base Fedora version that the module was built for
+       (corresponds to the stream of the 'platform' module). If None
+       builds for all base versions will be returned
+    status -- the status of the module in Fedora - can be
+       'stable', 'testing', 'candidate', 'pending', or 'signing-ending'. If None,
+       builds with all statuses will be returned
+    koji_config -- alternate koji config file to read
+    koji_profile -- alternate koji profile to use
+    include_rpms -- if %TRUE, each returned build will have a 'gmb_rpms' key with
+       the value being a list of dictionaries with information about each RPM
+       built in the module.
+    """
+
+    options = koji.read_config(profile_name=koji_profile, user_config=koji_config)
+    session_opts = koji.grab_session_options(options)
+    session = koji.ClientSession(options['server'], session_opts)
+
+    return get_module_builds_for_session(session,
+                                         module_name, stream,
+                                         version=version,
+                                         base_version=base_version,
+                                         status=status,
+                                         include_rpms=include_rpms)
