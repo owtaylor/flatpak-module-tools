@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='flatpak-module-tools',
-      version='0.3',
+      version='0.4',
       description='Tools for creating and maintaining Flatpaks as Fedora modules',
       url='https://pagure.io/flatpak-module-tools',
       author='Owen Taylor',
