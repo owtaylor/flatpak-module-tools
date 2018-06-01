@@ -85,7 +85,7 @@ def get_module_info(module_name, stream, version=None, koji_config=None, koji_pr
     mmd.upgrade()
 
     rpms = ['{name}-{epochnum}:{version}-{release}.{arch}.rpm'.format(epochnum=rpm['epoch'] or 0, **rpm)
-            for rpm in build['fedmod_rpms']
+            for rpm in build['gmb_rpms']
             if rpm['arch'] in ('x86_64', 'noarch')]
 
     return mmd, build['extra']['typeinfo']['module']['content_koji_tag'], rpms

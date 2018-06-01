@@ -20,14 +20,14 @@ def _add_status_and_base_version(session, build):
         for p, s in FEDORA_TAG_PATTERNS:
             m = p.match(t['name'])
             if m:
-                build['fedmod_status'] = s
-                build['fedmod_base_version'] = m.group(1)
+                build['gmb_status'] = s
+                build['gmb_base_version'] = m.group(1)
                 break
 
 def _add_rpm_list(session, build):
     archives = session.listArchives(buildID=build['build_id'])
     assert len(archives) == 1
-    build['fedmod_rpms'] = session.listRPMs(imageID=archives[0]['id'])
+    build['gmb_rpms'] = session.listRPMs(imageID=archives[0]['id'])
 
 def get_module_builds(module_name, stream,
                       version=None,
@@ -67,20 +67,20 @@ def get_module_builds(module_name, stream,
                                 state=koji.BUILD_STATES['COMPLETE'])
     # For convenience, add keys that turn the NVR into module terms
     for b in builds:
-        b['fedmod_stream'] = b['version']
+        b['gmb_stream'] = b['version']
         if '.' in b['release']:
-            b['fedmod_version'], b['fedmod_context'] = b['release'].split('.', 1)
+            b['gmb_version'], b['gmb_context'] = b['release'].split('.', 1)
         else:
-            b['fedmod_version'], b['fedmod_context'] = b['release'], None
+            b['gmb_version'], b['gmb_context'] = b['release'], None
 
         # Will fill in later
-        b['fedmod_status'] = None
-        b['fedmod_base_version'] = None
+        b['gmb_status'] = None
+        b['gmb_base_version'] = None
 
     def filter_build(b):
-        if b['fedmod_stream'] != stream:
+        if b['gmb_stream'] != stream:
             return False
-        if version is not None and b['fedmod_version'] != version:
+        if version is not None and b['gmb_version'] != version:
             return False
         return True
 
@@ -91,9 +91,9 @@ def get_module_builds(module_name, stream,
             _add_status_and_base_version(session, b)
 
         def filter_build_2(b):
-            if base_version is not None and b['fedmod_base_version'] != base_version:
+            if base_version is not None and b['gmb_base_version'] != base_version:
                 return False
-            if status is not None and b['fedmod_status'] != status:
+            if status is not None and b['gmb_status'] != status:
                 return False
             return True
 
@@ -102,8 +102,8 @@ def get_module_builds(module_name, stream,
     if version is None and len(matching_builds) > 0:
         # OK, we've limited the builds to the ones that match the search criteria, find
         # the most recent one, based on the module version.
-        latest_version = max(b['fedmod_version'] for b in matching_builds)
-        result = [b for b in matching_builds if b['fedmod_version'] == latest_version]
+        latest_version = max(b['gmb_version'] for b in matching_builds)
+        result = [b for b in matching_builds if b['gmb_version'] == latest_version]
     else:
         result = matching_builds
 
