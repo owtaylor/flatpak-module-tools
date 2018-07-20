@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -48,7 +49,7 @@ class Installer(object):
             check_call(['ostree', 'init', '--mode=archive-z2', '--repo', self.repodir])
 
         output = subprocess.check_output(['flatpak', 'remotes', '--user'], encoding="UTF-8")
-        if not 'flatpak-module-tools ' in output:
+        if not re.search('^flatpak-module-tools\s', output, re.MULTILINE):
             check_call(['flatpak', 'remote-add',
                         '--user', '--no-gpg-verify',
                         'flatpak-module-tools', self.repodir])
