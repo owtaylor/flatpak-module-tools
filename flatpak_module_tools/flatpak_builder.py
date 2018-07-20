@@ -12,6 +12,7 @@ image. It is shared between:
  https://pagure.io/flatpak-module-tools
 """
 
+import logging
 import os
 from six.moves import configparser
 import re
@@ -182,6 +183,8 @@ class FlatpakBuilder(object):
         self.source = source
         self.workdir = workdir
         self.root = root
+
+        self.log = logging.getLogger(__name__)
 
     def precheck(self):
         source = self.source

@@ -1,3 +1,5 @@
+import logging
+
 import click
 
 from .container_builder import ContainerBuilder
@@ -6,8 +8,13 @@ from .module_builder import ModuleBuilder
 from .utils import die
 
 @click.group()
-def cli():
-    pass
+@click.option('-v', '--verbose', is_flag=True,
+              help='Show verbose debugging output')
+def cli(verbose):
+    if verbose:
+        logging.basicConfig(level=logging.INFO)
+    else:
+        logging.basicConfig(level=logging.WARNING)
 
 
 @cli.command(name="local-build")
