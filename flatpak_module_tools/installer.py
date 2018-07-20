@@ -76,7 +76,9 @@ class Installer(object):
 
             ref = index_json['manifests'][0]['annotations']['org.flatpak.ref']
 
-            check_call(['flatpak', 'build-import-bundle', '--oci', self.repodir, ocidir])
+            check_call(['flatpak', 'build-import-bundle',
+                        '--update-appstream', '--oci',
+                        self.repodir, ocidir])
         finally:
             shutil.rmtree(workdir)
 
