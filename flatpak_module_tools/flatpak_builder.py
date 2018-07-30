@@ -19,9 +19,33 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 import tarfile
 from textwrap import dedent
 from xml.etree import ElementTree
+
+
+# Work around lack of RawConfigParser space_around_delimeters in Python-2.7
+if sys.version_info[0] == 2:
+    class MyConfigParser(configparser.RawConfigParser):
+        # Copy from configparser.RawConfigParser - Copyright (c) 2017 Python Software Foundation
+        # https://www.python.org/download/releases/2.7/license/
+        def write(self, fp, space_around_delimiters=False):
+            """Write an .ini-format representation of the configuration state."""
+            for section in self._sections:
+                fp.write("[%s]\n" % section)
+                for (key, value) in self._sections[section].items():
+                    if key == "__name__":
+                        continue
+                    if (value is not None) or (self._optcre == self.OPTCRE):
+                        key = "=".join((key, str(value).replace('\n', '\n\t')))
+                    fp.write("%s\n" % (key))
+                fp.write("\n")
+
+    CP = MyConfigParser
+else:
+    CP = configparser.RawConfigParser
+
 
 # Returns flatpak's name for the current arch
 def get_arch():
@@ -232,7 +256,7 @@ class FileTreeProcessor(object):
 
         self.log.debug("Rewriting contents of %s", desktop_basename)
 
-        cp = configparser.RawConfigParser()
+        cp = CP()
         cp.optionxform = str
         with open(desktop) as f:
             cp.readfp(f)
