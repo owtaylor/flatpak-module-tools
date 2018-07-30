@@ -365,6 +365,13 @@ class FlatpakBuilder(object):
                   profile_xmd.get('runtime', None), "'runtime'")
             check(flatpak_yaml.get('sdk', None) == profile_xmd.get('sdk', None), "'sdk'")
 
+    def get_enable_modules(self):
+        # We need to enable all the modules other than the platform pseudo-module
+        # sorted for testability.
+        return sorted(m.mmd.props.name + ':' + m.mmd.props.stream
+                      for m in self.source.modules.values()
+                      if m.mmd.props.name != 'platform')
+
     def get_install_packages(self):
         source = self.source
         return source.base_module.mmd.peek_profiles()[source.profile].props.rpms.get()
