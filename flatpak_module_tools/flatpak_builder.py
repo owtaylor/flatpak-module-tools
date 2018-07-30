@@ -311,7 +311,7 @@ class FlatpakSourceInfo(object):
 
         # A runtime module must have a 'runtime' profile, but can have other
         # profiles for SDKs, minimal runtimes, etc.
-        self.runtime = 'runtime' in base_module.mmd.props.profiles
+        self.runtime = 'runtime' in base_module.mmd.peek_profiles()
 
         if profile:
             self.profile = profile
