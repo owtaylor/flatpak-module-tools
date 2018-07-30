@@ -79,10 +79,26 @@ class ContainerBuilder(object):
 
         output_path = os.path.join(workdir, 'mock.cfg')
 
+        # Check if DNF is new enough to support modules, if not, all packages from modular
+        # repositories will automatically be enabled
+        try:
+            subprocess.check_output(['dnf', 'module', 'list', '--enabled'],
+                                    stderr=subprocess.STDOUT)
+            have_dnf_module=True
+        except subprocess.CalledProcessError:
+            have_dnf_module=False
+
+        if have_dnf_module:
+            modules_str = ', '.join("'{}'".format(x) for x in builder.get_enable_modules())
+            module_enable = "config_opts['module_enable'] = [{}]".format(modules_str)
+        else:
+            module_enable = ""
+
         template.stream(arch='x86_64',
                         ver='28',
                         kojipkgs='kojipkgs.stg.fedoraproject.org' if self.staging else 'kojipkgs.fedoraproject.org',
                         includepkgs=builder.get_includepkgs(),
+                        module_enable=module_enable,
                         repos=repos).dump(output_path)
 
         finalize_script = dedent("""\
