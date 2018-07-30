@@ -333,10 +333,11 @@ class FlatpakSourceInfo(object):
 
 
 class FlatpakBuilder(object):
-    def __init__(self, source, workdir, root):
+    def __init__(self, source, workdir, root, parse_manifest=None):
         self.source = source
         self.workdir = workdir
         self.root = root
+        self.parse_manifest = parse_manifest
 
         self.log = logging.getLogger(__name__)
 
@@ -545,7 +546,7 @@ class FlatpakBuilder(object):
         with open(manifest, 'r') as f:
             lines = f.readlines()
 
-        return parse_rpm_output(lines)
+        return self.parse_manifest(lines)
 
     def _filter_app_manifest(self, components):
         runtime_rpms = self.source.runtime_module.mmd.peek_profiles()['runtime'].props.rpms
