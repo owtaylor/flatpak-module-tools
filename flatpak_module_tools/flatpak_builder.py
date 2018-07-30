@@ -21,7 +21,7 @@ import shutil
 import subprocess
 import tarfile
 from textwrap import dedent
-
+from xml.etree import ElementTree
 
 # Returns flatpak's name for the current arch
 def get_arch():
@@ -55,67 +55,6 @@ def build_init(directory, appname, sdk, runtime, runtime_branch, tags=[]):
     os.mkdir(os.path.join(directory, "files"))
 
 
-# add_app_prefix('org.gimp', 'gimp, 'gimp.desktop') => org.gimp.desktop
-# add_app_prefix('org.gnome', 'eog, 'eog.desktop') => org.gnome.eog.desktop
-def add_app_prefix(app_id, root, full):
-    prefix = app_id
-    if prefix.endswith('.' + root):
-        prefix = prefix[:-(1 + len(root))]
-    return prefix + '.' + full
-
-
-def find_desktop_files(builddir):
-    desktopdir = os.path.join(builddir, 'files/share/applications')
-    for (dirpath, dirnames, filenames) in os.walk(desktopdir):
-        for filename in filenames:
-            if filename.endswith('.desktop'):
-                yield os.path.join(dirpath, filename)
-
-
-def find_icons(builddir, name):
-    icondir = os.path.join(builddir, 'files/share/icons/hicolor')
-    for (dirpath, dirnames, filenames) in os.walk(icondir):
-        for filename in filenames:
-            if filename.startswith(name + '.'):
-                yield os.path.join(dirpath, filename)
-
-
-def update_desktop_files(app_id, builddir):
-    for full_path in find_desktop_files(builddir):
-        cp = configparser.RawConfigParser()
-        cp.read([full_path])
-        try:
-            icon = cp.get('Desktop Entry', 'Icon')
-        except configparser.NoOptionError:
-            icon = None
-
-        # Does it have an icon?
-        if icon and not icon.startswith(app_id):
-            found_icon = False
-
-            # Rename any matching icons
-            for icon_file in find_icons(builddir, icon):
-                shutil.copy(icon_file,
-                            os.path.join(os.path.dirname(icon_file),
-                                         add_app_prefix(app_id, icon, os.path.basename(icon_file))))
-                found_icon = True
-
-            # If we renamed the icon, change the desktop file
-            if found_icon:
-                subprocess.check_call(['desktop-file-edit',
-                                       '--set-icon',
-                                       add_app_prefix(app_id, icon, icon), full_path])
-
-        # Is the desktop file not prefixed with the app id, then prefix it
-        basename = os.path.basename(full_path)
-        if not basename.startswith(app_id):
-            shutil.move(full_path,
-                        os.path.join(os.path.dirname(full_path),
-                                     add_app_prefix(app_id,
-                                                    basename[:-len('.desktop')],
-                                                    basename)))
-
-
 class ModuleInfo(object):
     def __init__(self, name, stream, version, mmd, rpms):
         self.name = name
@@ -124,6 +63,221 @@ class ModuleInfo(object):
         self.mmd = mmd
         self.rpms = rpms
 
+
+class FileTreeProcessor(object):
+    def __init__(self, builddir, flatpak_yaml):
+        self.app_root = os.path.join(builddir, "files")
+        self.app_id = flatpak_yaml['id']
+
+        self.appdata_license = flatpak_yaml.get('appdata-license', None)
+        self.appstream_compose = flatpak_yaml.get('appstream-compose', True)
+        self.copy_icon = flatpak_yaml.get('copy-icon', False)
+        self.desktop_file_name_prefix = flatpak_yaml.get('desktop-file-name-prefix')
+        self.desktop_file_name_suffix = flatpak_yaml.get('desktop-file-name-suffix')
+        self.rename_appdata_file = flatpak_yaml.get('rename-appdata-file', None)
+        self.rename_desktop_file = flatpak_yaml.get('rename-desktop-file')
+        self.rename_icon = flatpak_yaml.get('rename-icon')
+
+        self.log = logging.getLogger(__name__)
+
+    def _find_appdata_file(self):
+        # We order these so that share/appdata/XXX.appdata.xml if found
+        # first, as this is the target name, and apps may have both, which will
+        # cause issues with the rename.
+        extensions = [
+            ".appdata.xml",
+            ".metainfo.xml",
+        ]
+
+        dirs = [
+            "share/appdata",
+            "share/metainfo",
+        ]
+
+        for d in dirs:
+            appdata_dir = os.path.join(self.app_root, d)
+            for ext in extensions:
+                if self.rename_appdata_file is not None:
+                    basename = self.rename_appdata_file
+                else:
+                    basename = self.app_id + ext
+
+                source = os.path.join(appdata_dir, basename)
+                if os.path.exists(source):
+                    return source
+
+        return None
+
+    def _rewrite_appdata(self):
+        tree = ElementTree.parse(self.appdata_file)
+
+        # replace component/id
+        n_root = tree.getroot()
+        if n_root.tag != "component" and n_root.tag != "application":
+            raise RuntimeError("Root node is not <application> or <component>")
+
+        n_license = n_root.find("project_license")
+        if n_license is not None:
+            n_license.text = self.appdata_license
+
+        tree.write(self.appdata_file, encoding="UTF-8", xml_declaration=True)
+
+    def _process_appdata_file(self):
+        appdata_source = self._find_appdata_file ()
+        self.appdata_file = None
+
+        if appdata_source:
+            # We always use the old name / dir, in case the runtime has older appdata tools
+            appdata_dir = os.path.join(self.app_root, "share", "appdata")
+            appdata_basename = self.app_id + ".appdata.xml"
+            self.appdata_file = os.path.join(appdata_dir, appdata_basename)
+
+            if appdata_source != self.appdata_file:
+                src_basename = os.path.basename(appdata_source)
+                self.log.info("Renaming %s to share/appdata/%s", src_basename, appdata_basename)
+
+                if not os.path.exists(appdata_dir):
+                    os.path.mkdirs(appdata_dir)
+                os.rename(appdata_source, self.appdata_file)
+
+            if self.appdata_license:
+                self._rewrite_appdata()
+
+    def _rename_desktop_file(self):
+        if not self.rename_desktop_file:
+            return
+
+        applications_dir = os.path.join(self.app_root, "share", "applications")
+        src = os.path.join(applications_dir, self.rename_desktop_file)
+        desktop_basename = self.app_id + ".desktop"
+        dest = os.path.join(applications_dir, desktop_basename)
+
+        self.log.info("Renaming %s to %s", self.rename_desktop_file, desktop_basename)
+        os.rename(src, dest)
+
+        if self.appdata_file:
+            tree = ElementTree.parse(self.appdata_file)
+
+            # replace component/id
+            n_root = tree.getroot()
+            if n_root.tag != "component" and n_root.tag != "application":
+                raise RuntimeError("Root node is not <application> or <component>")
+
+            n_id = n_root.find("id")
+            if n_id is not None:
+                if n_id.text == self.rename_desktop_file:
+                    n_id.text = self.app_id
+
+            # replace any optional launchable
+            n_launchable = n_root.find("launchable")
+            if n_launchable is not None:
+                if n_launchable.text == self.rename_desktop_file:
+                    n_launchable.text = desktop_basename
+
+            tree.write(self.appdata_file, encoding="UTF-8", xml_declaration=True)
+
+    def _rename_icon(self):
+        if not self.rename_icon:
+            return
+
+        found_icon = False
+        icons_dir = os.path.join(self.app_root, "share/icons")
+
+        for full_dir, dirnames, filenames in os.walk(icons_dir):
+            relative = full_dir[len(icons_dir):]
+            depth = relative.count("/")
+
+            for source_file in filenames:
+                if source_file.startswith(self.rename_icon):
+                    source_path = os.path.join(full_dir, source_file)
+                    is_file = os.path.isfile(source_path)
+                    extension = source_file[len(self.rename_icon):]
+
+                    if is_file and depth == 3 and (extension.startswith(".") or
+                                                   extension.startswith("-symbolic")):
+                        found_icon = True
+                        new_name = self.app_id + extension
+
+                        self.log.info("%s icon %s/%s to %s/%s",
+                                      "Copying" if self.copy_icon else "Renaming",
+                                      relative[1:], source_file,
+                                      relative[1:], new_name)
+
+                        dest_path = os.path.join(full_dir, new_name)
+                        if self.copy_icon:
+                            shutil.copy(source_path, dest_path)
+                        else:
+                            os.rename(source_path, dest_path)
+                    else:
+                        if not is_file:
+                            self.log.debug("%s/%s matches 'rename-icon', but not a regular file",
+                                           full_dir, source_name)
+                        elif depth != 3:
+                            self.log.debug("%s/%s matches 'rename-icon', but not at depth 3",
+                                           full_dir, source_name)
+                        else:
+                            self.log.debug("%s/%s matches 'rename-icon', but name does not continue with '.' or '-symbolic.'",
+                                           full_dir, source_name)
+
+        if not found_icon:
+            raise RuntimeError("icon {} not found below {}".format(self.rename_icon, icons_dir))
+
+    def _rewrite_desktop_file(self):
+        if not (self.rename_icon or self.desktop_file_name_prefix or self.desktop_file_name_suffix):
+            return
+
+        applications_dir = os.path.join(self.app_root, "share/applications")
+        desktop_basename = self.app_id + ".desktop"
+        desktop = os.path.join(applications_dir, desktop_basename)
+
+        self.log.debug("Rewriting contents of %s", desktop_basename)
+
+        cp = configparser.RawConfigParser()
+        cp.optionxform = str
+        with open(desktop) as f:
+            cp.readfp(f)
+
+        desktop_keys = cp.options('Desktop Entry')
+
+        if self.rename_icon:
+            if self.rename_icon:
+                original_icon_name = cp.get('Desktop Entry', 'Icon')
+                cp.set('Desktop Entry', 'Icon', self.app_id)
+
+                for key in desktop_keys:
+                    if key.startswith("Icon["):
+                        if cp.get('Desktop Entry', key) == original_icon_name:
+                            cp.set('Desktop Entry', key, self.app_id)
+
+        if self.desktop_file_name_suffix or self.desktop_file_name_prefix:
+            for key in desktop_keys:
+                if key == "Name" or key.startswith("Name["):
+                    name = cp.get('Desktop Entry', key)
+                    new_name = ((self.desktop_file_name_prefix or "") +
+                                name +
+                                (self.desktop_file_name_suffix or ""))
+                    cp.set('Desktop Entry', key, new_name)
+
+        with open(desktop, "w") as f:
+            cp.write(f, space_around_delimiters=False)
+
+    def _compose_appstream(self):
+        if not self.appstream_compose or not self.appdata_file:
+            return
+
+        subprocess.check_call(['appstream-compose',
+                               '--verbose',
+                               '--prefix', self.app_root,
+                               '--basename', self.app_id,
+                               '--origin', 'flatpak',
+                               self.app_id])
+
+    def process(self):
+        self._process_appdata_file()
+        self._rename_desktop_file()
+        self._rename_icon()
+        self._rewrite_desktop_file()
+        self._compose_appstream()
 
 class FlatpakSourceInfo(object):
     def __init__(self, flatpak_yaml, modules, base_module, profile=None):
@@ -142,7 +296,7 @@ class FlatpakSourceInfo(object):
         else:
             self.profile = 'default'
 
-        assert self.profile in base_module.mmd.props.profiles
+        assert self.profile in base_module.mmd.peek_profiles()
 
     # The module for the Flatpak runtime that this app runs against
     @property
@@ -153,10 +307,10 @@ class FlatpakSourceInfo(object):
         # A built module should have its dependencies already expanded
         assert len(dependencies) == 1
 
-        for key in dependencies[0].props.buildrequires.keys():
+        for key in dependencies[0].peek_buildrequires().keys():
             try:
                 module = self.modules[key]
-                if 'runtime' in module.mmd.props.profiles:
+                if 'runtime' in module.mmd.peek_profiles():
                     return module
             except KeyError:
                 pass
@@ -173,7 +327,7 @@ class FlatpakSourceInfo(object):
 
         def is_app_module(m):
             dependencies = m.mmd.props.dependencies
-            return runtime_module_name in dependencies[0].props.buildrequires
+            return runtime_module_name in dependencies[0].peek_buildrequires()
 
         return [m for m in self.modules.values() if is_app_module(m)]
 
@@ -212,7 +366,7 @@ class FlatpakBuilder(object):
 
     def get_install_packages(self):
         source = self.source
-        return source.base_module.mmd.props.profiles[source.profile].props.rpms.get()
+        return source.base_module.mmd.peek_profiles()[source.profile].props.rpms.get()
 
     def get_includepkgs(self):
         source = self.source
@@ -241,7 +395,7 @@ class FlatpakBuilder(object):
 
         if not source.runtime:
             runtime_module = source.runtime_module
-            runtime_profile = runtime_module.mmd.props.profiles['runtime']
+            runtime_profile = runtime_module.mmd.peek_profiles()['runtime']
             available_packages = sorted(runtime_profile.props.rpms.get())
 
             for m in source.app_modules:
@@ -250,7 +404,7 @@ class FlatpakBuilder(object):
                 available_packages.extend(x[:-4] for x in m.rpms)
         else:
             base_module = source.base_module
-            available_packages = sorted(base_module.mmd.props.profiles['runtime'].props.rpms.get())
+            available_packages = sorted(base_module.mmd.peek_profiles()['runtime'].props.rpms.get())
 
         return available_packages
 
@@ -394,7 +548,7 @@ class FlatpakBuilder(object):
         return parse_rpm_output(lines)
 
     def _filter_app_manifest(self, components):
-        runtime_rpms = self.source.runtime_module.mmd.props.profiles['runtime'].props.rpms
+        runtime_rpms = self.source.runtime_module.mmd.peek_profiles()['runtime'].props.rpms
 
         return [c for c in components if not runtime_rpms.contains(c['name'])]
 
@@ -490,7 +644,8 @@ class FlatpakBuilder(object):
         # with gzip'ed tarball, tar is several seconds faster than tarfile.extractall
         subprocess.check_call(['tar', 'xCfz', builddir, tarred_filesystem])
 
-        update_desktop_files(app_id, builddir)
+        processor = FileTreeProcessor(builddir, info)
+        processor.process()
 
         finish_args = []
         if 'finish-args' in info:
