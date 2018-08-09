@@ -75,7 +75,7 @@ class ModuleBuilder(object):
 
         log_line_re = re.compile(r'.*?-\s*(\S+)\s-\s*(DEBUG|INFO|WARNING|ERROR)\s*-\s*(.*)')
         command_re = re.compile(r'Executing command: \[([^]]+)\](?:, stdout log: (\S+?))?(?:, stderr log: (\S+?))?$')
-        build_id_re = re.compile('\S+ submitted build of (\S+), stream=(\S+), version=(\S+)')
+        build_id_re = re.compile('\S+ submitted build of (\S+), stream=(\S+), version=(\S+), context=(\S+)')
 
         # These define lines in the log output to ignore, in addition to all
         # messages at level DEBUG
