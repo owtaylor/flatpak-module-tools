@@ -28,6 +28,16 @@ excludepkgs={exclude}
 priority=10
 """.format(name=self.name, stream=self.stream, path=self.path, exclude=exclude)
 
+    def has_module_metadata(self):
+        # Parsing the repomd.xml file would be cleaner and almost as simple,
+        # but this matches how the dnf finds the modules file
+
+        for f in os.path.join(self.path, 'repodata'):
+            if "modules.yaml" in file:
+                return True
+
+        return False
+
 class LocalBuild(Build):
     def __init__(self, path):
         mmd_path = os.path.join(path, 'modules.yaml')

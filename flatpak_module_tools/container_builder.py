@@ -64,8 +64,11 @@ class ContainerBuilder(object):
         os.makedirs(workdir)
         info("Writing results to {}".format(workdir))
 
+        has_modulemd = {}
+
         for build in builds.values():
             locator.ensure_downloaded(build)
+            has_modulemd[build.name + ':' + build.stream] = build.has_module_metadata()
 
         repos = [build.yum_config() for build in builds.values()]
 
@@ -80,7 +83,8 @@ class ContainerBuilder(object):
         output_path = os.path.join(workdir, 'mock.cfg')
 
         # Check if DNF is new enough to support modules, if not, all packages from modular
-        # repositories will automatically be enabled
+        # repositories will automatically be enabled. If yes, we'll need to enable any
+        # modular repositories - *if they actually have module metadata*
         try:
             subprocess.check_output(['dnf', 'module', 'list', '--enabled'],
                                     stderr=subprocess.STDOUT)
@@ -89,7 +93,9 @@ class ContainerBuilder(object):
             have_dnf_module=False
 
         if have_dnf_module:
-            modules_str = ', '.join("'{}'".format(x) for x in builder.get_enable_modules())
+            to_enable = [x for x in builder.get_enable_modules() if has_modulemd[x]]
+
+            modules_str = ', '.join("'{}'".format(x) for x in to_enable)
             module_enable = "config_opts['module_enable'] = [{}]".format(modules_str)
         else:
             module_enable = ""
