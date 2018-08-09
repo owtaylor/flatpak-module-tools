@@ -17,6 +17,11 @@ from .utils import check_call, error, die, header, important, header, info
 class ModuleBuilder(object):
     def __init__(self, modulemd, stream, local_builds=[]):
         self.git_repo = self.find_git_repo()
+        if self.git_repo:
+            self.top_dir = self.git_repo
+        else:
+            self.top_dir = os.getcwd()
+
         if modulemd is not None:
             self.modulemd = modulemd
         else:
@@ -42,11 +47,8 @@ class ModuleBuilder(object):
             return None
 
     def find_modulemd(self):
-        if self.git_repo is None:
-            die('modulemd file not specified and not in a git repository')
-
-        basename = os.path.basename(self.git_repo)
-        modulemd = os.path.join(self.git_repo, basename + '.yaml')
+        basename = os.path.basename(self.top_dir)
+        modulemd = os.path.join(self.top_dir, basename + '.yaml')
         if not os.path.exists(modulemd):
             die("'{}' does not exist".format(modulemd))
 
@@ -54,7 +56,7 @@ class ModuleBuilder(object):
 
     def find_stream(self):
         if self.git_repo is None:
-            die('stream not specified and not in a git repository')
+            return 'master'
 
         try:
             with open(os.devnull, 'w') as devnull:
