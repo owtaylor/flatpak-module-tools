@@ -95,6 +95,13 @@ class ModuleBuilder(object):
             r'u"document: modulemd',
         ]]
 
+        # These are lines that if we see in the log, we consider the build to have failed
+        # (Possible we want to treat level=ERROR as fatal always)
+        fail_res = [re.compile(r) for r in [
+            r'Error while building artifact',
+            r'Could not process message handler',
+        ]]
+
         cmd = ['mbs-manager', 'build_module_locally',
                '--file', self.modulemd,
                '--stream', self.stream]
@@ -111,6 +118,7 @@ class ModuleBuilder(object):
         log_path = None
         log_file = None
         log_lines = []
+        failed = False
 
         while True:
             line = process.stdout.readline()
@@ -150,7 +158,12 @@ class ModuleBuilder(object):
                 if ignored:
                     continue
 
-                elif level == 'INFO':
+                for p in fail_res:
+                    if p.match(message) is not None:
+                        failed = True
+                        break
+
+                if level == 'INFO':
                     m = build_id_re.match(message)
                     if m is not None:
                         name = m.group(1)
@@ -200,7 +213,7 @@ class ModuleBuilder(object):
         rv = process.wait()
         click.echo()
 
-        if rv == 0:
+        if not failed and rv == 0:
             important('{}:{}:{} successfully built'.format(name, stream, version))
             info("log: {}".format(log_path))
         else:
