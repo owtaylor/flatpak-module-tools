@@ -93,7 +93,7 @@ class Installer(object):
             old_origin = None
 
         if old_origin == 'flatpak-module-tools':
-            check_call(['flatpak', 'update', '--user', ref])
+            check_call(['flatpak', 'update', '-y', '--user', ref])
         else:
             if old_origin is not None:
                 check_call(['flatpak', 'uninstall', '--user', shortref])
