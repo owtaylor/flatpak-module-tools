@@ -161,7 +161,7 @@ class FileTreeProcessor(object):
                 self.log.info("Renaming %s to share/appdata/%s", src_basename, appdata_basename)
 
                 if not os.path.exists(appdata_dir):
-                    os.path.mkdirs(appdata_dir)
+                    os.makedirs(appdata_dir)
                 os.rename(appdata_source, self.appdata_file)
 
             if self.appdata_license:

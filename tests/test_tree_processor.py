@@ -87,7 +87,10 @@ class AppTree(object):
                                       desktop_contents)
 
         if rename_appdata_file:
-            files["files/share/appdata/" + rename_appdata_file] = appdata_contents
+            if rename_appdata_file.endswith('metainfo.xml'):
+                files["files/share/metainfo/" + rename_appdata_file] = appdata_contents
+            else:
+                files["files/share/appdata/" + rename_appdata_file] = appdata_contents
         else:
             files["files/share/appdata/org.gnome.eog.appdata.xml"] = appdata_contents
 
