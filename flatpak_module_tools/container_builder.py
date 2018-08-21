@@ -1,6 +1,7 @@
 import jinja2
 import os
 import yaml
+import re
 import shutil
 import subprocess
 import sys
@@ -38,6 +39,34 @@ class ContainerBuilder(object):
             warn("Multiple modules specified in compose section of '{}', using first".format(containerspec))
 
         self.module_spec = split_module_spec(modules[0])
+
+    def _get_fedora_version(self, builds):
+        # Streams should already be expanded in the modulemd's that we retrieve
+        #  modules were built against a particular dependency.
+        def get_stream(module, req, req_stream):
+            req_stream_list = req_stream.get()
+            if len(req_stream_list) != 1:
+                die("%s: stream list for '%s' is not expanded (%s)" %
+                    (module.props.name, req, req_stream_list))
+            return req_stream_list[0]
+
+        platform_stream = None
+
+        # Find the platform stream to get the base package set
+        for build in builds.values():
+            for dep in build.mmd.peek_dependencies():
+                for req, req_stream in dep.peek_requires().items():
+                    if req == 'platform':
+                        platform_stream = get_stream(build.mmd, req, req_stream)
+
+        if platform_stream is None:
+            die("Unable to determine base OS version from 'platform' module stream")
+
+        m = re.match('^f(\d+)$', platform_stream)
+        if m is None:
+            die("'platform' module stream should be f<N>, e.g, f29")
+
+        return m.group(1)
 
     def build(self):
         header('BUILDING CONTAINER')
@@ -101,7 +130,7 @@ class ContainerBuilder(object):
             module_enable = ""
 
         template.stream(arch='x86_64',
-                        ver='28',
+                        ver=self._get_fedora_version(builds),
                         kojipkgs='kojipkgs.stg.fedoraproject.org' if self.staging else 'kojipkgs.fedoraproject.org',
                         includepkgs=builder.get_includepkgs(),
                         module_enable=module_enable,
