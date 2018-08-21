@@ -32,8 +32,8 @@ priority=10
         # Parsing the repomd.xml file would be cleaner and almost as simple,
         # but this matches how the dnf finds the modules file
 
-        for f in os.path.join(self.path, 'repodata'):
-            if "modules.yaml" in file:
+        for f in os.listdir(os.path.join(self.path, 'repodata')):
+            if "modules.yaml" in f:
                 return True
 
         return False
