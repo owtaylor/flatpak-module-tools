@@ -398,7 +398,16 @@ class FlatpakBuilder(object):
 
     def get_install_packages(self):
         source = self.source
-        return source.base_module.mmd.peek_profiles()[source.profile].props.rpms.get()
+        packages = source.base_module.mmd.peek_profiles()[source.profile].props.rpms.get()
+        if not source.runtime:
+            # The flatpak-runtime-config package is needed when building an application
+            # Flatpak because it includes file triggers for files in /app. (Including just
+            # this package avoids having to install the entire runtime package set; if
+            # we need to make this configurable it could be a separate profile of
+            # the runtime.)
+            packages.append('flatpak-runtime-config')
+
+        return packages
 
     def get_includepkgs(self):
         source = self.source
