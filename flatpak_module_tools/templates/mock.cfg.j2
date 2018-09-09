@@ -6,6 +6,9 @@ config_opts['dist'] = 'fc{{ ver }}'  # only useful for --resultdir variable subs
 config_opts['extra_chroot_dirs'] = [ '/run/lock', ]
 config_opts['releasever'] = '{{ ver }}'
 config_opts['plugin_conf']['root_cache_enable'] = False
+config_opts['plugin_conf'].setdefault('yum_cache_opts', {})
+config_opts['plugin_conf']['yum_cache_opts']['dir'] = \
+    "%(cache_topdir)s/flatpak-module-tools/%(package_manager)s_cache/"
 
 config_opts['package_manager'] = 'dnf'
 
