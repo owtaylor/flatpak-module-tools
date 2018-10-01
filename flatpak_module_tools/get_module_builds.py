@@ -28,6 +28,10 @@ def _add_status_and_base_version(session, build):
 
 def _add_rpm_list(session, build):
     archives = session.listArchives(buildID=build['build_id'])
+    # The RPM list for the 'modulemd.txt' archive has all the RPMs, recent
+    # versions of MBS also write upload 'modulemd.<arch>.txt' archives with
+    # architecture subsets.
+    archives = [a for a in archives if a['filename'] == 'modulemd.txt']
     assert len(archives) == 1
     build['gmb_rpms'] = session.listRPMs(imageID=archives[0]['id'])
 
