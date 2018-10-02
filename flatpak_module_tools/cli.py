@@ -48,7 +48,8 @@ def local_build(add_local_build, containerspec, modulemd, stream, install):
     tarfile = container_builder.build()
 
     if install:
-        installer = Installer(path=tarfile)
+        installer = Installer()
+        installer.set_source_path(tarfile)
         installer.install()
 
 
@@ -93,9 +94,20 @@ def build_container(add_local_build, from_local, staging, containerspec, install
 
 
 @cli.command()
+@click.option('--koji', is_flag=True,
+              help='Look up argument as NAME[:STREAM] in Koji')
+@click.option('--staging', is_flag=True,
+              help='Use Fedora staging Koji')
 @click.argument('path_or_url')
-def install(path_or_url):
+def install(koji, staging, path_or_url):
     """Install a container as a Flatpak"""
 
-    installer = Installer(path=path_or_url)
+    installer = Installer(staging=staging)
+    if koji:
+        installer.set_source_koji_name_stream(path_or_url)
+    elif path_or_url.startswith("http://") or path_or_url.startswith("https://"):
+        installer.set_source_url(path_or_url)
+    else:
+        installer.set_path(path_or_url)
+
     installer.install()

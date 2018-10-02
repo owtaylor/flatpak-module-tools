@@ -1,3 +1,4 @@
+import koji
 import json
 import os
 import re
@@ -10,7 +11,7 @@ from six.moves.urllib.parse import urlparse
 import click
 import requests
 
-from .utils import check_call, header
+from .utils import check_call, header, die
 
 def _download_url(url, outdir):
     parts = urlparse(url)
@@ -32,13 +33,70 @@ def _download_url(url, outdir):
 
     return path
 
+
+def _download_koji_name_stream(koji_name_stream, outdir, staging=False):
+    parts = koji_name_stream.split(':')
+    if len(parts) == 1:
+        name = parts[0]
+        stream = None
+    elif len(parts) == 2:
+        name = parts[0]
+        stream = parts[1]
+    else:
+        die("Koji download should be NAME or NAME:STREAM, not {}".format(koji_name_stream))
+
+    koji_config = '/etc/module-build-service/koji.conf'
+    koji_profile = 'staging' if staging else 'koji'
+
+    options = koji.read_config(profile_name=koji_profile, user_config=koji_config)
+    session_opts = koji.grab_session_options(options)
+    session = koji.ClientSession(options['server'], session_opts)
+
+    package_id = session.getPackageID(name)
+    if package_id is None:
+        die("Cannot find koji ID for {}".format(koji_name_stream))
+
+    kwargs = {
+        'type': 'image',
+        'state': koji.BUILD_STATES['COMPLETE'],
+        'queryOpts': { 'order': '-completion_ts'}
+    }
+
+    if stream is None:
+        kwargs['queryOpts']['limit'] = 1
+
+    builds = session.listBuilds(package_id, **kwargs)
+    if stream is not None:
+        builds = [b for b in builds if b['version'] == stream]
+
+    if len(builds) == 0:
+        die("Cannot find any Flatpak builds for {}".format(koji_name_stream))
+
+    build = builds[0]
+    archives = session.listArchives(build['build_id'])
+
+    pathinfo = koji.PathInfo(topdir=options['topurl'])
+    url = '/'.join((pathinfo.imagebuild(build), archives[0]['filename']))
+
+    return _download_url(url, outdir)
+
+
 class Installer(object):
-    def __init__(self, path):
-        self.path = path
+    def __init__(self, staging=False):
+        self.staging = staging
 
         data_home = os.environ.get('XDG_DATA_HOME',
                                    os.path.expanduser('~/.local/share'))
         self.repodir = os.path.join(data_home, 'flatpak-module-tools', 'repo')
+
+    def set_source_path(self, path):
+        self.source_path = path
+
+    def set_source_url(self, url):
+        self.source_url = url
+
+    def set_source_koji_name_stream(self, koji_name_stream):
+        self.source_koji_name_stream = koji_name_stream
 
     def ensure_remote(self):
         if not os.path.exists(self.repodir):
@@ -64,10 +122,14 @@ class Installer(object):
             ocidir = os.path.join(workdir, 'oci')
             os.mkdir(ocidir)
 
-            if self.path.startswith("http://") or self.path.startswith("https://"):
-                path = _download_url(self.path, workdir)
+            if self.source_koji_name_stream:
+                path = _download_koji_name_stream(self.source_koji_name_stream, workdir, staging=self.staging)
+            elif self.source_url:
+                path = _download_url(self.source_url, workdir)
+            elif self.source_path:
+                path = os.path.abspath(self.source_path)
             else:
-                path = os.path.abspath(self.path)
+                raise RuntimeError("Installation source not set")
 
             check_call(['tar', 'xfa', path], cwd=ocidir)
 
