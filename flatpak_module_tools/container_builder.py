@@ -139,7 +139,7 @@ class ContainerBuilder(object):
         finalize_script = dedent("""\
             #!/bin/sh
             set -e
-            userdel mockbuild
+            userdel -f mockbuild
             groupdel mock
             """ + builder.get_cleanup_script()) + dedent("""\
             (cd / && tar cf - --anchored --exclude='./sys/*' --exclude='./proc/*' --exclude='./dev/*' --exclude='./run/*' ./)
