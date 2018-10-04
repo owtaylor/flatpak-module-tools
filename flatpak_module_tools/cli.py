@@ -89,7 +89,8 @@ def build_container(add_local_build, from_local, staging, containerspec, install
     tarfile = container_builder.build()
 
     if install:
-        installer = Installer(path=tarfile)
+        installer = Installer()
+        installer.set_source_path(tarfile)
         installer.install()
 
 
@@ -108,6 +109,6 @@ def install(koji, staging, path_or_url):
     elif path_or_url.startswith("http://") or path_or_url.startswith("https://"):
         installer.set_source_url(path_or_url)
     else:
-        installer.set_path(path_or_url)
+        installer.set_source_path(path_or_url)
 
     installer.install()

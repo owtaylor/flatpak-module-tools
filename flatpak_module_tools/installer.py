@@ -84,6 +84,9 @@ def _download_koji_name_stream(koji_name_stream, outdir, staging=False):
 class Installer(object):
     def __init__(self, staging=False):
         self.staging = staging
+        self.source_koji_name_stream = None
+        self.source_path = None
+        self.source_url = None
 
         data_home = os.environ.get('XDG_DATA_HOME',
                                    os.path.expanduser('~/.local/share'))
