@@ -34,7 +34,7 @@ def _download_url(url, outdir):
     return path
 
 
-def _download_koji_name_stream(koji_name_stream, outdir, staging=False):
+def _download_koji_name_stream(profile, koji_name_stream, outdir):
     parts = koji_name_stream.split(':')
     if len(parts) == 1:
         name = parts[0]
@@ -45,10 +45,7 @@ def _download_koji_name_stream(koji_name_stream, outdir, staging=False):
     else:
         die("Koji download should be NAME or NAME:STREAM, not {}".format(koji_name_stream))
 
-    koji_config = '/etc/module-build-service/koji.conf'
-    koji_profile = 'staging' if staging else 'koji'
-
-    options = koji.read_config(profile_name=koji_profile, user_config=koji_config)
+    options = koji.read_config(profile_name=profile.koji_profile, user_config=profile.koji_config)
     session_opts = koji.grab_session_options(options)
     session = koji.ClientSession(options['server'], session_opts)
 
@@ -82,8 +79,8 @@ def _download_koji_name_stream(koji_name_stream, outdir, staging=False):
 
 
 class Installer(object):
-    def __init__(self, staging=False):
-        self.staging = staging
+    def __init__(self, profile):
+        self.profile = profile
         self.source_koji_name_stream = None
         self.source_path = None
         self.source_url = None
@@ -126,7 +123,7 @@ class Installer(object):
             os.mkdir(ocidir)
 
             if self.source_koji_name_stream:
-                path = _download_koji_name_stream(self.source_koji_name_stream, workdir, staging=self.staging)
+                path = _download_koji_name_stream(self.profile, self.source_koji_name_stream, workdir)
             elif self.source_url:
                 path = _download_url(self.source_url, workdir)
             elif self.source_path:

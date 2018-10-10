@@ -105,12 +105,12 @@ class ModuleLocator(object):
     class Config(object):
         pass
 
-    def __init__(self, staging=False):
-        self.staging = staging
+    def __init__(self, profile):
+        self.profile = profile
         self.conf = ModuleLocator.Config()
 
-        self.conf.koji_config = '/etc/module-build-service/koji.conf'
-        self.conf.koji_profile = 'staging' if staging else 'koji'
+        self.conf.koji_config = profile.koji_config
+        self.conf.koji_profile = profile.koji_profile
 
         self.conf.cache_dir = os.path.expanduser('~/modulebuild/cache')
         self.conf.mock_resultsdir = os.path.expanduser('~/modulebuild/builds')

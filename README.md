@@ -10,7 +10,7 @@ The `flatpak-module local-build` builds the module locally, then creates a flatp
 It is equivalent to running `flatpak-module build-module; flatpak-module build-container --source=local`
 
 Usage:
-    flatpak-module local-build
+    flatpak-module [global options] local-build
 	     [--add-local-build=NAME:STREAM[:VERSION]]
 		 [--modulemd=mymodule.yaml]
 		 [--containerspec=somedir/container.yaml]
@@ -37,7 +37,7 @@ flatpak-module build-module
 A wrapper around `mbs-manager build_module_locally`.
 
 Usage:
-    flatpak-module build-module
+    flatpak-module [global options] build-module
 	     [--add-local-build=NAME:STREAM[:VERSION]]
 		 [--modulemd=mymodule.yaml]
 		 [--stream=STREAM]
@@ -64,7 +64,7 @@ For example:
  org.example.MyApp-stable-20180205192824.oci.tar.gz
 
 Usage:
-    flatpak-module build-container
+    flatpak-module [global options] build-container
 	     [--add-local-build=NAME:STREAM[:VERSION]]
 	     [--from-local]
 	     [--install/--install-user]
@@ -88,11 +88,52 @@ flatpak-module install
 Installs a Flatpak or Runtime built as an OCI bundle.
 
 Usage:
-    flatpak-module install [PATH-or-URL]
+    flatpak-module [global options] install [PATH-or-URL]
 
 **--install**
 install the resulting Flatpak for the current user. If it doesn't already exist, a
 `flatpak-module-tools` remote is added to the Flatpak's user configuration.
+
+global options
+==============
+
+**--verbose/v**
+Show verbose debugging output
+
+**--config/c**
+Additional configuration file to read
+
+**--profile/p**
+Alternate configuration profile to use. Default is `production`. The standard config file
+for flatpak-module-tools defines `production` and `staging`, which result in using the
+Fedora production and staging environments, respectively.
+
+Configuration
+=============
+Configuration is read from the following sources, in descending order of priority:
+
+* Any config file specified on the comand line, first has highest priority
+* `~/.config/flatpak-module/config.d/*.yaml`, sorted alphabetically
+* `~/.config/flatpak-module/config.yaml`
+* `/etc/flatpak-module/config.d/*.yaml`, sorted alphabetically
+* `/etc/flatpak-module/config.yaml`
+* `config.yaml` in the Python installation directory of flatpak-module-tools
+
+A config file looks like:
+
+``` yaml
+profiles:
+    profile_name:
+        base_repo_url: http://kojipkgs.fedoraproject.org/repos/f{platform}/latest/$basearch
+        koji_config: /etc/module-build-service/koji.conf
+        koji_profile: koji
+        mbs_config_file: /etc/module-build-service/config.py
+        mbs_config_section: DevConfiguration
+        platform_stream_pattern: '^f(\d+)$'
+```
+
+(normally, it won't be necessary to set all these values.) The profile name `__default__` provides defaults that
+are used if a particular profile doesn't have a key.
 
 LICENSE
 =======

@@ -1,2 +1,3 @@
 include LICENSE
 include flatpak_module_tools/templates/*.j2
+include flatpak_module_tools/config.yaml

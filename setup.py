@@ -19,7 +19,7 @@ setup(name='flatpak-module-tools',
       author_email='otaylor@redhat.com',
       license='MIT',
       packages=['flatpak_module_tools'],
-      package_data={'flatpak_module_tools': ['templates/*.j2']},
+      package_data={'flatpak_module_tools': ['config.yaml', 'templates/*.j2']},
       include_package_data=True,
       entry_points=entry_points,
       )

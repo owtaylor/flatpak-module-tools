@@ -2,6 +2,7 @@ import logging
 
 import click
 
+from .config import add_config_file, set_profile_name, get_profile
 from .container_builder import ContainerBuilder
 from .installer import Installer
 from .module_builder import ModuleBuilder
@@ -10,7 +11,20 @@ from .utils import die
 @click.group()
 @click.option('-v', '--verbose', is_flag=True,
               help='Show verbose debugging output')
-def cli(verbose):
+@click.option('-c', '--config', metavar='CONFIG_YAML', multiple=True,
+              help='Additional configuration file to read')
+@click.option('-p', '--profile', metavar='PROFILE_NAME', default='production',
+              help='Alternate configuration profile to use')
+def cli(verbose, config, profile):
+    for c in reversed(config):
+        add_config_file(c)
+
+    set_profile_name(profile)
+    try:
+        get_profile()
+    except KeyError:
+        die("Unknown profile '{}'".format(profile))
+
     if verbose:
         logging.basicConfig(level=logging.INFO)
     else:
@@ -31,9 +45,11 @@ def cli(verbose):
 def local_build(add_local_build, containerspec, modulemd, stream, install):
     """Build module locally, then build a container"""
 
-    module_builder = ModuleBuilder(modulemd=modulemd, stream=stream,
+    module_builder = ModuleBuilder(profile=get_profile(),
+                                   modulemd=modulemd, stream=stream,
                                    local_builds=add_local_build)
-    container_builder = ContainerBuilder(containerspec=containerspec,
+    container_builder = ContainerBuilder(profile=get_profile(),
+                                         containerspec=containerspec,
                                          local_builds=add_local_build,
                                          from_local=True)
 
@@ -48,7 +64,7 @@ def local_build(add_local_build, containerspec, modulemd, stream, install):
     tarfile = container_builder.build()
 
     if install:
-        installer = Installer()
+        installer = Installer(profile=get_profile())
         installer.set_source_path(tarfile)
         installer.install()
 
@@ -63,7 +79,8 @@ def local_build(add_local_build, containerspec, modulemd, stream, install):
 def build_module(add_local_build, modulemd, stream):
     """Build module locally"""
 
-    module_builder = ModuleBuilder(modulemd=modulemd, stream=stream,
+    module_builder = ModuleBuilder(profile=get_profile(),
+                                   modulemd=modulemd, stream=stream,
                                    local_builds=add_local_build)
     module_builder.build()
 
@@ -73,23 +90,21 @@ def build_module(add_local_build, modulemd, stream):
               help='include a local MBS module build  as a source for the build')
 @click.option('--from-local', is_flag=True,
               help='Use a local build for the module source listed in container.yaml ')
-@click.option('--staging', is_flag=True,
-              help='Use builds from Fedora staging infrastructure')
 @click.option('--containerspec', metavar='CONTAINER_YAML', default='./container.yaml',
               help='Path to container.yaml - defaults to ./container.yaml')
 @click.option('--install', is_flag=True,
               help='automatically install Flatpak for the current user')
-def build_container(add_local_build, from_local, staging, containerspec, install):
+def build_container(add_local_build, from_local, containerspec, install):
     """Build a container from local or remote module"""
 
-    container_builder = ContainerBuilder(containerspec=containerspec,
+    container_builder = ContainerBuilder(profile=get_profile(),
+                                         containerspec=containerspec,
                                          local_builds=add_local_build,
-                                         from_local=from_local,
-                                         staging=staging)
+                                         from_local=from_local)
     tarfile = container_builder.build()
 
     if install:
-        installer = Installer()
+        installer = Installer(profile=get_profile())
         installer.set_source_path(tarfile)
         installer.install()
 
@@ -97,13 +112,11 @@ def build_container(add_local_build, from_local, staging, containerspec, install
 @cli.command()
 @click.option('--koji', is_flag=True,
               help='Look up argument as NAME[:STREAM] in Koji')
-@click.option('--staging', is_flag=True,
-              help='Use Fedora staging Koji')
 @click.argument('path_or_url')
-def install(koji, staging, path_or_url):
+def install(koji, path_or_url):
     """Install a container as a Flatpak"""
 
-    installer = Installer(staging=staging)
+    installer = Installer(profile=get_profile())
     if koji:
         installer.set_source_koji_name_stream(path_or_url)
     elif path_or_url.startswith("http://") or path_or_url.startswith("https://"):

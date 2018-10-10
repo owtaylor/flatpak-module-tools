@@ -15,7 +15,8 @@ from .utils import check_call, error, die, header, important, header, info
 # rather than a maintainer of an MBS installation.
 
 class ModuleBuilder(object):
-    def __init__(self, modulemd, stream, local_builds=[]):
+    def __init__(self, profile, modulemd, stream, local_builds=[]):
+        self.profile = profile
         self.git_repo = self.find_git_repo()
         if self.git_repo:
             self.top_dir = self.git_repo
@@ -110,7 +111,13 @@ class ModuleBuilder(object):
         for build_id in self.local_builds:
             cmd += ['--add-local-build', build_id]
 
+        env = os.environ.copy()
+        if self.profile.mbs_config_file is not None:
+            env['MBS_CONFIG_FILE'] = self.profile.mbs_config_file
+        if self.profile.mbs_config_section is not None:
+            env['MBS_CONFIG_SECTION'] = self.profile.mbs_config_section
         process = subprocess.Popen(cmd,
+                                   env=env,
                                    bufsize=1,
                                    universal_newlines=True,
                                    stdout=subprocess.PIPE,

@@ -12,11 +12,11 @@ from .module_locator import ModuleLocator
 from .utils import check_call, die, header, important, info, split_module_spec
 
 class ContainerBuilder(object):
-    def __init__(self, containerspec, from_local=False, local_builds=[], staging=False):
+    def __init__(self, profile, containerspec, from_local=False, local_builds=[]):
+        self.profile = profile
         self.containerspec = os.path.abspath(containerspec)
         self.from_local = from_local
         self.local_builds = local_builds
-        self.staging = staging
 
         with open(self.containerspec) as f:
             container_yaml = yaml.safe_load(f)
@@ -40,7 +40,7 @@ class ContainerBuilder(object):
 
         self.module_spec = split_module_spec(modules[0])
 
-    def _get_fedora_version(self, builds):
+    def _get_platform_version(self, builds):
         # Streams should already be expanded in the modulemd's that we retrieve
         #  modules were built against a particular dependency.
         def get_stream(module, req, req_stream):
@@ -62,9 +62,10 @@ class ContainerBuilder(object):
         if platform_stream is None:
             die("Unable to determine base OS version from 'platform' module stream")
 
-        m = re.match('^f(\d+)$', platform_stream)
+        m = re.match(self.profile.platform_stream_pattern, platform_stream)
         if m is None:
-            die("'platform' module stream should be f<N>, e.g, f29")
+            die("'platform' module stream '{}' doesn't match '{}'".format(
+                platform_stream, self.profile.platform_stream_pattern))
 
         return m.group(1)
 
@@ -75,7 +76,7 @@ class ContainerBuilder(object):
 
         module_build_id = self.module_spec.to_str(include_profile=False)
 
-        locator = ModuleLocator(staging=self.staging)
+        locator = ModuleLocator(self.profile)
         if self.from_local:
             locator.add_local_build(module_build_id)
         for build_id in self.local_builds:
@@ -129,9 +130,10 @@ class ContainerBuilder(object):
         else:
             module_enable = ""
 
+        platform_version = self._get_platform_version(builds)
+        base_repo_url = self.profile.base_repo_url.format(platform=platform_version)
         template.stream(arch='x86_64',
-                        ver=self._get_fedora_version(builds),
-                        kojipkgs='kojipkgs.stg.fedoraproject.org' if self.staging else 'kojipkgs.fedoraproject.org',
+                        base_repo_url=base_repo_url,
                         includepkgs=builder.get_includepkgs(),
                         module_enable=module_enable,
                         repos=repos).dump(output_path)
