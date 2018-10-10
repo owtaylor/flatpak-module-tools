@@ -85,14 +85,16 @@ path to container.yaml - defaults to `./container.yaml`
 flatpak-module install
 ======================
 
-Installs a Flatpak or Runtime built as an OCI bundle.
+Installs a Flatpak or Runtime built as an OCI bundle for the current user. If it doesn't
+already exist, a `flatpak-module-tools` remote is added to the Flatpak's user configuration.
 
 Usage:
     flatpak-module [global options] install [PATH-or-URL]
 
-**--install**
-install the resulting Flatpak for the current user. If it doesn't already exist, a
-`flatpak-module-tools` remote is added to the Flatpak's user configuration.
+
+**--koji**
+Look up argument as NAME[:STREAM] in Koji, instead of a path or an URL, and install the latest
+Flatpak build that matches.
 
 global options
 ==============
