@@ -445,7 +445,7 @@ class FlatpakBuilder(object):
                 available_packages.extend(x[:-4] for x in m.rpms)
         else:
             base_module = source.base_module
-            available_packages = sorted(base_module.mmd.peek_profiles()['runtime'].props.rpms.get())
+            available_packages = sorted(base_module.mmd.peek_profiles()[source.profile].props.rpms.get())
 
         return available_packages
 
