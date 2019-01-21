@@ -235,13 +235,13 @@ class FileTreeProcessor(object):
                     else:
                         if not is_file:
                             self.log.debug("%s/%s matches 'rename-icon', but not a regular file",
-                                           full_dir, source_name)
+                                           full_dir, source_file)
                         elif depth != 3:
                             self.log.debug("%s/%s matches 'rename-icon', but not at depth 3",
-                                           full_dir, source_name)
+                                           full_dir, source_file)
                         else:
                             self.log.debug("%s/%s matches 'rename-icon', but name does not continue with '.' or '-symbolic.'",
-                                           full_dir, source_name)
+                                           full_dir, source_file)
 
         if not found_icon:
             raise RuntimeError("icon {} not found below {}".format(self.rename_icon, icons_dir))
