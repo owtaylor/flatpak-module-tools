@@ -140,7 +140,7 @@ class ContainerBuilder(object):
 
         finalize_script = dedent("""\
             #!/bin/sh
-            set -e
+            set -ex
             userdel -f mockbuild
             groupdel mock
             """ + builder.get_cleanup_script()) + dedent("""\
@@ -167,6 +167,8 @@ class ContainerBuilder(object):
                                   stdout=subprocess.PIPE)
         filesystem_tar, manifestfile = builder._export_from_stream(process.stdout)
         process.wait()
+        if process.returncode != 0:
+            die("finalize.sh failed (exit status=%d)" % rv)
 
         ref_name, outfile, tarred_outfile = builder.build_container(filesystem_tar)
 
