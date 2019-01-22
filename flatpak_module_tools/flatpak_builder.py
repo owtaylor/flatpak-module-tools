@@ -511,7 +511,7 @@ class FlatpakBuilder(object):
             ("ROOT/app/", "files")
         ])
 
-    def _export_from_stream(self, export_stream):
+    def _export_from_stream(self, export_stream, close_stream=True):
         if self.source.runtime:
             get_target_path = self._get_target_path_runtime()
         else:
@@ -574,7 +574,8 @@ class FlatpakBuilder(object):
 
         in_tf.close()
         out_tf.close()
-        export_stream.close()
+        if close_stream:
+            export_stream.close()
         compress_process.stdin.close()
         if compress_process.wait() != 0:
             raise RuntimeError("gzip failed")

@@ -165,8 +165,13 @@ class ContainerBuilder(object):
         args = ['mock', '-q', '-r', output_path, '--shell', '/root/finalize.sh']
         log_call(args)
         process = subprocess.Popen(args, stdout=subprocess.PIPE)
-        filesystem_tar, manifestfile = builder._export_from_stream(process.stdout)
+        # When mock is using systemd-nspawn, systemd-nspawn dies with EPIPE if the output
+        # stream is closed before it exits, even if the child of systemd-nspawn isn't
+        # writing anything.
+        # https://github.com/systemd/systemd/issues/11533
+        filesystem_tar, manifestfile = builder._export_from_stream(process.stdout, close_stream=False)
         process.wait()
+        process.stdout.close()
         if process.returncode != 0:
             die("finalize.sh failed (exit status=%d)" % process.returncode)
 
