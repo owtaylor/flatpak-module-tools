@@ -168,7 +168,7 @@ class ContainerBuilder(object):
         filesystem_tar, manifestfile = builder._export_from_stream(process.stdout)
         process.wait()
         if process.returncode != 0:
-            die("finalize.sh failed (exit status=%d)" % rv)
+            die("finalize.sh failed (exit status=%d)" % process.returncode)
 
         ref_name, outfile, tarred_outfile = builder.build_container(filesystem_tar)
 
