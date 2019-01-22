@@ -25,7 +25,7 @@ def _download_url(url, outdir):
     total_length = int(r.headers.get('content-length'))
 
     with open(path, 'wb') as f:
-        with click.progressbar(length=total_length, label="Downloading {}".format(basename)) as pb:
+        with click.progressbar(length=total_length, label="Downloading image") as pb:
             for chunk in r.iter_content(chunk_size=1024):
                 if chunk:
                     pb.update(len(chunk))
