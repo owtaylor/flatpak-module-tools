@@ -228,7 +228,7 @@ class ModuleLocator(object):
         koji_path = os.path.join(self.conf.cache_dir, "koji_tags", build.koji_tag)
         if not os.path.exists(koji_path):
             info("Downloading %s:%s to %s" % (build.name, build.stream, build.path))
-            create_local_repo_from_koji_tag(self.conf, build.koji_tag, build.path)
+            create_local_repo_from_koji_tag(self.conf, build.koji_tag, koji_path)
 
         os.makedirs(build.path)
         success = False
