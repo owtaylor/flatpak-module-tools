@@ -8,7 +8,7 @@ from textwrap import dedent
 
 from .flatpak_builder import FlatpakBuilder, FlatpakSourceInfo
 from .module_locator import ModuleLocator
-from .utils import check_call, die, warn, header, important, info, split_module_spec
+from .utils import check_call, die, log_call, warn, header, important, info, split_module_spec
 
 class ContainerBuilder(object):
     def __init__(self, profile, containerspec, from_local=False, local_builds=[]):
@@ -162,8 +162,9 @@ class ContainerBuilder(object):
 
         builder.root = "."
 
-        process = subprocess.Popen(['mock', '-q', '-r', output_path, '--shell', '/root/finalize.sh'],
-                                  stdout=subprocess.PIPE)
+        args = ['mock', '-q', '-r', output_path, '--shell', '/root/finalize.sh']
+        log_call(args)
+        process = subprocess.Popen(args, stdout=subprocess.PIPE)
         filesystem_tar, manifestfile = builder._export_from_stream(process.stdout)
         process.wait()
         if process.returncode != 0:

@@ -27,9 +27,12 @@ def header(msg):
     important(msg)
     important('=' * len(msg))
 
-def check_call(args, cwd=None):
+def log_call(args):
     click.secho('running: ', fg='blue', bold=True, err=True, nl=False)
     click.echo(' '.join(pipes.quote(a) for a in args))
+
+def check_call(args, cwd=None):
+    log_call(args)
     rv = subprocess.call(args, cwd=cwd)
     if rv != 0:
         die("%s failed (exit status=%d)" % (args[0], rv))
