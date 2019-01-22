@@ -122,20 +122,11 @@ class ContainerBuilder(object):
         except subprocess.CalledProcessError:
             have_dnf_module=False
 
-        if have_dnf_module:
-            to_enable = [x for x in builder.get_enable_modules() if has_modulemd[x]]
-
-            modules_str = ', '.join("'{}'".format(x) for x in to_enable)
-            module_enable = "config_opts['module_enable'] = [{}]".format(modules_str)
-        else:
-            module_enable = ""
-
         platform_version = self._get_platform_version(builds)
         base_repo_url = self.profile.base_repo_url.format(platform=platform_version)
         template.stream(arch='x86_64',
                         base_repo_url=base_repo_url,
                         includepkgs=builder.get_includepkgs(),
-                        module_enable=module_enable,
                         repos=repos).dump(output_path)
 
         finalize_script = dedent("""\
@@ -154,6 +145,15 @@ class ContainerBuilder(object):
 
         info('Initializing installation path')
         check_call(['mock', '-q', '-r', output_path, '--clean'])
+
+        # Using mock's config_opts['module_enable'] doesn't work because dnf tries
+        # to enable modules before chroot_setup_cmd installs system-release, but
+        # dnf needs /etc/os-release to figure out the platform module. So we do it this way.
+        # https://github.com/rpm-software-management/mock/issues/232#issuecomment-456340663
+        if have_dnf_module:
+            info('Enabling modules')
+            to_enable = [x for x in builder.get_enable_modules() if has_modulemd[x]]
+            check_call(['mock', '-r', output_path, '--dnf-cmd', 'module', 'enable'] + to_enable)
 
         info('Installing packages')
         check_call(['mock', '-r', output_path, '--install'] + sorted(builder.get_install_packages()))
