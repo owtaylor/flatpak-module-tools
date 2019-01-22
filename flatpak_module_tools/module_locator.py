@@ -5,6 +5,8 @@ import os
 import re
 import sys
 
+from .utils import check_call
+
 import gi
 gi.require_version('Modulemd', '1.0')
 from gi.repository import Modulemd
@@ -206,14 +208,51 @@ class ModuleLocator(object):
                                                    koji_config=self.conf.koji_config,
                                                    koji_profile=self.conf.koji_profile)
 
-        path = os.path.join(self.conf.cache_dir, "koji_tags", koji_tag)
+        path = os.path.join(self.conf.cache_dir, "modules", koji_tag)
         self._cached_remote_builds[key] = KojiBuild(modulemd, path, koji_tag, rpms)
         return self._cached_remote_builds[key]
 
     def ensure_downloaded(self, build):
-        if not os.path.exists(build.path):
+        if os.path.exists(build.path):
+            return
+
+        # We want to re-use modules downloaded by MBS, but unfortunately, when
+        # MBS downloads a module it doesn't include the module metadata, which
+        # DNF wants to be able to do module dependencies. So we do a two step
+        # process:
+        #
+        #  1) Use MBS code to download the module (which runs createrepo)
+        #  2) Create another directory with a symlink to the MBS download,
+        #     run createrepo *again* there, and then add in the module metadata
+        #     with modifyrepo.
+        #
+        # (Adding module metadata directly to the MBS download directory would
+        # break the module build, since MBS is expecting a bare repository
+        # without module metadata.)
+        #
+        # Long term solution: Enable ODCS in Fedora infrastructure,
+        #   stop downloading module builds
+
+        koji_path = os.path.join(self.conf.cache_dir, "koji_tags", build.koji_tag)
+        if not os.path.exists(koji_path):
             info("Downloading %s:%s to %s" % (build.name, build.stream, build.path))
             create_local_repo_from_koji_tag(self.conf, build.koji_tag, build.path)
+
+        os.makedirs(build.path)
+        success = False
+        try:
+            os.symlink(os.path.join("../../koji_tags/", build.koji_tag),
+                       os.path.join(build.path, "rpms"))
+            check_call(["createrepo_c", build.path])
+
+            modules_path = os.path.join(build.path, 'modules.yaml')
+            repodata_path = os.path.join(build.path, 'repodata')
+            build.mmd.dump(modules_path)
+            check_call(['/usr/bin/modifyrepo_c', '--mdtype=modules', modules_path, repodata_path])
+            success = True
+        finally:
+            if not success:
+                shutil.rmtree(build.path)
 
     def _get_builds_recurse(self, builds, name, stream):
         if name == 'platform':
