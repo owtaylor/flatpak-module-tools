@@ -4,7 +4,7 @@ import re
 import subprocess
 import sys
 
-from .utils import check_call, error, die, header, important, header, info
+from .utils import die, error, header, important, info
 
 # ModuleBuilder is a straightforward, simple wrapper around:
 #

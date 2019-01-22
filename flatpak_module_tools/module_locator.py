@@ -1,9 +1,7 @@
-import module_build_service as mbs
-
 from collections import OrderedDict
 import os
 import re
-import sys
+import shutil
 
 from .utils import check_call
 
@@ -11,10 +9,9 @@ import gi
 gi.require_version('Modulemd', '1.0')
 from gi.repository import Modulemd
 
-import koji
 from module_build_service.builder.utils import create_local_repo_from_koji_tag
 
-from .utils import die, info, ModuleSpec
+from .utils import info, ModuleSpec
 from .flatpak_builder import ModuleInfo
 from .get_module_builds import get_module_builds
 

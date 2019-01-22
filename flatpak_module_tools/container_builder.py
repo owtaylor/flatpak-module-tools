@@ -4,12 +4,11 @@ import yaml
 import re
 import shutil
 import subprocess
-import sys
 from textwrap import dedent
 
 from .flatpak_builder import FlatpakBuilder, FlatpakSourceInfo
 from .module_locator import ModuleLocator
-from .utils import check_call, die, header, important, info, split_module_spec
+from .utils import check_call, die, warn, header, important, info, split_module_spec
 
 class ContainerBuilder(object):
     def __init__(self, profile, containerspec, from_local=False, local_builds=[]):

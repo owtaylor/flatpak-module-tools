@@ -5,7 +5,6 @@ import re
 import shutil
 import subprocess
 import tempfile
-import http.client
 
 from six.moves.urllib.parse import urlparse
 
