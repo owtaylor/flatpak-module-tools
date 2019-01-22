@@ -5,6 +5,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import http.client
 
 from six.moves.urllib.parse import urlparse
 
@@ -21,7 +22,14 @@ def _download_url(url, outdir):
 
     path = os.path.join(outdir, basename)
 
-    r = requests.get(url, stream=True)
+    try:
+        r = requests.get(url, stream=True)
+        r.raise_for_status()
+    except requests.exceptions.ConnectionError as e:
+        die("Download failed for {}: {}".format(url, e))
+    except requests.exceptions.HTTPError as e:
+        die("Download failed: {}".format(e))
+
     total_length = int(r.headers.get('content-length'))
 
     with open(path, 'wb') as f:
