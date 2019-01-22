@@ -134,7 +134,8 @@ class ContainerBuilder(object):
             userdel -f mockbuild
             groupdel mock
             """ + builder.get_cleanup_script()) + dedent("""\
-            (cd / && tar cf - --anchored --exclude='./sys/*' --exclude='./proc/*' --exclude='./dev/*' --exclude='./run/*' ./)
+            cd /
+            exec tar cf - --anchored --exclude='./sys/*' --exclude='./proc/*' --exclude='./dev/*' --exclude='./run/*' ./
         """)
 
         finalize_script_path = os.path.join(workdir, 'finalize.sh')
