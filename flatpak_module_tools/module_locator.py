@@ -122,11 +122,6 @@ class ModuleLocator(object):
 
         self._cached_remote_builds = {}
 
-    def download_tag(self, name, stream, tag):
-        repo_dir = os.path.join(self.conf.cache_dir, "koji_tags", tag)
-        info("Downloading %s:%s to %s" % (name, stream, repo_dir))
-        create_local_repo_from_koji_tag(self.conf, tag, repo_dir)
-
     def add_local_build(self, build_id):
         self.local_build_ids.append(build_id)
         self._local_build_info = None
