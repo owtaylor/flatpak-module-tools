@@ -697,7 +697,28 @@ class FlatpakBuilder(object):
             finish_args = ['--command', info['command']] + finish_args
 
         subprocess.check_call(['flatpak', 'build-finish'] + finish_args + [builddir])
-        subprocess.check_call(['flatpak', 'build-export', repo, builddir, app_branch])
+
+        # If we don't have a working bubblewrap, then we need to pass --disable-sandbox
+        # to 'flatpak build-export'.
+        def try_export(disable_sandbox):
+            args = ['flatpak', 'build-export', repo, builddir, app_branch]
+            if disable_sandbox:
+                args += ['--disable-sandbox']
+            subprocess.check_call(args)
+
+        with open(os.devnull) as devnull:
+            have_bwrap = subprocess.call(['bwrap', '--bind', '/', '/', 'true'],
+                                         stdout=devnull, stderr=devnull) == 0
+        if have_bwrap:
+            try_export(disable_sandbox=False)
+        else:
+            self.log.info('No working bubblewrap, callling flatpak build-export --disable-sandbox')
+            try:
+                try_export(disable_sandbox=True)
+            except subprocess.CalledProcessError:
+                # Older flatpak without --disable-sandbox?
+                self.log.info('Retrying without --disable-sandbox')
+                try_export(disable_sandbox=False)
 
         subprocess.check_call(['flatpak', 'build-bundle', repo, '--oci',
                                outfile, app_id, app_branch])
