@@ -112,6 +112,7 @@ class Installer(object):
                 os.makedirs(parent)
 
             check_call(['ostree', 'init', '--mode=archive-z2', '--repo', self.repodir])
+            check_call(['flatpak', 'build-update-repo', self.repodir])
 
         output = subprocess.check_output(['flatpak', 'remotes', '--user'], encoding="UTF-8")
         if not re.search('^flatpak-module-tools\s', output, re.MULTILINE):
