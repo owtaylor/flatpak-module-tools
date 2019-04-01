@@ -153,7 +153,9 @@ class ModuleBuilder(object):
                 level = m.group(2)
                 message = m.group(3)
 
-                if logname != 'module_build_service':
+                # Since https://pagure.io/fm-orchestrator/pull-request/1161
+                # module-build-service messages are categorized as MBS.<subcategory>
+                if logname != 'module_build_service' and not logname.startswith('MBS.'):
                     continue
 
                 if level == 'DEBUG':
