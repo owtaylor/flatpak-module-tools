@@ -137,6 +137,33 @@ profiles:
 (normally, it won't be necessary to set all these values.) The profile name `__default__` provides defaults that
 are used if a particular profile doesn't have a key.
 
+Development
+===========
+
+You can use pipenv to install a local copy for development:
+
+``` sh
+# Create a virtual environment
+$ pipenv --site-packages --three
+# Enter it
+$ pipenv shell
+# Install flatpak-module-tools so that edits are picked up immediately
+$ pip install -e .
+```
+
+Subsequently, you just need `pipenv shell`.
+
+Release process
+===============
+* Update the version in `setup.py`
+* Make a release tarball (`setup.py sdist`)
+* Commit the change (`git commit -a -m "Version 0.9.3"`)
+* Create a signed tag (`git tag -s -m "Version 0.9.3" v0.9.3`)
+* Push commit and tag (`git push origin --tags master`)
+* Upload to PyPI (`twine upload flatpak-module-tools-0.9.3.tar.gz`)
+* Create updated packages for current Fedora releases and EPEL
+* File Bodhi updates as necessary
+
 LICENSE
 =======
 flatpak-module-tools is licensed under the MIT license. See the LICENSE file for details.
