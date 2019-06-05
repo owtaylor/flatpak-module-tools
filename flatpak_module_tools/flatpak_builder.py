@@ -550,10 +550,11 @@ class FlatpakBuilder(object):
 
             if member.isdir():
                 member.mode = 0o0755
-            elif member.mode & 0o0100:
-                member.mode = 0o0755
-            else:
-                member.mode = 0o0644
+            elif member.isreg():
+                if member.mode & 0o0100:
+                    member.mode = 0o0755
+                else:
+                    member.mode = 0o0644
 
             member.name = target_name
             if member.islnk():
