@@ -76,7 +76,7 @@ class ModuleBuilder(object):
 
         log_line_re = re.compile(r'.*?-\s*(\S+)\s-\s*(DEBUG|INFO|WARNING|ERROR)\s*-\s*(.*)')
         command_re = re.compile(r'Executing command: \[([^]]+)\](?:, stdout log: (\S+?))?(?:, stderr log: (\S+?))?$')
-        build_id_re = re.compile('\S+ submitted build of (\S+), stream=(\S+), version=(\S+), context=(\S+)')
+        build_id_re = re.compile(r'The user "[^"]+" submitted the build "([^"]+)"')
 
         # These define lines in the log output to ignore, in addition to all
         # messages at level DEBUG
@@ -177,11 +177,13 @@ class ModuleBuilder(object):
                 if level == 'INFO':
                     m = build_id_re.match(message)
                     if m is not None:
-                        name = m.group(1)
+                        nsvc = m.group(1)
+                        parts = nsvc.split(":")
+                        name = parts[0]
                         assert name == self.name
-                        stream = m.group(2)
+                        stream = parts[1]
                         assert stream == self.stream
-                        version = m.group(3)
+                        version = parts[2]
 
                         output_dir = os.path.join(os.path.expanduser('~/modulebuild'),
                                                   'builds',
