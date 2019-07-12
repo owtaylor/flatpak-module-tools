@@ -645,6 +645,7 @@ class FlatpakBuilder(object):
         subprocess.check_call(['ostree', 'commit',
                                '--repo', repo, '--owner-uid=0',
                                '--owner-gid=0', '--no-xattrs',
+                               '--canonical-permissions',
                                '--branch', runtime_ref,
                                '-s', 'build of ' + runtime_ref,
                                '--tree=tar=' + tarred_filesystem,
