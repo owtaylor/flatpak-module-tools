@@ -42,21 +42,21 @@ class ContainerBuilder(object):
     def _get_platform_version(self, builds):
         # Streams should already be expanded in the modulemd's that we retrieve
         #  modules were built against a particular dependency.
-        def get_stream(module, req, req_stream):
-            req_stream_list = req_stream.get()
-            if len(req_stream_list) != 1:
+        def get_stream(module, req, req_streams):
+            if len(req_streams) != 1:
                 die("%s: stream list for '%s' is not expanded (%s)" %
-                    (module.props.name, req, req_stream_list))
-            return req_stream_list[0]
+                    (module.props.name, req, req_streams))
+            return req_streams[0]
 
         platform_stream = None
 
         # Find the platform stream to get the base package set
         for build in builds.values():
-            for dep in build.mmd.peek_dependencies():
-                for req, req_stream in dep.peek_requires().items():
+            for dep in build.mmd.get_dependencies():
+                for req in dep.get_runtime_modules():
                     if req == 'platform':
-                        platform_stream = get_stream(build.mmd, req, req_stream)
+                        req_streams = dep.get_runtime_streams(req)
+                        platform_stream = get_stream(build.mmd, req, req_streams)
 
         if platform_stream is None:
             die("Unable to determine base OS version from 'platform' module stream")

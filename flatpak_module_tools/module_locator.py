@@ -6,7 +6,7 @@ import shutil
 from .utils import check_call
 
 import gi
-gi.require_version('Modulemd', '1.0')
+gi.require_version('Modulemd', '2.0')
 from gi.repository import Modulemd
 
 from module_build_service.builder.utils import create_local_repo_from_koji_tag
@@ -17,7 +17,7 @@ from .get_module_builds import get_module_builds
 
 class Build(ModuleInfo):
     def yum_config(self):
-        exclude = ','.join(self.mmd.props.rpm_filter.get())
+        exclude = ','.join(self.mmd.get_rpm_filters())
 
         return """[{name}-{stream}]
 name={name}-{stream}
@@ -40,28 +40,26 @@ priority=10
 class LocalBuild(Build):
     def __init__(self, path):
         mmd_path = os.path.join(path, 'modules.yaml')
-        objects = Modulemd.objects_from_file(mmd_path)
-        mmds = [o for o in objects if isinstance(o, Modulemd.Module)]
+        mmd = Modulemd.ModuleStream.read_file (mmd_path, False)
+        mmd = mmd.upgrade(Modulemd.ModuleStreamVersionEnum.TWO)
 
-        mmd = mmds[0]
-        mmd.upgrade()
-
-        self.name = mmd.props.name
-        self.stream = mmd.props.stream
+        self.name = mmd.props.module_name
+        self.stream = mmd.props.stream_name
         self.version = mmd.props.version
 
         self.path = path
         self.mmd = mmd
 
-        self.rpms = [a + '.rpm' for a in mmd.props.rpm_artifacts.get()]
+        print(mmd.get_rpm_artifacts())
+        self.rpms = [a + '.rpm' for a in mmd.get_rpm_artifacts()]
 
     def __repr__(self):
         return '<LocalBuild {name}:{stream}:{version}>'.format(**self.__dict__)
 
 class KojiBuild(Build):
     def __init__(self, mmd, path, koji_tag, rpms):
-        self.name = mmd.props.name
-        self.stream = mmd.props.stream
+        self.name = mmd.props.module_name
+        self.stream = mmd.props.stream_name
         self.version = mmd.props.version
 
         self.path = path
@@ -89,9 +87,9 @@ def get_module_info(module_name, stream, version=None, koji_config=None, koji_pr
     build = builds[0]
 
     modulemd_str = build['extra']['typeinfo']['module']['modulemd_str']
-    mmd = Modulemd.Module.new_from_string(modulemd_str)
+    mmd = Modulemd.ModuleStream.read_string(modulemd_str, False)
     # Make sure that we have the v2 'dependencies' format
-    mmd.upgrade()
+    mmd.upgrade(Modulemd.ModuleStreamVersionEnum.TWO)
 
     rpms = ['{name}-{epochnum}:{version}-{release}.{arch}.rpm'.format(epochnum=rpm['epoch'] or 0, **rpm)
             for rpm in build['gmb_rpms']
@@ -239,7 +237,10 @@ class ModuleLocator(object):
 
             modules_path = os.path.join(build.path, 'modules.yaml')
             repodata_path = os.path.join(build.path, 'repodata')
-            build.mmd.dump(modules_path)
+            mmd_index = Modulemd.ModuleIndex.new()
+            mmd_index.add_module_stream(build.mmd)
+            with open(modules_path, "w") as f:
+                f.write(mmd_index.dump_to_string())
             check_call(['/usr/bin/modifyrepo_c', '--mdtype=modules', modules_path, repodata_path])
             success = True
         finally:
@@ -262,15 +263,15 @@ class ModuleLocator(object):
         build = self.locate(name, stream)
         builds[name] = build
 
-        dependencies = build.mmd.props.dependencies
+        dependencies = build.mmd.get_dependencies()
         # A built module should have its dependencies already expanded
         assert len(dependencies) == 1
 
-        for n, required_streams in dependencies[0].props.requires.items():
-            rs = required_streams.get()
+        for required_module in dependencies[0].get_runtime_modules():
+            rs = dependencies[0].get_runtime_streams(required_module)
             # should already be expanded to a single stream
             assert len(rs) == 1
-            self._get_builds_recurse(builds, n, rs[0])
+            self._get_builds_recurse(builds, required_module, rs[0])
 
     def get_builds(self, name, stream, version=None):
         builds = OrderedDict()

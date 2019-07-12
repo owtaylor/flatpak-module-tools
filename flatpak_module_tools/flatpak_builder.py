@@ -311,7 +311,7 @@ class FlatpakSourceInfo(object):
 
         # A runtime module must have a 'runtime' profile, but can have other
         # profiles for SDKs, minimal runtimes, etc.
-        self.runtime = 'runtime' in base_module.mmd.peek_profiles()
+        self.runtime = 'runtime' in base_module.mmd.get_profile_names()
 
         if profile:
             self.profile = profile
@@ -320,21 +320,21 @@ class FlatpakSourceInfo(object):
         else:
             self.profile = 'default'
 
-        assert self.profile in base_module.mmd.peek_profiles()
+        assert self.profile in base_module.mmd.get_profile_names()
 
     # The module for the Flatpak runtime that this app runs against
     @property
     def runtime_module(self):
         assert not self.runtime
 
-        dependencies = self.base_module.mmd.props.dependencies
+        dependencies = self.base_module.mmd.get_dependencies()
         # A built module should have its dependencies already expanded
         assert len(dependencies) == 1
 
-        for key in dependencies[0].peek_buildrequires().keys():
+        for module_name in dependencies[0].get_buildtime_modules():
             try:
-                module = self.modules[key]
-                if 'runtime' in module.mmd.peek_profiles():
+                module = self.modules[module_name]
+                if 'runtime' in module.mmd.get_profile_names():
                     return module
             except KeyError:
                 pass
@@ -347,11 +347,11 @@ class FlatpakSourceInfo(object):
     # but might contain modules shared between multiple flatpaks as well.
     @property
     def app_modules(self):
-        runtime_module_name = self.runtime_module.mmd.props.name
+        runtime_module_name = self.runtime_module.mmd.props.module_name
 
         def is_app_module(m):
-            dependencies = m.mmd.props.dependencies
-            return runtime_module_name in dependencies[0].peek_buildrequires()
+            dependencies = m.mmd.get_dependencies()
+            return runtime_module_name in dependencies[0].get_buildtime_modules()
 
         return [m for m in self.modules.values() if is_app_module(m)]
 
@@ -372,7 +372,7 @@ class FlatpakBuilder(object):
         # and the modulemd, check that it matches
         if source.runtime:
             flatpak_yaml = source.flatpak_yaml
-            flatpak_xmd = self.source.base_module.mmd.props.xmd['flatpak']
+            flatpak_xmd = self.source.base_module.mmd.get_xmd()['flatpak']
 
             def check(condition, what):
                 if not condition:
@@ -392,13 +392,13 @@ class FlatpakBuilder(object):
     def get_enable_modules(self):
         # We need to enable all the modules other than the platform pseudo-module
         # sorted for testability.
-        return sorted(m.mmd.props.name + ':' + m.mmd.props.stream
+        return sorted(m.mmd.props.module_name + ':' + m.mmd.props.stream_name
                       for m in self.source.modules.values()
-                      if m.mmd.props.name != 'platform')
+                      if m.mmd.props.module_name != 'platform')
 
     def get_install_packages(self):
         source = self.source
-        packages = source.base_module.mmd.peek_profiles()[source.profile].props.rpms.get()
+        packages = source.base_module.mmd.get_profile(source.profile).get_rpms()
         if not source.runtime:
             # The flatpak-runtime-config package is needed when building an application
             # Flatpak because it includes file triggers for files in /app. (Including just
@@ -436,8 +436,8 @@ class FlatpakBuilder(object):
 
         if not source.runtime:
             runtime_module = source.runtime_module
-            runtime_profile = runtime_module.mmd.peek_profiles()['runtime']
-            available_packages = sorted(runtime_profile.props.rpms.get())
+            runtime_profile = runtime_module.mmd.get_profile('runtime')
+            available_packages = sorted(runtime_profile.get_rpms())
 
             for m in source.app_modules:
                 # Strip off the '.rpm' suffix from the filename to get something
@@ -445,7 +445,7 @@ class FlatpakBuilder(object):
                 available_packages.extend(x[:-4] for x in m.rpms)
         else:
             base_module = source.base_module
-            available_packages = sorted(base_module.mmd.peek_profiles()[source.profile].props.rpms.get())
+            available_packages = sorted(base_module.mmd.get_profile(source.profile).get_rpms())
 
         return available_packages
 
@@ -591,7 +591,7 @@ class FlatpakBuilder(object):
         return self.parse_manifest(lines)
 
     def _filter_app_manifest(self, components):
-        runtime_rpms = self.source.runtime_module.mmd.peek_profiles()['runtime'].props.rpms
+        runtime_rpms = self.source.runtime_module.mmd.get_profile('runtime').get_rpms()
 
         return [c for c in components if not runtime_rpms.contains(c['name'])]
 
@@ -660,7 +660,7 @@ class FlatpakBuilder(object):
     def _find_runtime_info(self):
         runtime_module = self.source.runtime_module
 
-        flatpak_xmd = runtime_module.mmd.props.xmd['flatpak']
+        flatpak_xmd = runtime_module.mmd.get_xmd()['flatpak']
         runtime_id = flatpak_xmd['runtimes']['runtime']['id']
         sdk_id = flatpak_xmd['runtimes']['runtime'].get('sdk', runtime_id)
         runtime_version = flatpak_xmd['branch']
