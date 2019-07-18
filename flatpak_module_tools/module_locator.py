@@ -267,11 +267,12 @@ class ModuleLocator(object):
         # A built module should have its dependencies already expanded
         assert len(dependencies) <= 1
 
-        for required_module in dependencies[0].get_runtime_modules():
-            rs = dependencies[0].get_runtime_streams(required_module)
-            # should already be expanded to a single stream
-            assert len(rs) == 1
-            self._get_builds_recurse(builds, required_module, rs[0])
+        if len(dependencies) == 1:
+            for required_module in dependencies[0].get_runtime_modules():
+                rs = dependencies[0].get_runtime_streams(required_module)
+                # should already be expanded to a single stream
+                assert len(rs) == 1
+                self._get_builds_recurse(builds, required_module, rs[0])
 
     def get_builds(self, name, stream, version=None):
         builds = OrderedDict()

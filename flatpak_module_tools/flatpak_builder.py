@@ -331,13 +331,14 @@ class FlatpakSourceInfo(object):
         # A built module should have its dependencies already expanded
         assert len(dependencies) <= 1
 
-        for module_name in dependencies[0].get_buildtime_modules():
-            try:
-                module = self.modules[module_name]
-                if 'runtime' in module.mmd.get_profile_names():
-                    return module
-            except KeyError:
-                pass
+        if len(dependencies) == 1:
+            for module_name in dependencies[0].get_buildtime_modules():
+                try:
+                    module = self.modules[module_name]
+                    if 'runtime' in module.mmd.get_profile_names():
+                        return module
+                except KeyError:
+                    pass
 
         raise RuntimeError("Failed to identify runtime module in the buildrequires for {}"
                            .format(self.base_module.name))
