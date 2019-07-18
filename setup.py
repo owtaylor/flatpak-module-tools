@@ -12,7 +12,7 @@ else:
     entry_points = None
 
 setup(name='flatpak-module-tools',
-      version='0.10.1',
+      version='0.10.2',
       description='Tools for creating and maintaining Flatpaks as Fedora modules',
       url='https://pagure.io/flatpak-module-tools',
       author='Owen Taylor',
