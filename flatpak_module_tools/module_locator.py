@@ -265,7 +265,7 @@ class ModuleLocator(object):
 
         dependencies = build.mmd.get_dependencies()
         # A built module should have its dependencies already expanded
-        assert len(dependencies) == 1
+        assert len(dependencies) <= 1
 
         for required_module in dependencies[0].get_runtime_modules():
             rs = dependencies[0].get_runtime_streams(required_module)

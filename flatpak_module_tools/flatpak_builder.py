@@ -329,7 +329,7 @@ class FlatpakSourceInfo(object):
 
         dependencies = self.base_module.mmd.get_dependencies()
         # A built module should have its dependencies already expanded
-        assert len(dependencies) == 1
+        assert len(dependencies) <= 1
 
         for module_name in dependencies[0].get_buildtime_modules():
             try:
