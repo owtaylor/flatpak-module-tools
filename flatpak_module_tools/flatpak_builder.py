@@ -591,9 +591,9 @@ class FlatpakBuilder(object):
         return self.parse_manifest(lines)
 
     def _filter_app_manifest(self, components):
-        runtime_rpms = self.source.runtime_module.mmd.get_profile('runtime').get_rpms()
+        runtime_rpms = set(self.source.runtime_module.mmd.get_profile('runtime').get_rpms())
 
-        return [c for c in components if not runtime_rpms.contains(c['name'])]
+        return [c for c in components if not c['name'] in runtime_rpms]
 
     def get_components(self, manifest):
         all_components = self._get_components(manifest)
