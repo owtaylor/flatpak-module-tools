@@ -89,7 +89,7 @@ def get_module_info(module_name, stream, version=None, koji_config=None, koji_pr
     modulemd_str = build['extra']['typeinfo']['module']['modulemd_str']
     mmd = Modulemd.ModuleStream.read_string(modulemd_str, False)
     # Make sure that we have the v2 'dependencies' format
-    mmd.upgrade(Modulemd.ModuleStreamVersionEnum.TWO)
+    mmd = mmd.upgrade(Modulemd.ModuleStreamVersionEnum.TWO)
 
     rpms = ['{name}-{epochnum}:{version}-{release}.{arch}.rpm'.format(epochnum=rpm['epoch'] or 0, **rpm)
             for rpm in build['gmb_rpms']
