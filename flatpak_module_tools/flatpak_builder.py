@@ -12,6 +12,7 @@ image. It is shared between:
  https://pagure.io/flatpak-module-tools
 """
 
+import errno
 import logging
 import os
 from six.moves import configparser
@@ -702,7 +703,19 @@ class FlatpakBuilder(object):
         subprocess.check_call(['flatpak', 'build-finish'] + finish_args + [builddir])
 
         # If we don't have a working bubblewrap, then we need to pass --disable-sandbox
-        # to 'flatpak build-export'.
+        # to 'flatpak build-export'. On some systems, bwrap may be part
+        # of the Flatpak install.
+
+        def try_bwrap(exec_name):
+            # return: True - works; False - doesn't work; None - not found
+            try:
+                return subprocess.call([exec_name, '--bind', '/', '/', 'true'],
+                                       stdout=devnull, stderr=devnull) == 0
+            except OSError as e:
+                if e.errno == errno.ENOENT:
+                    return None
+                raise
+
         def try_export(disable_sandbox):
             args = ['flatpak', 'build-export', repo, builddir, app_branch]
             if disable_sandbox:
@@ -710,8 +723,10 @@ class FlatpakBuilder(object):
             subprocess.check_call(args)
 
         with open(os.devnull) as devnull:
-            have_bwrap = subprocess.call(['bwrap', '--bind', '/', '/', 'true'],
-                                         stdout=devnull, stderr=devnull) == 0
+            have_bwrap = try_bwrap('bwrap')
+            if have_bwrap is None:
+                have_bwrap = try_bwrap('/usr/libexec/flatpak-bwrap')
+
         if have_bwrap:
             try_export(disable_sandbox=False)
         else:
