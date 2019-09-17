@@ -50,7 +50,6 @@ class LocalBuild(Build):
         self.path = path
         self.mmd = mmd
 
-        print(mmd.get_rpm_artifacts())
         self.rpms = [a + '.rpm' for a in mmd.get_rpm_artifacts()]
 
     def __repr__(self):
