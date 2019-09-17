@@ -13,6 +13,8 @@ image. It is shared between:
 """
 
 import errno
+import hashlib
+import json
 import logging
 import os
 from six.moves import configparser
@@ -747,6 +749,51 @@ class FlatpakBuilder(object):
 
         return app_ref
 
+    # Older versions of Flatpak write an image config file without any history entries.
+    # History isn't required by OCI spec, but multiple tools have problems without
+    # history entries matching the layers of the image.
+    # https://github.com/flatpak/flatpak/commit/be9961ecf65a081aac24e2007a0af7be1424eb38
+    def _fixup_history(self, outfile):
+        def get_path_from_descriptor(descriptor):
+            assert descriptor["digest"].startswith("sha256:")
+            return os.path.join(outfile, "blobs", "sha256", descriptor["digest"][len("sha256:"):])
+
+        def update_descriptor(descriptor, contents_json):
+            old_path = get_path_from_descriptor(descriptor)
+            contents_bytes = json.dumps(contents_json, indent=4).encode("UTF-8")
+            digest = hashlib.sha256(contents_bytes).hexdigest()
+            descriptor["digest"] = "sha256:" + digest
+            descriptor["size"] = len(contents_bytes)
+            new_path = get_path_from_descriptor(descriptor)
+            with open(new_path, "wb") as f:
+                f.write(contents_bytes)
+            os.remove(old_path)
+
+        with open(os.path.join(outfile, "index.json")) as f:
+            index_json = json.load(f)
+
+        old_manifest = get_path_from_descriptor(index_json["manifests"][0])
+        with open(old_manifest) as f:
+            manifest_json = json.load(f)
+        old_config = get_path_from_descriptor(manifest_json["config"])
+        with open(old_config) as f:
+            config_json = json.load(f)
+
+        if config_json.get("history") is None:
+            self.log.warning("No history in the image config, adding one")
+            config_json["history"] = [
+                {
+                    "created": config_json["created"],
+                    "created_by": "flatpak build-bundle",
+                },
+            ]
+            update_descriptor(manifest_json["config"], config_json)
+            update_descriptor(index_json["manifests"][0], manifest_json)
+
+            with open(os.path.join(outfile, "index.json"), "w") as f:
+                json.dump(index_json, f, indent=4)
+
+
     def build_container(self, tarred_filesystem):
         outfile = os.path.join(self.workdir, 'flatpak-oci-image')
 
@@ -754,6 +801,8 @@ class FlatpakBuilder(object):
             ref_name = self._create_runtime_oci(tarred_filesystem, outfile)
         else:
             ref_name = self._create_app_oci(tarred_filesystem, outfile)
+
+        self._fixup_history(outfile)
 
         tarred_outfile = outfile + '.tar'
         with tarfile.TarFile(tarred_outfile, "w") as tf:
