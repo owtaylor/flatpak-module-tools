@@ -381,6 +381,14 @@ class FlatpakBuilder(object):
 
         self.log = logging.getLogger(__name__)
 
+        self.extra_labels = {}
+
+    def add_labels(self, labels):
+        """Specify additional labels to add to the generated image"""
+
+        self.log.warning(labels)
+        self.extra_labels.update(labels)
+
     def precheck(self):
         source = self.source
 
@@ -766,6 +774,7 @@ class FlatpakBuilder(object):
     #  * Add the annotations from the OCI image as labels (like
     #     flatpak build-bundle --oci-use-labels, but without requiring a
     #     newer version of flatpak)
+    #  * Add in extra labels specified by the caller
     #  * Add a history entry if missing - old versions of Flatpak write an
     #    image config file without any history entries.
     #    History isn't required by OCI spec, but multiple tools have problems
@@ -822,6 +831,8 @@ class FlatpakBuilder(object):
 
             for k in to_delete:
                 del annotations[k]
+
+        labels.update(self.extra_labels)
 
         update_descriptor(manifest_json["config"], config_json)
         update_descriptor(index_json["manifests"][0], manifest_json)
