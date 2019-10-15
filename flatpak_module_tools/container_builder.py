@@ -105,7 +105,17 @@ class ContainerBuilder(object):
 
         source = FlatpakSourceInfo(self.flatpak_yaml, builds, base_build, self.module_spec.profile)
 
-        builder = FlatpakBuilder(source, workdir, ".")
+        builder = FlatpakBuilder(source, workdir, ".", flatpak_metadata=self.flatpak_metadata)
+
+        component_label = self.flatpak_yaml.get('component', base_build.name)
+        name_label = self.flatpak_yaml.get('name', base_build.name)
+        version_label = base_build.stream
+        release_label = base_build.version
+
+        builder.add_labels({'name': name_label,
+                            'com.redhat.component': component_label,
+                            'version': version_label,
+                            'release': release_label})
 
         env = jinja2.Environment(loader=jinja2.PackageLoader('flatpak_module_tools', 'templates'),
                                  autoescape=False)
