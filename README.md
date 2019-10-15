@@ -14,6 +14,7 @@ Usage:
 	     [--add-local-build=NAME:STREAM[:VERSION]]
 		 [--modulemd=mymodule.yaml]
 		 [--containerspec=somedir/container.yaml]
+		 [--flatpak-metadata=labels/annotations/both]
 		 [--stream=STREAM]
 	     [--install]
 
@@ -25,6 +26,10 @@ modulemd file to build. If in a git repository, defaults to <reponame>.yaml
 
 **--containerspec**
 path to container.yaml - defaults to `./container.yaml`
+
+**--flatpak-metadata**
+how flatpak metadata should be stored. Defaults to `annotations`. Using
+only labels require Flatpak >= 1.6.
 
 **--stream**
 Module stream for the build. If in a git repository, defaults to `<branchname>`
@@ -69,6 +74,7 @@ Usage:
 	     [--from-local]
 	     [--install/--install-user]
 		 [--containerspec=somedir/container.yaml]
+         [--flatpak-metadata=labels/annotations/both]
 
 **--add-local-build**
 include a local MBS module build  as a source for the build
@@ -81,6 +87,10 @@ automatically install the resulting Flatpak or runtime systemwide
 
 **--containerspec**
 path to container.yaml - defaults to `./container.yaml`
+
+**--flatpak-metadata**
+how flatpak metadata should be stored. Defaults to `annotations`. Using
+only labels require Flatpak >= 1.6.
 
 flatpak-module install
 ======================

@@ -6,16 +6,18 @@ import shutil
 import subprocess
 from textwrap import dedent
 
-from .flatpak_builder import FlatpakBuilder, FlatpakSourceInfo
+from .flatpak_builder import FlatpakBuilder, FlatpakSourceInfo, FLATPAK_METADATA_ANNOTATIONS
 from .module_locator import ModuleLocator
 from .utils import check_call, die, log_call, warn, header, important, info, split_module_spec
 
 class ContainerBuilder(object):
-    def __init__(self, profile, containerspec, from_local=False, local_builds=[]):
+    def __init__(self, profile, containerspec, from_local=False, local_builds=[],
+                 flatpak_metadata=FLATPAK_METADATA_ANNOTATIONS):
         self.profile = profile
         self.containerspec = os.path.abspath(containerspec)
         self.from_local = from_local
         self.local_builds = local_builds
+        self.flatpak_metadata = flatpak_metadata
 
         with open(self.containerspec) as f:
             container_yaml = yaml.safe_load(f)

@@ -4,6 +4,9 @@ import click
 
 from .config import add_config_file, set_profile_name, get_profile
 from .container_builder import ContainerBuilder
+from .flatpak_builder import (FLATPAK_METADATA_ANNOTATIONS,
+                              FLATPAK_METADATA_BOTH,
+                              FLATPAK_METADATA_LABELS)
 from .installer import Installer
 from .module_builder import ModuleBuilder
 from .utils import die
@@ -90,17 +93,24 @@ def build_module(add_local_build, modulemd, stream):
               help='include a local MBS module build  as a source for the build')
 @click.option('--from-local', is_flag=True,
               help='Use a local build for the module source listed in container.yaml ')
+@click.option('--flatpak-metadata',
+              type=click.Choice([FLATPAK_METADATA_LABELS,
+                                 FLATPAK_METADATA_ANNOTATIONS,
+                                 FLATPAK_METADATA_BOTH], case_sensitive=False),
+              default=FLATPAK_METADATA_ANNOTATIONS,
+              help='How to store Flatpak metadata in the container')
 @click.option('--containerspec', metavar='CONTAINER_YAML', default='./container.yaml',
               help='Path to container.yaml - defaults to ./container.yaml')
 @click.option('--install', is_flag=True,
               help='automatically install Flatpak for the current user')
-def build_container(add_local_build, from_local, containerspec, install):
+def build_container(add_local_build, from_local, flatpak_metadata, containerspec, install):
     """Build a container from local or remote module"""
 
     container_builder = ContainerBuilder(profile=get_profile(),
                                          containerspec=containerspec,
                                          local_builds=add_local_build,
-                                         from_local=from_local)
+                                         from_local=from_local,
+                                         flatpak_metadata=flatpak_metadata)
     tarfile = container_builder.build()
 
     if install:

@@ -28,6 +28,11 @@ from textwrap import dedent
 from xml.etree import ElementTree
 
 
+FLATPAK_METADATA_LABELS = "labels"
+FLATPAK_METADATA_ANNOTATIONS = "annotations"
+FLATPAK_METADATA_BOTH = "both"
+
+
 # Work around lack of RawConfigParser space_around_delimeters in Python-2.7
 if sys.version_info[0] == 2:
     class MyConfigParser(configparser.RawConfigParser):
@@ -361,11 +366,18 @@ class FlatpakSourceInfo(object):
 
 
 class FlatpakBuilder(object):
-    def __init__(self, source, workdir, root, parse_manifest=None):
+    def __init__(self, source, workdir, root, parse_manifest=None,
+                 flatpak_metadata=FLATPAK_METADATA_ANNOTATIONS):
         self.source = source
         self.workdir = workdir
         self.root = root
         self.parse_manifest = parse_manifest
+
+        if not flatpak_metadata in (FLATPAK_METADATA_ANNOTATIONS,
+                                    FLATPAK_METADATA_LABELS,
+                                    FLATPAK_METADATA_BOTH):
+            raise ValueError("Bad flatpak_metadata value %s" % flatpak_metadata)
+        self.flatpak_metadata = flatpak_metadata
 
         self.log = logging.getLogger(__name__)
 
@@ -749,11 +761,17 @@ class FlatpakBuilder(object):
 
         return app_ref
 
-    # Older versions of Flatpak write an image config file without any history entries.
-    # History isn't required by OCI spec, but multiple tools have problems without
-    # history entries matching the layers of the image.
-    # https://github.com/flatpak/flatpak/commit/be9961ecf65a081aac24e2007a0af7be1424eb38
-    def _fixup_history(self, outfile):
+    # Update the config JSON for the image:
+    #
+    #  * Add the annotations from the OCI image as labels (like
+    #     flatpak build-bundle --oci-use-labels, but without requiring a
+    #     newer version of flatpak)
+    #  * Add a history entry if missing - old versions of Flatpak write an
+    #    image config file without any history entries.
+    #    History isn't required by OCI spec, but multiple tools have problems
+    #    without history entries matching the layers of the image.
+    #    https://github.com/flatpak/flatpak/commit/be9961ecf65a081aac24e2007a0af7be1424eb38
+    def _fixup_config(self, outfile):
         def get_path_from_descriptor(descriptor):
             assert descriptor["digest"].startswith("sha256:")
             return os.path.join(outfile, "blobs", "sha256", descriptor["digest"][len("sha256:"):])
@@ -775,6 +793,7 @@ class FlatpakBuilder(object):
         old_manifest = get_path_from_descriptor(index_json["manifests"][0])
         with open(old_manifest) as f:
             manifest_json = json.load(f)
+        annotations = manifest_json.get("annotations", {})
         old_config = get_path_from_descriptor(manifest_json["config"])
         with open(old_config) as f:
             config_json = json.load(f)
@@ -787,12 +806,28 @@ class FlatpakBuilder(object):
                     "created_by": "flatpak build-bundle",
                 },
             ]
-            update_descriptor(manifest_json["config"], config_json)
-            update_descriptor(index_json["manifests"][0], manifest_json)
 
-            with open(os.path.join(outfile, "index.json"), "w") as f:
-                json.dump(index_json, f, indent=4)
+        config = config_json.setdefault("config", {})
+        labels = config.setdefault("Labels", {})
 
+        if self.flatpak_metadata != FLATPAK_METADATA_ANNOTATIONS:
+            # Merge in the annotations as labels
+            to_delete = list()
+            for k, v in annotations.items():
+                if k.startswith("org.flatpak.") or k.startswith("org.freedesktop."):
+                    if not k in labels:
+                        labels[k] = v
+                    if self.flatpak_metadata != FLATPAK_METADATA_BOTH:
+                        to_delete.append(k)
+
+            for k in to_delete:
+                del annotations[k]
+
+        update_descriptor(manifest_json["config"], config_json)
+        update_descriptor(index_json["manifests"][0], manifest_json)
+
+        with open(os.path.join(outfile, "index.json"), "w") as f:
+            json.dump(index_json, f, indent=4)
 
     def build_container(self, tarred_filesystem):
         outfile = os.path.join(self.workdir, 'flatpak-oci-image')
@@ -802,7 +837,7 @@ class FlatpakBuilder(object):
         else:
             ref_name = self._create_app_oci(tarred_filesystem, outfile)
 
-        self._fixup_history(outfile)
+        self._fixup_config(outfile)
 
         tarred_outfile = outfile + '.tar'
         with tarfile.TarFile(tarred_outfile, "w") as tf:
