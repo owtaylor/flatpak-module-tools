@@ -771,9 +771,9 @@ class FlatpakBuilder(object):
 
     # Update the config JSON for the image:
     #
-    #  * Add the annotations from the OCI image as labels (like
-    #     flatpak build-bundle --oci-use-labels, but without requiring a
-    #     newer version of flatpak)
+    #  * Convert OCI images with labels (Flatpak >= 1.6) to OCI images
+    #    with annotations (Flaptak < 1.6), and vice-versa, or generate
+    #    compat images with both labels and annotations.
     #  * Add in extra labels specified by the caller
     #  * Add a history entry if missing - old versions of Flatpak write an
     #    image config file without any history entries.
@@ -802,7 +802,7 @@ class FlatpakBuilder(object):
         old_manifest = get_path_from_descriptor(index_json["manifests"][0])
         with open(old_manifest) as f:
             manifest_json = json.load(f)
-        annotations = manifest_json.get("annotations", {})
+        annotations = manifest_json.setdefault("annotations", {})
         old_config = get_path_from_descriptor(manifest_json["config"])
         with open(old_config) as f:
             config_json = json.load(f)
@@ -831,6 +831,19 @@ class FlatpakBuilder(object):
 
             for k in to_delete:
                 del annotations[k]
+
+        if self.flatpak_metadata != FLATPAK_METADATA_LABELS:
+            # And merge the labels as annotations the other way
+            to_delete = list()
+            for k, v in labels.items():
+                if k.startswith("org.flatpak.") or k.startswith("org.freedesktop."):
+                    if not k in annotations:
+                        annotations[k] = v
+                    if self.flatpak_metadata != FLATPAK_METADATA_BOTH:
+                        to_delete.append(k)
+
+            for k in to_delete:
+                del labels[k]
 
         labels.update(self.extra_labels)
 
