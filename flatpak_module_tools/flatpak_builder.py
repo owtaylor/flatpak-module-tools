@@ -628,11 +628,26 @@ class FlatpakBuilder(object):
 
         return image_components
 
+    def _build_finish(self, builddir):
+        info = self.source.flatpak_yaml
+
+        finish_args = []
+        if 'finish-args' in info:
+            # shlex.split(None) reads from standard input, so avoid that
+            finish_args = shlex.split(info['finish-args'] or '', comments=True)
+        if 'command' in info and not self.source.runtime:
+            finish_args = ['--command', info['command']] + finish_args
+
+        subprocess.check_call(['flatpak', 'build-finish'] + finish_args + [builddir])
+
     def _create_runtime_oci(self, tarred_filesystem, outfile):
         info = self.source.flatpak_yaml
 
         builddir = os.path.join(self.workdir, "build")
         os.mkdir(builddir)
+
+        filesdir = os.path.join(builddir, "files")
+        os.mkdir(filesdir)
 
         repo = os.path.join(self.workdir, "repo")
         subprocess.check_call(['ostree', 'init', '--mode=archive-z2', '--repo', repo])
@@ -655,14 +670,13 @@ class FlatpakBuilder(object):
             name={id}
             runtime={runtime_id}/{arch}/{branch}
             sdk={sdk_id}/{arch}/{branch}
-
-            [Environment]
-            LD_LIBRARY_PATH=/app/lib64:/app/lib
-            GI_TYPELIB_PATH=/app/lib64/girepository-1.0
             """)
 
         with open(os.path.join(builddir, 'metadata'), 'w') as f:
             f.write(METADATA_TEMPLATE.format(**args))
+
+        # Run flatpak-build-finish to add extra metadata, based on finish-args
+        self._build_finish(builddir)
 
         runtime_ref = 'runtime/{id}/{arch}/{branch}'.format(**args)
 
@@ -715,14 +729,7 @@ class FlatpakBuilder(object):
         processor = FileTreeProcessor(builddir, info)
         processor.process()
 
-        finish_args = []
-        if 'finish-args' in info:
-            # shlex.split(None) reads from standard input, so avoid that
-            finish_args = shlex.split(info['finish-args'] or '', comments=True)
-        if 'command' in info:
-            finish_args = ['--command', info['command']] + finish_args
-
-        subprocess.check_call(['flatpak', 'build-finish'] + finish_args + [builddir])
+        self._build_finish(builddir)
 
         # If we don't have a working bubblewrap, then we need to pass --disable-sandbox
         # to 'flatpak build-export'. On some systems, bwrap may be part
