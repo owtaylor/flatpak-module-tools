@@ -678,6 +678,9 @@ class FlatpakBuilder(object):
         # Run flatpak-build-finish to add extra metadata, based on finish-args
         self._build_finish(builddir)
 
+        with open(os.path.join(builddir, 'metadata'), 'r') as f:
+            metadata = f.read()
+
         runtime_ref = 'runtime/{id}/{arch}/{branch}'.format(**args)
 
         subprocess.check_call(['ostree', 'commit',
@@ -685,6 +688,7 @@ class FlatpakBuilder(object):
                                '--owner-gid=0', '--no-xattrs',
                                '--canonical-permissions',
                                '--branch', runtime_ref,
+                               '--add-metadata-string', 'xa.metadata=' + metadata,
                                '-s', 'build of ' + runtime_ref,
                                '--tree=tar=' + tarred_filesystem,
                                '--tree=dir=' + builddir])
