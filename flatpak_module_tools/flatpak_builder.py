@@ -683,15 +683,21 @@ class FlatpakBuilder(object):
 
         runtime_ref = 'runtime/{id}/{arch}/{branch}'.format(**args)
 
-        subprocess.check_call(['ostree', 'commit',
-                               '--repo', repo, '--owner-uid=0',
-                               '--owner-gid=0', '--no-xattrs',
-                               '--canonical-permissions',
-                               '--branch', runtime_ref,
-                               '--add-metadata-string', 'xa.metadata=' + metadata,
-                               '-s', 'build of ' + runtime_ref,
-                               '--tree=tar=' + tarred_filesystem,
-                               '--tree=dir=' + builddir])
+        commit_args = ['--repo', repo, '--owner-uid=0',
+                       '--owner-gid=0', '--no-xattrs',
+                       '--canonical-permissions',
+                       '--branch', runtime_ref,
+                       '-s', 'build of ' + runtime_ref,
+                       '--tree=tar=' + tarred_filesystem,
+                       '--tree=dir=' + builddir,
+                       '--add-metadata-string', 'xa.metadata=' + metadata]
+
+        if 'end-of-life' in info:
+            commit_args += ['--add-metadata-string', 'ostree.endoflife=' + info['end-of-life']]
+        if 'end-of-life-rebase' in info:
+            commit_args += ['--add-metadata-string', 'ostree.endoflife-rebase=' + info['end-of-life-rebase']]
+
+        subprocess.check_call(['ostree', 'commit'] + commit_args)
         subprocess.check_call(['ostree', 'summary', '-u', '--repo', repo])
 
         subprocess.check_call(['flatpak', 'build-bundle', repo,
@@ -753,6 +759,10 @@ class FlatpakBuilder(object):
             args = ['flatpak', 'build-export', repo, builddir, app_branch]
             if disable_sandbox:
                 args += ['--disable-sandbox']
+            if 'end-of-life' in info:
+                args += ['--end-of-life' + info['end-of-life']]
+            if 'end-of-life-rebase' in info:
+                args += ['--end-of-life-rebase' + info['end-of-life-rebase']]
             subprocess.check_call(args)
 
         with open(os.devnull) as devnull:
