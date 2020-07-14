@@ -1,6 +1,7 @@
 config_opts['root'] = 'flatpak-module-{{ arch }}'
 config_opts['target_arch'] = '{{ arch }}'
 config_opts['legal_host_arches'] = ('{{ arch }}',)
+config_opts['use_bootstrap_container'] = False
 config_opts['chroot_setup_cmd'] = 'install /bin/bash glibc-minimal-langpack shadow-utils tar'
 config_opts['dist'] = 'fc{{ ver }}'  # only useful for --resultdir variable subst
 config_opts['extra_chroot_dirs'] = [ '/run/lock', ]
