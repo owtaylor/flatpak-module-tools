@@ -25,6 +25,8 @@ baseurl=file://{path}
 enabled=1
 excludepkgs={exclude}
 priority=10
+# just treat modular packages as normal packages - don't expect modular metadata
+module_hotfixes=true
 """.format(name=self.name, stream=self.stream, path=self.path, exclude=exclude)
 
     def has_module_metadata(self):
