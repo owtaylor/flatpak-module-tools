@@ -28,7 +28,7 @@ modulemd file to build. If in a git repository, defaults to <reponame>.yaml
 path to container.yaml - defaults to `./container.yaml`
 
 **--flatpak-metadata**
-how flatpak metadata should be stored. Defaults to `annotations`. Using
+how flatpak metadata should be stored. Defaults to `both`. Using
 only labels require Flatpak >= 1.6.
 
 **--stream**
@@ -89,7 +89,7 @@ automatically install the resulting Flatpak or runtime systemwide
 path to container.yaml - defaults to `./container.yaml`
 
 **--flatpak-metadata**
-how flatpak metadata should be stored. Defaults to `annotations`. Using
+how flatpak metadata should be stored. Defaults to `both`. Using
 only labels require Flatpak >= 1.6.
 
 flatpak-module install

@@ -39,13 +39,19 @@ def cli(verbose, config, profile):
               help='include a local MBS module build  as a source for the build')
 @click.option('--containerspec', metavar='CONTAINER_YAML', default='./container.yaml',
               help='path to container.yaml - defaults to ./container.yaml')
+@click.option('--flatpak-metadata',
+              type=click.Choice([FLATPAK_METADATA_LABELS,
+                                 FLATPAK_METADATA_ANNOTATIONS,
+                                 FLATPAK_METADATA_BOTH], case_sensitive=False),
+              default=FLATPAK_METADATA_BOTH,
+              help='How to store Flatpak metadata in the container')
 @click.option('--modulemd', metavar='MODULEMD',
               help='path to modulemd file')
 @click.option('--stream', metavar='STREAM',
               help='module stream for the build')
 @click.option('--install', is_flag=True,
               help='automatically install Flatpak for the current user')
-def local_build(add_local_build, containerspec, modulemd, stream, install):
+def local_build(add_local_build, containerspec, flatpak_metadata, modulemd, stream, install):
     """Build module locally, then build a container"""
 
     module_builder = ModuleBuilder(profile=get_profile(),
@@ -54,7 +60,8 @@ def local_build(add_local_build, containerspec, modulemd, stream, install):
     container_builder = ContainerBuilder(profile=get_profile(),
                                          containerspec=containerspec,
                                          local_builds=add_local_build,
-                                         from_local=True)
+                                         from_local=True,
+                                         flatpak_metadata=flatpak_metadata)
 
     if (container_builder.module_spec.name != module_builder.name or
         container_builder.module_spec.stream != module_builder.stream):
@@ -97,7 +104,7 @@ def build_module(add_local_build, modulemd, stream):
               type=click.Choice([FLATPAK_METADATA_LABELS,
                                  FLATPAK_METADATA_ANNOTATIONS,
                                  FLATPAK_METADATA_BOTH], case_sensitive=False),
-              default=FLATPAK_METADATA_ANNOTATIONS,
+              default=FLATPAK_METADATA_BOTH,
               help='How to store Flatpak metadata in the container')
 @click.option('--containerspec', metavar='CONTAINER_YAML', default='./container.yaml',
               help='Path to container.yaml - defaults to ./container.yaml')
