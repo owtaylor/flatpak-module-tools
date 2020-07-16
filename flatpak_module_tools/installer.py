@@ -144,7 +144,30 @@ class Installer(object):
             with open(os.path.join(ocidir, 'index.json')) as f:
                 index_json = json.load(f)
 
-            ref = index_json['manifests'][0]['annotations']['org.flatpak.ref']
+            def get_path_from_descriptor(descriptor):
+                assert descriptor["digest"].startswith("sha256:")
+                return os.path.join(ocidir, "blobs", "sha256", descriptor["digest"][len("sha256:"):])
+
+            digest = index_json['manifests'][0]['digest']
+            assert digest.startswith("sha256:")
+            manifest_path = os.path.join(ocidir, 'blobs', 'sha256', digest[7:])
+
+            with open(get_path_from_descriptor(index_json['manifests'][0])) as f:
+                manifest_json = json.load(f)
+
+            ref = manifest_json['annotations'].get('org.flatpak.ref')
+
+            if ref is None:
+                with open(get_path_from_descriptor(manifest_json["config"])) as f:
+                    config_json = json.load(f)
+
+                    config = config_json.get("config", {})
+                    labels = config.get("Labels", {})
+
+                    ref = labels.get('org.flatpak.ref')
+
+            if ref is None:
+                raise RuntimeError("org.flatpak.ref not found in annotations or labels - is this a Flatpak?")
 
             check_call(['flatpak', 'build-import-bundle',
                         '--update-appstream', '--oci',
