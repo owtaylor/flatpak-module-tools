@@ -386,8 +386,7 @@ class FlatpakBuilder(object):
     def add_labels(self, labels):
         """Specify additional labels to add to the generated image"""
 
-        self.log.warning(labels)
-        self.extra_labels.update(labels)
+        self.extra_labels.update({k: str(v) for k, v in labels.items()})
 
     def precheck(self):
         source = self.source
