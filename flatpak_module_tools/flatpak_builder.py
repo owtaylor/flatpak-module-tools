@@ -759,9 +759,9 @@ class FlatpakBuilder(object):
             if disable_sandbox:
                 args += ['--disable-sandbox']
             if 'end-of-life' in info:
-                args += ['--end-of-life' + info['end-of-life']]
+                args += ['--end-of-life=' + info['end-of-life']]
             if 'end-of-life-rebase' in info:
-                args += ['--end-of-life-rebase' + info['end-of-life-rebase']]
+                args += ['--end-of-life-rebase=' + info['end-of-life-rebase']]
             subprocess.check_call(args)
 
         with open(os.devnull) as devnull:
