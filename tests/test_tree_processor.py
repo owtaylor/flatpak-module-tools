@@ -15,10 +15,11 @@ APPDATA_CONTENTS = """\
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop">
   <id>org.gnome.eog</id>
-  <launchable>org.gnome.eog.desktop</launchable>
+  <launchable type="desktop-id">org.gnome.eog.desktop</launchable>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-2.0+ and GFDL-1.3</project_license>
   <name>Eye of GNOME</name>
+  <summary>Browse and rotate images</summary>
   <description>
     <p>
       The Eye of GNOME is the official image viewer for the GNOME desktop.
@@ -26,7 +27,6 @@ APPDATA_CONTENTS = """\
       formats for viewing single images or images in a collection.
     </p>
   </description>
-  <summary>Browse and rotate images</summary>
 </component>
 """
 
@@ -81,17 +81,23 @@ class AppTree(object):
         appdata_contents = APPDATA_CONTENTS
         desktop_contents = DESKTOP_CONTENTS
 
+        def assert_sub(pattern, replacement, string):
+            new = re.sub(pattern, replacement, string)
+            assert new != string
+
+            return new
+
         if rename_desktop_file:
-            appdata_contents = re.sub(r'<id>org\.gnome\.eog</id>',
-                                      r'<id>' + rename_desktop_file + r'</id>',
-                                      appdata_contents)
-            appdata_contents = re.sub(r'<launchable>org\.gnome\.eog\.desktop</launchable>',
-                                      r'<launchable>' + rename_desktop_file + r'</launchable>',
-                                      appdata_contents)
+            appdata_contents = assert_sub(r'<id>org\.gnome\.eog</id>',
+                                          r'<id>' + rename_desktop_file + r'</id>',
+                                          appdata_contents)
+            appdata_contents = assert_sub(r'<launchable type="desktop-id">org\.gnome\.eog\.desktop</launchable>',
+                                          r'<launchable type="desktop-id">' + rename_desktop_file + r'</launchable>',
+                                          appdata_contents)
         if rename_icon:
-            desktop_contents = re.sub(r'Icon(\[de\])?=org.gnome.eog.png',
-                                      r'Icon\1=' + rename_icon,
-                                      desktop_contents)
+            desktop_contents = assert_sub(r'Icon(\[de\])?=org.gnome.eog',
+                                          r'Icon\1=' + rename_icon,
+                                          desktop_contents)
 
         if rename_appdata_file:
             if rename_appdata_file.endswith('metainfo.xml'):
@@ -155,9 +161,8 @@ def test_renames(app_tree,
 
     contents = app_tree.contents('files/share/app-info/xmls/org.gnome.eog.xml.gz',
                                  decompress=True)
-    print(contents)
     assert '<id>org.gnome.eog</id>' in contents
-    assert '<launchable>org.gnome.eog.desktop</launchable>' in contents
+    assert '<launchable type="desktop-id">org.gnome.eog.desktop</launchable>' in contents
 
 
 def test_copy_icon(app_tree):
