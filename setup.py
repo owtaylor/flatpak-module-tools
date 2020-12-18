@@ -12,13 +12,13 @@ else:
     entry_points = None
 
 setup(name='flatpak-module-tools',
-      version='0.12',
+      version='0.12.1',
       description='Tools for creating and maintaining Flatpaks as Fedora modules',
       url='https://pagure.io/flatpak-module-tools',
       author='Owen Taylor',
       author_email='otaylor@redhat.com',
       license='MIT',
-      packages=['flatpak_module_tools'],
+      packages=['flatpak_module_tools', 'tests'],
       package_data={'flatpak_module_tools': ['config.yaml', 'templates/*.j2']},
       include_package_data=True,
       entry_points=entry_points,
