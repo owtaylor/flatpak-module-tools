@@ -580,6 +580,13 @@ class FlatpakBuilder(object):
                     member.mode = 0o0644
 
             member.name = target_name
+
+            # if member.name was > 100 characters, but target_name <= 100 characters,
+            # member.pax_headers["path"] will stick around and override member.name;
+            # it will be recreated if target_name > 100 characters
+            if "path" in member.pax_headers:
+                del member.pax_headers["path"]
+
             if member.islnk():
                 # Hard links have full paths within the archive (no leading /)
                 link_target = get_target_path(member.linkname)
@@ -587,6 +594,13 @@ class FlatpakBuilder(object):
                     self.log.debug("Skipping %s, hard link to %s", target_name, link_target)
                     continue
                 member.linkname = link_target
+
+                # if member.linkname was > 100 characters, but link_target < 100 characters,
+                # member.pax_headers["path"] will stick around and override member.name
+                # it will be recreated if link_target > 100 characters
+                if "linkpath" in member.pax_headers:
+                    del member.pax_headers["linkpath"]
+
                 out_tf.addfile(member)
             elif member.issym():
                 # Symlinks have the literal link target, which will be
