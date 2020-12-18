@@ -1,11 +1,14 @@
 import os
 from subprocess import check_call
 
+import gi
+gi.require_version('Modulemd', '2.0')
+from gi.repository import Modulemd
+
 import pytest
 import yaml
 
 from flatpak_module_tools.flatpak_builder import FlatpakBuilder, FlatpakSourceInfo, ModuleInfo
-from flatpak_module_tools.module_locator import Modulemd
 
 
 FLATPAK_RUNTIME_MMD = """
