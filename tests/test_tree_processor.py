@@ -19,6 +19,13 @@ APPDATA_CONTENTS = """\
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-2.0+ and GFDL-1.3</project_license>
   <name>Eye of GNOME</name>
+  <description>
+    <p>
+      The Eye of GNOME is the official image viewer for the GNOME desktop.
+      It integrates with the GTK+ look and feel of GNOME, and supports many image
+      formats for viewing single images or images in a collection.
+    </p>
+  </description>
   <summary>Browse and rotate images</summary>
 </component>
 """
