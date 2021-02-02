@@ -13,6 +13,7 @@ image. It is shared between:
 """
 
 import errno
+import functools
 import hashlib
 import json
 import logging
@@ -55,9 +56,18 @@ else:
     CP = configparser.RawConfigParser
 
 
-# Returns flatpak's name for the current arch
-def get_arch():
+@functools.cache
+def get_flatpak_arch():
+    """Return Flatpak's name for the current architecture"""
     return subprocess.check_output(['flatpak', '--default-arch'],
+                                   universal_newlines=True).strip()
+
+
+# Returns flatpak's name for the current arch
+@functools.cache
+def get_rpm_arch():
+    """Return RPM's name for the current architecture"""
+    return subprocess.check_output(['rpm', '--eval', '%{_arch}'],
                                    universal_newlines=True).strip()
 
 
@@ -81,7 +91,7 @@ def build_init(directory, appname, sdk, runtime, runtime_branch, tags=[]):
                                   sdk=sdk,
                                   runtime=runtime,
                                   runtime_branch=runtime_branch,
-                                  arch=get_arch())))
+                                  arch=get_flatpak_arch())))
         if tags:
             f.write("tags=" + ";".join(tags) + "\n")
     os.mkdir(os.path.join(directory, "files"))
@@ -94,6 +104,15 @@ class ModuleInfo(object):
         self.version = version
         self.mmd = mmd
         self.rpms = rpms
+
+    def get_profile_packages(self, profile):
+        result = self.mmd.get_profile(profile).get_rpms()
+
+        arch_profile = profile + '-' + get_rpm_arch()
+        if arch_profile in self.mmd.get_profile_names():
+            result.extend(self.mmd.get_profile(arch_profile).get_rpms())
+
+        return result
 
 
 class FileTreeProcessor(object):
@@ -424,7 +443,7 @@ class FlatpakBuilder(object):
 
     def get_install_packages(self):
         source = self.source
-        packages = source.base_module.mmd.get_profile(source.profile).get_rpms()
+        packages = source.base_module.get_profile_packages(source.profile)
         if not source.runtime:
             # The flatpak-runtime-config package is needed when building an application
             # Flatpak because it includes file triggers for files in /app. (Including just
@@ -462,8 +481,7 @@ class FlatpakBuilder(object):
 
         if not source.runtime:
             runtime_module = source.runtime_module
-            runtime_profile = runtime_module.mmd.get_profile('runtime')
-            available_packages = sorted(runtime_profile.get_rpms())
+            available_packages = sorted(runtime_module.get_profile_packages('runtime'))
 
             for m in source.app_modules:
                 # Strip off the '.rpm' suffix from the filename to get something
@@ -471,7 +489,7 @@ class FlatpakBuilder(object):
                 available_packages.extend(x[:-4] for x in m.rpms)
         else:
             base_module = source.base_module
-            available_packages = sorted(base_module.mmd.get_profile(source.profile).get_rpms())
+            available_packages = sorted(base_module.get_profile_packages(source.profile))
 
         return available_packages
 
@@ -631,7 +649,7 @@ class FlatpakBuilder(object):
         return self.parse_manifest(lines)
 
     def _filter_app_manifest(self, components):
-        runtime_rpms = set(self.source.runtime_module.mmd.get_profile('runtime').get_rpms())
+        runtime_rpms = set(self.source.runtime_module.get_profile_packages('runtime'))
 
         return [c for c in components if not c['name'] in runtime_rpms]
 
@@ -677,7 +695,7 @@ class FlatpakBuilder(object):
             'id': id_,
             'runtime_id': runtime_id,
             'sdk_id': sdk_id,
-            'arch': get_arch(),
+            'arch': get_flatpak_arch(),
             'branch': branch
         }
 
@@ -803,7 +821,7 @@ class FlatpakBuilder(object):
                                outfile, app_id, app_branch])
 
         app_ref = 'app/{app_id}/{arch}/{branch}'.format(app_id=app_id,
-                                                        arch=get_arch(),
+                                                        arch=get_flatpak_arch(),
                                                         branch=app_branch)
 
         return app_ref

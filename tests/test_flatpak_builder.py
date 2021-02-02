@@ -9,7 +9,7 @@ import pytest
 import yaml
 
 from flatpak_module_tools.flatpak_builder import (
-    FlatpakBuilder, FlatpakSourceInfo, FLATPAK_METADATA_BOTH, ModuleInfo
+    FlatpakBuilder, FlatpakSourceInfo, FLATPAK_METADATA_BOTH, get_rpm_arch, ModuleInfo
 )
 
 
@@ -105,6 +105,9 @@ data:
     default:
       rpms:
       - testapp
+    default-@ARCH@:
+      rpms:
+      - testapp-fancymath
   components:
     rpms:
       testapp:
@@ -156,12 +159,16 @@ def runtime_module():
 
 @pytest.fixture
 def testapp_module():
-    testapp_mmd = Modulemd.ModuleStream.read_string(TESTAPP_MMD, True)
+    testapp_mmd = TESTAPP_MMD.replace("@ARCH@",
+                                      get_rpm_arch())
+
+    testapp_mmd = Modulemd.ModuleStream.read_string(testapp_mmd, True)
     yield ModuleInfo(testapp_mmd.get_module_name(),
                      testapp_mmd.get_stream_name(),
                      testapp_mmd.get_version(),
                      testapp_mmd,
-                     ['testapp-1-1.x86_64.rpm'])
+                     ['testapp-1-1.x86_64.rpm',
+                      'testapp-fancymath-1-1.x86_64.rpm'])
 
 
 @pytest.fixture
@@ -208,10 +215,10 @@ def test_app_basic(testapp_source, tmpdir):
                              flatpak_metadata=FLATPAK_METADATA_BOTH)
 
     assert set(builder.get_install_packages()) == set([
-        "testapp", "flatpak-runtime-config"
+        "testapp", "testapp-fancymath", "flatpak-runtime-config"
     ])
     assert set(builder.get_includepkgs()) == set([
-        "glibc", "flatpak-runtime-config", "testapp-1-1.x86_64"
+        "glibc", "flatpak-runtime-config", "testapp-1-1.x86_64", "testapp-fancymath-1-1.x86_64"
     ])
 
     bindir = tmpdir / "root/app/bin"
