@@ -155,7 +155,7 @@ class FileTreeProcessor(object):
         tree.write(self.appdata_file, encoding="UTF-8", xml_declaration=True)
 
     def _process_appdata_file(self):
-        appdata_source = self._find_appdata_file ()
+        appdata_source = self._find_appdata_file()
         self.appdata_file = None
 
         if appdata_source:
@@ -248,7 +248,8 @@ class FileTreeProcessor(object):
                             self.log.debug("%s/%s matches 'rename-icon', but not at depth 3",
                                            full_dir, source_file)
                         else:
-                            self.log.debug("%s/%s matches 'rename-icon', but name does not continue with '.' or '-symbolic.'",
+                            self.log.debug("%s/%s matches 'rename-icon', but name does not "
+                                           "continue with '.' or '-symbolic.'",
                                            full_dir, source_file)
 
         if not found_icon:
@@ -310,6 +311,7 @@ class FileTreeProcessor(object):
         self._rename_icon()
         self._rewrite_desktop_file()
         self._compose_appstream()
+
 
 class FlatpakSourceInfo(object):
     def __init__(self, flatpak_yaml, modules, base_module, profile=None):
@@ -373,7 +375,7 @@ class FlatpakBuilder(object):
         self.root = root
         self.parse_manifest = parse_manifest
 
-        if not flatpak_metadata in (FLATPAK_METADATA_ANNOTATIONS,
+        if flatpak_metadata not in (FLATPAK_METADATA_ANNOTATIONS,
                                     FLATPAK_METADATA_LABELS,
                                     FLATPAK_METADATA_BOTH):
             raise ValueError("Bad flatpak_metadata value %s" % flatpak_metadata)
@@ -527,7 +529,7 @@ class FlatpakBuilder(object):
 
             ("ROOT/usr/", "files"),
             ("ROOT/etc/", "files/etc")
-    ])
+        ])
 
     def _get_target_path_app(self):
         return self._compile_target_rules([
@@ -706,9 +708,11 @@ class FlatpakBuilder(object):
                        '--add-metadata-string', 'xa.metadata=' + metadata]
 
         if 'end-of-life' in info:
-            commit_args += ['--add-metadata-string', 'ostree.endoflife=' + info['end-of-life']]
+            commit_args += ['--add-metadata-string',
+                            'ostree.endoflife=' + info['end-of-life']]
         if 'end-of-life-rebase' in info:
-            commit_args += ['--add-metadata-string', 'ostree.endoflife-rebase=' + info['end-of-life-rebase']]
+            commit_args += ['--add-metadata-string',
+                            'ostree.endoflife-rebase=' + info['end-of-life-rebase']]
 
         subprocess.check_call(['ostree', 'commit'] + commit_args)
         subprocess.check_call(['ostree', 'summary', '-u', '--repo', repo])
@@ -858,7 +862,7 @@ class FlatpakBuilder(object):
             to_delete = list()
             for k, v in annotations.items():
                 if k.startswith("org.flatpak.") or k.startswith("org.freedesktop."):
-                    if not k in labels:
+                    if k not in labels:
                         labels[k] = v
                     if self.flatpak_metadata != FLATPAK_METADATA_BOTH:
                         to_delete.append(k)
@@ -871,7 +875,7 @@ class FlatpakBuilder(object):
             to_delete = list()
             for k, v in labels.items():
                 if k.startswith("org.flatpak.") or k.startswith("org.freedesktop."):
-                    if not k in annotations:
+                    if k not in annotations:
                         annotations[k] = v
                     if self.flatpak_metadata != FLATPAK_METADATA_BOTH:
                         to_delete.append(k)
