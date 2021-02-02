@@ -323,14 +323,15 @@ class FlatpakSourceInfo(object):
         # profiles for SDKs, minimal runtimes, etc.
         self.runtime = 'runtime' in base_module.mmd.get_profile_names()
 
-        if profile:
-            self.profile = profile
-        elif self.runtime:
-            self.profile = 'runtime'
-        else:
-            self.profile = 'default'
+        if profile is None:
+            profile = 'runtime' if self.runtime else 'default'
 
-        assert self.profile in base_module.mmd.get_profile_names()
+        if profile not in base_module.mmd.get_profile_names():
+            raise ValueError("{}:{}:{} doesn't have a profile '{}'".format(
+                base_module.name, base_module.stream, base_module.version,
+                profile))
+
+        self.profile = profile
 
     # The module for the Flatpak runtime that this app runs against
     @property
