@@ -8,7 +8,9 @@ from gi.repository import Modulemd
 import pytest
 import yaml
 
-from flatpak_module_tools.flatpak_builder import FlatpakBuilder, FlatpakSourceInfo, ModuleInfo
+from flatpak_module_tools.flatpak_builder import (
+    FlatpakBuilder, FlatpakSourceInfo, FLATPAK_METADATA_BOTH, ModuleInfo
+)
 
 
 FLATPAK_RUNTIME_MMD = """
@@ -121,38 +123,146 @@ flatpak:
     id: org.fedoraproject.TestApp
     branch: stable
     command: testapp
+    end-of-life: TestApp was replaced with NewApp
+    end-of-life-rebase: org.fedoraproject.NewApp
     finish-args: |-
         --socket=fallback-x11
         --socket=wayland
 """
 
 
+RUNTIME_CONTAINER_YAML = """
+compose:
+    modules:
+    - flatpak-runtime:f33
+flatpak:
+    id: org.fedoraproject.Platform
+    branch: stable
+    end-of-life: Fedora 33 is no longer supported
+    end-of-life-rebase: org.fedoraproject.NewPlatform
+"""
+
+
 @pytest.fixture
-def source():
+def runtime_module():
     runtime_mmd = Modulemd.ModuleStream.read_string(FLATPAK_RUNTIME_MMD, True)
-    runtime_module = ModuleInfo(runtime_mmd.get_module_name(),
-                                runtime_mmd.get_stream_name(),
-                                runtime_mmd.get_version(),
-                                runtime_mmd,
-                                [])
+    yield ModuleInfo(runtime_mmd.get_module_name(),
+                     runtime_mmd.get_stream_name(),
+                     runtime_mmd.get_version(),
+                     runtime_mmd,
+                     ['flatpak-rpm-macros-32-2.x86_64.rpm',
+                      'flatpak-runtime-config-29-5.x86_64.rpm'])
 
+
+@pytest.fixture
+def testapp_module():
     testapp_mmd = Modulemd.ModuleStream.read_string(TESTAPP_MMD, True)
-    testapp_module = ModuleInfo(testapp_mmd.get_module_name(),
-                                testapp_mmd.get_stream_name(),
-                                testapp_mmd.get_version(),
-                                testapp_mmd,
-                                [])
+    yield ModuleInfo(testapp_mmd.get_module_name(),
+                     testapp_mmd.get_stream_name(),
+                     testapp_mmd.get_version(),
+                     testapp_mmd,
+                     ['testapp-1-1.x86_64.rpm'])
 
+
+@pytest.fixture
+def testapp_source(testapp_module, runtime_module):
     container_yaml = yaml.safe_load(TESTAPP_CONTAINER_YAML)
 
-    source = FlatpakSourceInfo(container_yaml['flatpak'],
-                               [runtime_module, testapp_module],
-                               testapp_module)
+    modules = {
+        'flatpak-runtime': runtime_module,
+        'testapp': testapp_module
+    }
 
-    yield source
+    yield FlatpakSourceInfo(container_yaml['flatpak'],
+                            modules,
+                            testapp_module)
 
 
-def test_export_long_filenames(source, tmpdir):
+@pytest.fixture
+def runtime_source(runtime_module):
+    container_yaml = yaml.safe_load(RUNTIME_CONTAINER_YAML)
+
+    modules = {
+        'flatpak-runtime': runtime_module,
+    }
+
+    yield FlatpakSourceInfo(container_yaml['flatpak'],
+                            modules,
+                            runtime_module)
+
+
+def test_source_info_bad_profile(testapp_source):
+    with pytest.raises(ValueError,
+                       match=r"testapp:stable:3320201216094032 doesn't have a profile 'badprofile'"):
+        FlatpakSourceInfo(testapp_source.flatpak_yaml,
+                          testapp_source.modules,
+                          testapp_source.base_module,
+                          profile='badprofile')
+
+
+def test_app_basic(testapp_source, tmpdir):
+    workdir = str(tmpdir / "work")
+    os.mkdir(workdir)
+
+    builder = FlatpakBuilder(testapp_source, workdir, "root",
+                             flatpak_metadata=FLATPAK_METADATA_BOTH)
+
+    assert set(builder.get_install_packages()) == set([
+        "testapp", "flatpak-runtime-config"
+    ])
+    assert set(builder.get_includepkgs()) == set([
+        "glibc", "flatpak-runtime-config", "testapp-1-1.x86_64"
+    ])
+
+    bindir = tmpdir / "root/app/bin"
+    os.makedirs(bindir)
+
+    with open(bindir / "hello", "w") as f:
+        os.fchmod(f.fileno(), 0o0755)
+
+    check_call(["tar", "cfv", "export.tar", "-H", "pax", "--sort=name",
+                "root"], cwd=tmpdir)
+
+    with open(tmpdir / "export.tar", "rb") as f:
+        outfile, manifest_file = (builder._export_from_stream(f, close_stream=False))
+
+    check_call(["gzip", tmpdir / "export.tar"])
+
+    builder.build_container(str(tmpdir / "export.tar.gz"))
+
+
+def test_runtime_basic(runtime_source, tmpdir):
+    workdir = str(tmpdir / "work")
+    os.mkdir(workdir)
+
+    builder = FlatpakBuilder(runtime_source, workdir, "root",
+                             flatpak_metadata=FLATPAK_METADATA_BOTH)
+
+    assert set(builder.get_install_packages()) == set([
+        "glibc", "flatpak-runtime-config"
+    ])
+    assert set(builder.get_includepkgs()) == set([
+        "glibc", "flatpak-runtime-config"
+    ])
+
+    bindir = tmpdir / "root/usr/bin"
+    os.makedirs(bindir)
+
+    with open(bindir / "hello", "w") as f:
+        os.fchmod(f.fileno(), 0o0755)
+
+    check_call(["tar", "cfv", "export.tar", "-H", "pax", "--sort=name",
+                "root"], cwd=tmpdir)
+
+    with open(tmpdir / "export.tar", "rb") as f:
+        outfile, manifest_file = (builder._export_from_stream(f, close_stream=False))
+
+    check_call(["gzip", tmpdir / "export.tar"])
+
+    builder.build_container(str(tmpdir / "export.tar.gz"))
+
+
+def test_export_long_filenames(testapp_source, tmpdir):
     """
     Test for a bug where if the exported filesytem is in PAX format, then
     names/linknames that go from > 100 characters < 100 characters were
@@ -195,7 +305,7 @@ def test_export_long_filenames(source, tmpdir):
     workdir = str(tmpdir / "work")
     os.mkdir(workdir)
 
-    builder = FlatpakBuilder(source, workdir, "verylongrootname")
+    builder = FlatpakBuilder(testapp_source, workdir, "verylongrootname")
 
     with open(tmpdir / "export.tar", "rb") as f:
         outfile, manifest_file = (builder._export_from_stream(f, close_stream=False))
