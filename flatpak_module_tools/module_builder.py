@@ -155,7 +155,9 @@ class ModuleBuilder(object):
 
                 # Since https://pagure.io/fm-orchestrator/pull-request/1161
                 # module-build-service messages are categorized as MBS.<subcategory>
-                if logname != 'module_build_service' and not logname.startswith('MBS.'):
+                # But then that broke and they were logged as "MBS "
+                # https://pagure.io/fm-orchestrator/pull-request/1679
+                if logname != 'module_build_service' and logname != 'MBS' and not logname.startswith('MBS.'):
                     continue
 
                 if level == 'DEBUG':
