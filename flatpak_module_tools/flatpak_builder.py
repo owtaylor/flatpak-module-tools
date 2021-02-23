@@ -56,7 +56,7 @@ else:
     CP = configparser.RawConfigParser
 
 
-@functools.cache
+@functools.lru_cache(maxsize=None)
 def get_flatpak_arch():
     """Return Flatpak's name for the current architecture"""
     return subprocess.check_output(['flatpak', '--default-arch'],
@@ -64,7 +64,7 @@ def get_flatpak_arch():
 
 
 # Returns flatpak's name for the current arch
-@functools.cache
+@functools.lru_cache(maxsize=None)
 def get_rpm_arch():
     """Return RPM's name for the current architecture"""
     return subprocess.check_output(['rpm', '--eval', '%{_arch}'],
