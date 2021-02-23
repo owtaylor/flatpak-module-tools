@@ -649,9 +649,28 @@ class FlatpakBuilder(object):
         return self.parse_manifest(lines)
 
     def _filter_app_manifest(self, components):
-        runtime_rpms = set(self.source.runtime_module.get_profile_packages('runtime'))
+        # DNF filtering from get_includepkgs() restricts the installed packages
+        # to:
+        #
+        #  Runtime packages: libfoo
+        #  App module packages: libbar-0:1.2.3-1.module_1.33+11439+4b44cd2d.x86_64.rpm
+        #
+        # We want to filter the set of installed packages to only ones installed from
+        # the app module packages. We used to do this by excluding packages where
+        # c['name'] was in the runtime, but this doesn't work - even if 'libfoo' is in
+        # the runtime, a different 'libfoo' might be in a module. We need to instead
+        # compare against the particular versions in the app modules.
 
-        return [c for c in components if not c['name'] in runtime_rpms]
+        app_packages = set()
+        for m in self.source.app_modules:
+            app_packages.update(m.rpms)
+
+        def is_app_package(component):
+            pkg_string = ('{name}-{epochnum}:{version}-{release}.{arch}.rpm'
+                          .format(epochnum=component['epoch'] or 0, **component))
+            return pkg_string in app_packages
+
+        return [c for c in components if is_app_package(c)]
 
     def get_components(self, manifest):
         all_components = self._get_components(manifest)

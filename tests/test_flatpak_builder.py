@@ -1,5 +1,6 @@
 import os
 from subprocess import check_call
+from textwrap import dedent
 
 import gi
 gi.require_version('Modulemd', '2.0')
@@ -61,6 +62,7 @@ data:
       rpms:
       - flatpak-runtime-config
       - glibc
+      - libfoo
   api:
     rpms:
     - flatpak-rpm-macros
@@ -153,8 +155,8 @@ def runtime_module():
                      runtime_mmd.get_stream_name(),
                      runtime_mmd.get_version(),
                      runtime_mmd,
-                     ['flatpak-rpm-macros-32-2.x86_64.rpm',
-                      'flatpak-runtime-config-29-5.x86_64.rpm'])
+                     ['flatpak-rpm-macros-0:32-2.x86_64.rpm',
+                      'flatpak-runtime-config-0:29-5.x86_64.rpm'])
 
 
 @pytest.fixture
@@ -167,8 +169,9 @@ def testapp_module():
                      testapp_mmd.get_stream_name(),
                      testapp_mmd.get_version(),
                      testapp_mmd,
-                     ['testapp-1-1.x86_64.rpm',
-                      'testapp-fancymath-1-1.x86_64.rpm'])
+                     ['testapp-0:1-1.x86_64.rpm',
+                      'testapp-fancymath-0:1-1.x86_64.rpm',
+                      'libfoo-0:1.2.4-1.module_f33+11439+4b44cd2d.x86_64.rpm'])
 
 
 @pytest.fixture
@@ -207,18 +210,70 @@ def test_source_info_bad_profile(testapp_source):
                           profile='badprofile')
 
 
+def parse_manifest(lines):
+    """A parse_manifest function to pass to FlatpackBuilder. The 'include' filed
+    in the returned dictionary is not part of the FlatpakBuilder API ... it
+    is used here for testing purposes (whether we expect the manifest entry
+    to be in the result of FlatpakBuilder.get_components()"""
+
+    components = []
+
+    for line in lines:
+        include, nevra = line.strip().split()
+        assert include in ('true', 'false')
+
+        name, ev, ra = nevra.rsplit('-', 2)
+        epoch, version = ev.split(':', 1)
+        release, arch = ra.rsplit('.', 1)
+
+        components.append({
+            'include': include == 'true',
+            'name': name,
+            'epoch': None if epoch == '(none)' else int(epoch),
+            'version': version,
+            'release': release,
+            'arch': arch,
+        })
+
+    return components
+
+
+def check_get_components(builder, tmpdir, manifest):
+    manifestfile = tmpdir / "manifest"
+    with open(manifestfile, "w") as f:
+        f.write(manifest)
+
+    manifest_lines = [l + "\n" for l in manifest.strip().split("\n")]
+
+    expected_components = [c for c in parse_manifest(manifest_lines) if c['include']]
+    print(expected_components)
+    components = builder.get_components(manifestfile)
+
+    def flatten(components):
+        return set(f"{c['name']}-{c['epoch']}:{c['version']}-{c['release']}.{c['arch']}"
+                   for c in components)
+
+    assert flatten(components) == flatten(expected_components)
+
+
 def test_app_basic(testapp_source, tmpdir):
     workdir = str(tmpdir / "work")
     os.mkdir(workdir)
 
     builder = FlatpakBuilder(testapp_source, workdir, "root",
+                             parse_manifest=parse_manifest,
                              flatpak_metadata=FLATPAK_METADATA_BOTH)
 
     assert set(builder.get_install_packages()) == set([
         "testapp", "testapp-fancymath", "flatpak-runtime-config"
     ])
     assert set(builder.get_includepkgs()) == set([
-        "glibc", "flatpak-runtime-config", "testapp-1-1.x86_64", "testapp-fancymath-1-1.x86_64"
+        "glibc",
+        "flatpak-runtime-config",
+        "libfoo",
+        "libfoo-0:1.2.4-1.module_f33+11439+4b44cd2d.x86_64",
+        "testapp-0:1-1.x86_64",
+        "testapp-fancymath-0:1-1.x86_64"
     ])
 
     bindir = tmpdir / "root/app/bin"
@@ -237,19 +292,38 @@ def test_app_basic(testapp_source, tmpdir):
 
     builder.build_container(str(tmpdir / "export.tar.gz"))
 
+    # libfoo from the module should be listed in builder.get_components()
+    check_get_components(builder, tmpdir, dedent("""\
+        false flatpak-runtime-config-0:29-5.x86_64
+        false glibc-0:2.32-4.fc33.x86_64
+        true  libfoo-0:1.2.4-1.module_f33+11439+4b44cd2d.x86_64
+        true  testapp-0:1-1.x86_64
+        true  testapp-fancymath-0:1-1.x86_64
+    """))
+
+    # But libfoo from the runtime should not
+    check_get_components(builder, tmpdir, dedent("""\
+        false flatpak-runtime-config-0:29-5.x86_64
+        false glibc-0:2.32-4.fc33.x86_64
+        false libfoo-0:1.2.3-1.fc33.x86_64
+        true  testapp-0:1-1.x86_64
+        true  testapp-fancymath-0:1-1.x86_64
+    """))
+
 
 def test_runtime_basic(runtime_source, tmpdir):
     workdir = str(tmpdir / "work")
     os.mkdir(workdir)
 
     builder = FlatpakBuilder(runtime_source, workdir, "root",
+                             parse_manifest=parse_manifest,
                              flatpak_metadata=FLATPAK_METADATA_BOTH)
 
     assert set(builder.get_install_packages()) == set([
-        "glibc", "flatpak-runtime-config"
+        "glibc", "flatpak-runtime-config", "libfoo"
     ])
     assert set(builder.get_includepkgs()) == set([
-        "glibc", "flatpak-runtime-config"
+        "glibc", "flatpak-runtime-config", "libfoo"
     ])
 
     bindir = tmpdir / "root/usr/bin"
@@ -267,6 +341,13 @@ def test_runtime_basic(runtime_source, tmpdir):
     check_call(["gzip", tmpdir / "export.tar"])
 
     builder.build_container(str(tmpdir / "export.tar.gz"))
+
+    # builder.get_components() should not filter out any packages
+    check_get_components(builder, tmpdir, dedent("""\
+        true flatpak-runtime-config-0:29-5.x86_64
+        true glibc-0:2.32-4.fc33.x86_64
+        true libfoo-0:1.2.3-1.fc33.x86_64
+    """))
 
 
 def test_export_long_filenames(testapp_source, tmpdir):
