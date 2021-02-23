@@ -88,13 +88,16 @@ class ModuleBuilder(object):
             r'Cannot re-use',
             r'Connecting to koji',
             r'Found build',
+            r'Greenwave is not configured or configured improperly',
             r'Hub not initialized',
             r'Machine arch setting',
             r'MockModuleBuilder initialized',
             r'<ModuleBuild ',
             r'No MBSConsumer found.  Shutting down\?',
+            r'Note that retrieved module state 1 doesn\'t match message module state \'wait\'',
             r'Saw relevant component build ',
             r'Scheduling faked event ',
+            r'The necessary conflicts could not be generated due to RHBZ#1693683',
             r'u"document: modulemd',
         ]]
 
