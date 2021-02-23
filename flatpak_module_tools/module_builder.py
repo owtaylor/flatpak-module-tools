@@ -150,6 +150,8 @@ class ModuleBuilder(object):
             line = line.rstrip()
             m = log_line_re.match(line)
             if m is None:
+                if line == "The configuration file at /etc/module-build-service/config.py was not present":
+                    continue
                 click.secho(line)
             else:
                 logname = m.group(1)
