@@ -288,9 +288,7 @@ def test_app_basic(testapp_source, tmpdir):
     with open(tmpdir / "export.tar", "rb") as f:
         outfile, manifest_file = (builder._export_from_stream(f, close_stream=False))
 
-    check_call(["gzip", tmpdir / "export.tar"])
-
-    builder.build_container(str(tmpdir / "export.tar.gz"))
+    builder.build_container(outfile)
 
     # libfoo from the module should be listed in builder.get_components()
     check_get_components(builder, tmpdir, dedent("""\
@@ -338,9 +336,7 @@ def test_runtime_basic(runtime_source, tmpdir):
     with open(tmpdir / "export.tar", "rb") as f:
         outfile, manifest_file = (builder._export_from_stream(f, close_stream=False))
 
-    check_call(["gzip", tmpdir / "export.tar"])
-
-    builder.build_container(str(tmpdir / "export.tar.gz"))
+    builder.build_container(outfile)
 
     # builder.get_components() should not filter out any packages
     check_get_components(builder, tmpdir, dedent("""\
