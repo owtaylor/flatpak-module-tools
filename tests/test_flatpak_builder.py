@@ -14,7 +14,7 @@ from six.moves import configparser
 import yaml
 
 from flatpak_module_tools.flatpak_builder import (
-    FlatpakBuilder, FlatpakSourceInfo, FLATPAK_METADATA_BOTH, get_rpm_arch, ModuleInfo
+    FlatpakBuilder, FlatpakSourceInfo, FLATPAK_METADATA_BOTH, get_arch, ModuleInfo
 )
 
 
@@ -153,30 +153,51 @@ flatpak:
 """
 
 
+# We repeat the test with and without overriding the architectures
+@pytest.fixture(params=(None, "arm64", "testarch"))
+def oci_arch_override(request):
+  return request.param
+
+
+# This is the Arch object corresponding to oci_arch_override
 @pytest.fixture
-def runtime_module():
+def arch(oci_arch_override):
+  return get_arch(oci_arch_override)
+
+
+# We need to substitute on the arch a lot, so define another fixture to do that
+# concisely
+@pytest.fixture
+def R(arch):
+    def r(str):
+        return str.format(flatpak_arch=arch.flatpak, rpm_arch=arch.rpm)
+
+    return r
+
+
+@pytest.fixture
+def runtime_module(R):
     runtime_mmd = Modulemd.ModuleStream.read_string(FLATPAK_RUNTIME_MMD, True)
     yield ModuleInfo(runtime_mmd.get_module_name(),
                      runtime_mmd.get_stream_name(),
                      runtime_mmd.get_version(),
                      runtime_mmd,
-                     ['flatpak-rpm-macros-0:32-2.x86_64.rpm',
-                      'flatpak-runtime-config-0:29-5.x86_64.rpm'])
+                     [R('flatpak-rpm-macros-0:32-2.{rpm_arch}.rpm'),
+                      R('flatpak-runtime-config-0:29-5.{rpm_arch}.rpm')])
 
 
 @pytest.fixture
-def testapp_module():
-    testapp_mmd = TESTAPP_MMD.replace("@ARCH@",
-                                      get_rpm_arch())
+def testapp_module(arch, R):
+    testapp_mmd = TESTAPP_MMD.replace("@ARCH@", arch.rpm)
 
     testapp_mmd = Modulemd.ModuleStream.read_string(testapp_mmd, True)
     yield ModuleInfo(testapp_mmd.get_module_name(),
                      testapp_mmd.get_stream_name(),
                      testapp_mmd.get_version(),
                      testapp_mmd,
-                     ['testapp-0:1-1.x86_64.rpm',
-                      'testapp-fancymath-0:1-1.x86_64.rpm',
-                      'libfoo-0:1.2.4-1.module_f33+11439+4b44cd2d.x86_64.rpm'])
+                     [R('testapp-0:1-1.{rpm_arch}.rpm'),
+                      R('testapp-fancymath-0:1-1.{rpm_arch}.rpm'),
+                      R('libfoo-0:1.2.4-1.module_f33+11439+4b44cd2d.{rpm_arch}.rpm')])
 
 
 @pytest.fixture
@@ -260,16 +281,16 @@ def check_get_components(builder, tmpdir, manifest):
     assert flatten(components) == flatten(expected_components)
 
 
-def check_exported_oci(oci_outdir, runtime=False):
+def check_exported_oci(oci_outdir, arch, R, runtime=False):
     with open(os.path.join(oci_outdir, "index.json")) as f:
         index = json.load(f)
 
-    # Load the manifest that describes the container
     def descriptor_to_path(descriptor):
         digest = descriptor["digest"]
         assert digest.startswith("sha256:")
         return os.path.join(oci_outdir, "blobs", "sha256", digest[7:])
 
+    # Load the manifest that describes the container
     with open(descriptor_to_path(index["manifests"][0])) as f:
         manifest = json.load(f)
 
@@ -277,12 +298,17 @@ def check_exported_oci(oci_outdir, runtime=False):
     with open(descriptor_to_path(manifest["config"])) as f:
         config = json.load(f)
 
+    print(config)
+    assert config['architecture'] == arch.oci
+
     labels = config["config"]["Labels"]
 
     if runtime:
-        assert labels["org.flatpak.ref"] == "runtime/org.fedoraproject.Platform/x86_64/f33"
+        assert labels["org.flatpak.ref"] == \
+            R("runtime/org.fedoraproject.Platform/{flatpak_arch}/f33")
     else:
-        assert labels["org.flatpak.ref"] == "app/org.fedoraproject.TestApp/x86_64/stable"
+        assert labels["org.flatpak.ref"] == \
+            R("app/org.fedoraproject.TestApp/{flatpak_arch}/stable")
 
     # Do some basic checks on the metadata label
     metadata_from_labels = labels["org.flatpak.metadata"]
@@ -291,12 +317,12 @@ def check_exported_oci(oci_outdir, runtime=False):
 
     if runtime:
         assert cp.get("Runtime", "runtime") == \
-            "org.fedoraproject.Platform/x86_64/f33"
+            R("org.fedoraproject.Platform/{flatpak_arch}/f33")
         assert cp.get("Runtime", "sdk") == \
-            "org.fedoraproject.Sdk/x86_64/f33"
+            R("org.fedoraproject.Sdk/{flatpak_arch}/f33")
     else:
         assert cp.get("Application", "runtime") == \
-            "org.fedoraproject.Platform/x86_64/f33"
+            R("org.fedoraproject.Platform/{flatpak_arch}/f33")
 
     # Now get the contents we built
     tar = tarfile.open(descriptor_to_path(manifest["layers"][0]), "r:gz")
@@ -314,13 +340,14 @@ def check_exported_oci(oci_outdir, runtime=False):
     assert tar.getmember("files/bin/hello") is not None
 
 
-def test_app_basic(testapp_source, tmpdir):
+def test_app_basic(testapp_source, tmpdir, oci_arch_override, arch, R):
     workdir = str(tmpdir / "work")
     os.mkdir(workdir)
 
     builder = FlatpakBuilder(testapp_source, workdir, "root",
                              parse_manifest=parse_manifest,
-                             flatpak_metadata=FLATPAK_METADATA_BOTH)
+                             flatpak_metadata=FLATPAK_METADATA_BOTH,
+                             oci_arch=oci_arch_override)
 
     assert set(builder.get_install_packages()) == set([
         "testapp", "testapp-fancymath", "flatpak-runtime-config"
@@ -329,9 +356,9 @@ def test_app_basic(testapp_source, tmpdir):
         "glibc",
         "flatpak-runtime-config",
         "libfoo",
-        "libfoo-0:1.2.4-1.module_f33+11439+4b44cd2d.x86_64",
-        "testapp-0:1-1.x86_64",
-        "testapp-fancymath-0:1-1.x86_64"
+        R("libfoo-0:1.2.4-1.module_f33+11439+4b44cd2d.{rpm_arch}"),
+        R("testapp-0:1-1.{rpm_arch}"),
+        R("testapp-fancymath-0:1-1.{rpm_arch}")
     ])
 
     bindir = tmpdir / "root/app/bin"
@@ -340,7 +367,7 @@ def test_app_basic(testapp_source, tmpdir):
     with open(bindir / "hello", "w") as f:
         os.fchmod(f.fileno(), 0o0755)
 
-    check_call(["tar", "cfv", "export.tar", "-H", "pax", "--sort=name",
+    check_call(["tar", "cf", "export.tar", "-H", "pax", "--sort=name",
                 "root"], cwd=tmpdir)
 
     with open(tmpdir / "export.tar", "rb") as f:
@@ -349,33 +376,34 @@ def test_app_basic(testapp_source, tmpdir):
     ref_name, oci_outdir, tarred_oci_outdir = builder.build_container(outfile)
 
     # libfoo from the module should be listed in builder.get_components()
-    check_get_components(builder, tmpdir, dedent("""\
-        false flatpak-runtime-config-0:29-5.x86_64
-        false glibc-0:2.32-4.fc33.x86_64
-        true  libfoo-0:1.2.4-1.module_f33+11439+4b44cd2d.x86_64
-        true  testapp-0:1-1.x86_64
-        true  testapp-fancymath-0:1-1.x86_64
-    """))
+    check_get_components(builder, tmpdir, R(dedent("""\
+        false flatpak-runtime-config-0:29-5.{rpm_arch}
+        false glibc-0:2.32-4.fc33.{rpm_arch}
+        true  libfoo-0:1.2.4-1.module_f33+11439+4b44cd2d.{rpm_arch}
+        true  testapp-0:1-1.{rpm_arch}
+        true  testapp-fancymath-0:1-1.{rpm_arch}
+    """)))
 
     # But libfoo from the runtime should not
-    check_get_components(builder, tmpdir, dedent("""\
-        false flatpak-runtime-config-0:29-5.x86_64
-        false glibc-0:2.32-4.fc33.x86_64
-        false libfoo-0:1.2.3-1.fc33.x86_64
-        true  testapp-0:1-1.x86_64
-        true  testapp-fancymath-0:1-1.x86_64
-    """))
+    check_get_components(builder, tmpdir, R(dedent("""\
+        false flatpak-runtime-config-0:29-5.{rpm_arch}
+        false glibc-0:2.32-4.fc33.{rpm_arch}
+        false libfoo-0:1.2.3-1.fc33.{rpm_arch}
+        true  testapp-0:1-1.{rpm_arch}
+        true  testapp-fancymath-0:1-1.{rpm_arch}
+    """)))
 
-    check_exported_oci(oci_outdir, runtime=False)
+    check_exported_oci(oci_outdir, arch, R, runtime=False)
 
 
-def test_runtime_basic(runtime_source, tmpdir):
+def test_runtime_basic(runtime_source, tmpdir, oci_arch_override, arch, R):
     workdir = str(tmpdir / "work")
     os.mkdir(workdir)
 
     builder = FlatpakBuilder(runtime_source, workdir, "root",
                              parse_manifest=parse_manifest,
-                             flatpak_metadata=FLATPAK_METADATA_BOTH)
+                             flatpak_metadata=FLATPAK_METADATA_BOTH,
+                             oci_arch=oci_arch_override)
 
     assert set(builder.get_install_packages()) == set([
         "glibc", "flatpak-runtime-config", "libfoo"
@@ -399,13 +427,13 @@ def test_runtime_basic(runtime_source, tmpdir):
     refname, oci_outdir, tarred_oci_outdir = builder.build_container(outfile)
 
     # builder.get_components() should not filter out any packages
-    check_get_components(builder, tmpdir, dedent("""\
-        true flatpak-runtime-config-0:29-5.x86_64
-        true glibc-0:2.32-4.fc33.x86_64
-        true libfoo-0:1.2.3-1.fc33.x86_64
-    """))
+    check_get_components(builder, tmpdir, R(dedent("""\
+        true flatpak-runtime-config-0:29-5.{rpm_arch}
+        true glibc-0:2.32-4.fc33.{rpm_arch}
+        true libfoo-0:1.2.3-1.fc33.{rpm_arch}
+    """)))
 
-    check_exported_oci(oci_outdir, runtime=True)
+    check_exported_oci(oci_outdir, arch, R, runtime=True)
 
 
 def test_export_long_filenames(testapp_source, tmpdir):

@@ -29,6 +29,44 @@ from textwrap import dedent
 from xml.etree import ElementTree
 
 
+class Arch:
+    def __init__(self, oci, flatpak, rpm):
+        self.oci = oci
+        self.flatpak = flatpak
+        self.rpm = rpm
+
+
+ARCHES = {
+    arch.oci: arch for arch in [
+        Arch(oci="amd64", flatpak="x86_64", rpm="x86_64"),
+        Arch(oci="arm64", flatpak="aarch64", rpm="aarch64"),
+        Arch(oci="s390x", flatpak="s390x", rpm="s390x"),
+        Arch(oci="ppc64le", flatpak="ppc64le", rpm="ppc64le"),
+        # This is used in tests to test the case where the Flatpak and RPM names are
+        # different - this does not happen naturally at the moment as far as I know.
+        Arch(oci="testarch", flatpak="testarch", rpm="testarch_rpm"),
+    ]
+}
+
+
+@functools.lru_cache(maxsize=None)
+def _get_flatpak_arch():
+    return subprocess.check_output(
+        ['flatpak', '--default-arch'], universal_newlines=True
+    ).strip()
+
+def get_arch(oci_arch=None):
+    if oci_arch:
+        return ARCHES[oci_arch]
+    else:
+        flatpak_arch = _get_flatpak_arch()
+        for arch in ARCHES.values():
+            if arch.flatpak == flatpak_arch:
+                return arch
+
+        raise RuntimeError("Unknown flatpak arch '{}'".format(flatpak_arch))
+
+
 FLATPAK_METADATA_LABELS = "labels"
 FLATPAK_METADATA_ANNOTATIONS = "annotations"
 FLATPAK_METADATA_BOTH = "both"
@@ -56,21 +94,6 @@ else:
     CP = configparser.RawConfigParser
 
 
-@functools.lru_cache(maxsize=None)
-def get_flatpak_arch():
-    """Return Flatpak's name for the current architecture"""
-    return subprocess.check_output(['flatpak', '--default-arch'],
-                                   universal_newlines=True).strip()
-
-
-# Returns flatpak's name for the current arch
-@functools.lru_cache(maxsize=None)
-def get_rpm_arch():
-    """Return RPM's name for the current architecture"""
-    return subprocess.check_output(['rpm', '--eval', '%{_arch}'],
-                                   universal_newlines=True).strip()
-
-
 # flatpak build-init requires the sdk and runtime to be installed on the
 # build system (so that subsequent build steps can execute things with
 # the SDK). While it isn't impossible to download the runtime image and
@@ -78,7 +101,7 @@ def get_rpm_arch():
 # since our build step is just unpacking the filesystem we've already
 # created. This is a stub implementation of 'flatpak build-init' that
 # doesn't check for the SDK or use it to set up the build filesystem.
-def build_init(directory, appname, sdk, runtime, runtime_branch, tags=[]):
+def build_init(directory, appname, sdk, runtime, runtime_branch, arch, tags=[]):
     if not os.path.isdir(directory):
         os.mkdir(directory)
     with open(os.path.join(directory, "metadata"), "w") as f:
@@ -91,7 +114,7 @@ def build_init(directory, appname, sdk, runtime, runtime_branch, tags=[]):
                                   sdk=sdk,
                                   runtime=runtime,
                                   runtime_branch=runtime_branch,
-                                  arch=get_flatpak_arch())))
+                                  arch=arch.flatpak)))
         if tags:
             f.write("tags=" + ";".join(tags) + "\n")
     os.mkdir(os.path.join(directory, "files"))
@@ -105,10 +128,10 @@ class ModuleInfo(object):
         self.mmd = mmd
         self.rpms = rpms
 
-    def get_profile_packages(self, profile):
+    def get_profile_packages(self, profile, arch):
         result = self.mmd.get_profile(profile).get_rpms()
 
-        arch_profile = profile + '-' + get_rpm_arch()
+        arch_profile = profile + '-' + arch.rpm
         if arch_profile in self.mmd.get_profile_names():
             result.extend(self.mmd.get_profile(arch_profile).get_rpms())
 
@@ -389,7 +412,7 @@ class FlatpakSourceInfo(object):
 
 class FlatpakBuilder(object):
     def __init__(self, source, workdir, root, parse_manifest=None,
-                 flatpak_metadata=FLATPAK_METADATA_ANNOTATIONS):
+                 flatpak_metadata=FLATPAK_METADATA_ANNOTATIONS, oci_arch=None):
         self.source = source
         self.workdir = workdir
         self.root = root
@@ -400,6 +423,8 @@ class FlatpakBuilder(object):
                                     FLATPAK_METADATA_BOTH):
             raise ValueError("Bad flatpak_metadata value %s" % flatpak_metadata)
         self.flatpak_metadata = flatpak_metadata
+
+        self.arch = get_arch(oci_arch)
 
         self.log = logging.getLogger(__name__)
 
@@ -443,7 +468,7 @@ class FlatpakBuilder(object):
 
     def get_install_packages(self):
         source = self.source
-        packages = source.base_module.get_profile_packages(source.profile)
+        packages = source.base_module.get_profile_packages(source.profile, self.arch)
         if not source.runtime:
             # The flatpak-runtime-config package is needed when building an application
             # Flatpak because it includes file triggers for files in /app. (Including just
@@ -481,7 +506,9 @@ class FlatpakBuilder(object):
 
         if not source.runtime:
             runtime_module = source.runtime_module
-            available_packages = sorted(runtime_module.get_profile_packages('runtime'))
+            available_packages = sorted(
+                runtime_module.get_profile_packages('runtime', self.arch)
+            )
 
             for m in source.app_modules:
                 # Strip off the '.rpm' suffix from the filename to get something
@@ -489,7 +516,9 @@ class FlatpakBuilder(object):
                 available_packages.extend(x[:-4] for x in m.rpms)
         else:
             base_module = source.base_module
-            available_packages = sorted(base_module.get_profile_packages(source.profile))
+            available_packages = sorted(
+                base_module.get_profile_packages(source.profile, self.arch)
+            )
 
         return available_packages
 
@@ -714,7 +743,7 @@ class FlatpakBuilder(object):
             'id': id_,
             'runtime_id': runtime_id,
             'sdk_id': sdk_id,
-            'arch': get_flatpak_arch(),
+            'arch': self.arch.flatpak,
             'branch': branch
         }
 
@@ -755,9 +784,13 @@ class FlatpakBuilder(object):
         subprocess.check_call(['ostree', 'commit'] + commit_args)
         subprocess.check_call(['ostree', 'summary', '-u', '--repo', repo])
 
-        subprocess.check_call(['flatpak', 'build-bundle', repo,
-                               '--oci', '--runtime',
-                               outfile, id_, branch])
+        subprocess.check_call([
+            'flatpak', 'build-bundle', repo,
+            '--oci',
+            '--runtime',
+            '--arch', self.arch.flatpak,
+            outfile, id_, branch
+        ])
 
         return runtime_ref
 
@@ -786,10 +819,12 @@ class FlatpakBuilder(object):
         # See comment for build_init() for why we can't use 'flatpak build-init'
         # subprocess.check_call(['flatpak', 'build-init',
         #                        builddir, app_id, runtime_id, runtime_id, runtime_version])
-        build_init(builddir, app_id, sdk_id, runtime_id, runtime_version, tags=info.get('tags', []))
+        build_init(
+            builddir, app_id, sdk_id, runtime_id, runtime_version, self.arch, tags=info.get('tags', [])
+        )
 
         # with gzip'ed tarball, tar is several seconds faster than tarfile.extractall
-        subprocess.check_call(['tar', 'xCfz', builddir, tarred_filesystem])
+        subprocess.check_call(['tar', 'xvCfz', builddir, tarred_filesystem])
 
         processor = FileTreeProcessor(builddir, info)
         processor.process()
@@ -811,7 +846,7 @@ class FlatpakBuilder(object):
                 raise
 
         def try_export(disable_sandbox):
-            args = ['flatpak', 'build-export', repo, builddir, app_branch]
+            args = ['flatpak', 'build-export', '-v', repo, builddir, app_branch]
             if disable_sandbox:
                 args += ['--disable-sandbox']
             if 'end-of-life' in info:
@@ -836,11 +871,15 @@ class FlatpakBuilder(object):
                 self.log.info('Retrying without --disable-sandbox')
                 try_export(disable_sandbox=False)
 
-        subprocess.check_call(['flatpak', 'build-bundle', repo, '--oci',
-                               outfile, app_id, app_branch])
+        subprocess.check_call([
+            'flatpak', 'build-bundle', repo,
+            '--oci',
+            '--arch', self.arch.flatpak,
+            outfile, app_id, app_branch
+        ])
 
         app_ref = 'app/{app_id}/{arch}/{branch}'.format(app_id=app_id,
-                                                        arch=get_flatpak_arch(),
+                                                        arch=self.arch.flatpak,
                                                         branch=app_branch)
 
         return app_ref
