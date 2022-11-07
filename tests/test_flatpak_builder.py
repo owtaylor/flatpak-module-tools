@@ -142,7 +142,8 @@ compose:
     - flatpak-runtime:f33
 flatpak:
     id: org.fedoraproject.Platform
-    branch: stable
+    sdk: org.fedoraproject.Sdk
+    branch: f33
     end-of-life: Fedora 33 is no longer supported
     end-of-life-rebase: org.fedoraproject.NewPlatform
 """
