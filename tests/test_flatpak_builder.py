@@ -1,5 +1,8 @@
+from io import TextIOWrapper
+import json
 import os
 from subprocess import check_call
+import tarfile
 from textwrap import dedent
 
 import gi
@@ -7,6 +10,7 @@ gi.require_version('Modulemd', '2.0')
 from gi.repository import Modulemd
 
 import pytest
+from six.moves import configparser
 import yaml
 
 from flatpak_module_tools.flatpak_builder import (
@@ -256,6 +260,60 @@ def check_get_components(builder, tmpdir, manifest):
     assert flatten(components) == flatten(expected_components)
 
 
+def check_exported_oci(oci_outdir, runtime=False):
+    with open(os.path.join(oci_outdir, "index.json")) as f:
+        index = json.load(f)
+
+    # Load the manifest that describes the container
+    def descriptor_to_path(descriptor):
+        digest = descriptor["digest"]
+        assert digest.startswith("sha256:")
+        return os.path.join(oci_outdir, "blobs", "sha256", digest[7:])
+
+    with open(descriptor_to_path(index["manifests"][0])) as f:
+        manifest = json.load(f)
+
+    # Get the labels for the container
+    with open(descriptor_to_path(manifest["config"])) as f:
+        config = json.load(f)
+
+    labels = config["config"]["Labels"]
+
+    if runtime:
+        assert labels["org.flatpak.ref"] == "runtime/org.fedoraproject.Platform/x86_64/f33"
+    else:
+        assert labels["org.flatpak.ref"] == "app/org.fedoraproject.TestApp/x86_64/stable"
+
+    # Do some basic checks on the metadata label
+    metadata_from_labels = labels["org.flatpak.metadata"]
+    cp = configparser.RawConfigParser()
+    cp.read_string(metadata_from_labels)
+
+    if runtime:
+        assert cp.get("Runtime", "runtime") == \
+            "org.fedoraproject.Platform/x86_64/f33"
+        assert cp.get("Runtime", "sdk") == \
+            "org.fedoraproject.Sdk/x86_64/f33"
+    else:
+        assert cp.get("Application", "runtime") == \
+            "org.fedoraproject.Platform/x86_64/f33"
+
+    # Now get the contents we built
+    tar = tarfile.open(descriptor_to_path(manifest["layers"][0]), "r:gz")
+
+    # Check that that has the same metadata as the labels - the metadata
+    # file here will be used after installation
+    extracted = tar.extractfile("metadata")
+    assert extracted
+    metadata_stream = TextIOWrapper(extracted)
+    metadata_from_tarfile = metadata_stream.read()
+    metadata_stream.close()
+    assert metadata_from_tarfile == metadata_from_labels
+
+    # And check that the bin/hello file we add for both the runtime and app is there
+    assert tar.getmember("files/bin/hello") is not None
+
+
 def test_app_basic(testapp_source, tmpdir):
     workdir = str(tmpdir / "work")
     os.mkdir(workdir)
@@ -288,7 +346,7 @@ def test_app_basic(testapp_source, tmpdir):
     with open(tmpdir / "export.tar", "rb") as f:
         outfile, manifest_file = (builder._export_from_stream(f, close_stream=False))
 
-    builder.build_container(outfile)
+    ref_name, oci_outdir, tarred_oci_outdir = builder.build_container(outfile)
 
     # libfoo from the module should be listed in builder.get_components()
     check_get_components(builder, tmpdir, dedent("""\
@@ -307,6 +365,8 @@ def test_app_basic(testapp_source, tmpdir):
         true  testapp-0:1-1.x86_64
         true  testapp-fancymath-0:1-1.x86_64
     """))
+
+    check_exported_oci(oci_outdir, runtime=False)
 
 
 def test_runtime_basic(runtime_source, tmpdir):
@@ -336,7 +396,7 @@ def test_runtime_basic(runtime_source, tmpdir):
     with open(tmpdir / "export.tar", "rb") as f:
         outfile, manifest_file = (builder._export_from_stream(f, close_stream=False))
 
-    builder.build_container(outfile)
+    refname, oci_outdir, tarred_oci_outdir = builder.build_container(outfile)
 
     # builder.get_components() should not filter out any packages
     check_get_components(builder, tmpdir, dedent("""\
@@ -344,6 +404,8 @@ def test_runtime_basic(runtime_source, tmpdir):
         true glibc-0:2.32-4.fc33.x86_64
         true libfoo-0:1.2.3-1.fc33.x86_64
     """))
+
+    check_exported_oci(oci_outdir, runtime=True)
 
 
 def test_export_long_filenames(testapp_source, tmpdir):
