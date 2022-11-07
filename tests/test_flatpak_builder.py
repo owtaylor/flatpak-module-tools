@@ -247,7 +247,6 @@ def check_get_components(builder, tmpdir, manifest):
     manifest_lines = [l + "\n" for l in manifest.strip().split("\n")]
 
     expected_components = [c for c in parse_manifest(manifest_lines) if c['include']]
-    print(expected_components)
     components = builder.get_components(manifestfile)
 
     def flatten(components):
