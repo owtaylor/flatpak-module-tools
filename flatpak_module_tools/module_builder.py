@@ -52,7 +52,7 @@ class ModuleBuilder(object):
         basename = os.path.basename(self.top_dir)
         modulemd = os.path.join(self.top_dir, basename + '.yaml')
         if not os.path.exists(modulemd):
-            die("'{}' does not exist".format(modulemd))
+            die(f"'{modulemd}' does not exist")
 
         return modulemd
 
@@ -211,17 +211,17 @@ class ModuleBuilder(object):
                         assert stream == self.stream
                         version = parts[2]
 
-                        output_dir = os.path.join(os.path.expanduser('~/modulebuild'),
-                                                  'builds',
-                                                  'module-{}-{}-{}'.format(name,
-                                                                           stream,
-                                                                           version))
+                        output_dir = os.path.join(
+                            os.path.expanduser('~/modulebuild'),
+                            'builds',
+                            f'module-{name}-{stream}-{version}'
+                        )
                         log_path = os.path.join(output_dir, 'mbs.log')
-                        important("name: {}".format(name))
-                        important("stream: {}".format(stream))
-                        important("version: {}".format(version))
-                        important("modulemd: {}".format(self.modulemd))
-                        important("log: {}".format(log_path))
+                        important(f"name: {name}")
+                        important(f"stream: {stream}")
+                        important(f"version: {version}")
+                        important(f"modulemd: {self.modulemd}")
+                        important(f"log: {log_path}")
                         click.echo()
                     else:
                         m = command_re.match(message)
@@ -255,11 +255,11 @@ class ModuleBuilder(object):
         click.echo()
 
         if not failed and rv == 0:
-            important('{}:{}:{} successfully built'.format(name, stream, version))
-            info("log: {}".format(log_path))
+            important(f'{name}:{stream}:{version} successfully built')
+            info(f"log: {log_path}")
         else:
             error("mbs-manager build_module_locally failed")
-            error("log: {}".format(log_path))
+            error(f"log: {log_path}")
             sys.exit(1)
 
         self.version = version

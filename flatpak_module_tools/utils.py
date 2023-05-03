@@ -44,7 +44,7 @@ def check_call(args, cwd=None):
     log_call(args)
     rv = subprocess.call(args, cwd=cwd)
     if rv != 0:
-        die("%s failed (exit status=%d)" % (args[0], rv))
+        die(f"{args[0]} failed (exit status={rv})")
 
 
 class ModuleSpec(object):
@@ -64,7 +64,7 @@ class ModuleSpec(object):
         return result
 
     def __repr__(self):
-        return "ModuleSpec({})".format(self.to_str())
+        return f"ModuleSpec({self.to_str()})"
 
     def __eq__(self, other):
         return self.__dict__ == other.__dict__

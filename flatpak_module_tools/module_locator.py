@@ -28,15 +28,15 @@ class Build(ModuleInfo):
     def yum_config(self):
         exclude = ','.join(self.mmd.get_rpm_filters())
 
-        return """[{name}-{stream}]
-name={name}-{stream}
-baseurl=file://{path}
+        return f"""[{self.name}-{self.stream}]
+name={self.name}-{self.stream}
+baseurl=file://{self.path}
 enabled=1
 excludepkgs={exclude}
 priority=10
 # just treat modular packages as normal packages - don't expect modular metadata
 module_hotfixes=true
-""".format(name=self.name, stream=self.stream, path=self.path, exclude=exclude)
+"""
 
     def has_module_metadata(self):
         # Parsing the repomd.xml file would be cleaner and almost as simple,
@@ -60,7 +60,7 @@ class LocalBuild(Build):
         self.rpms = [a + '.rpm' for a in mmd.get_rpm_artifacts()]
 
     def __repr__(self):
-        return '<LocalBuild {name}:{stream}:{version}>'.format(**self.__dict__)
+        return '<LocalBuild {name}:{stream}:{version}>'.format(**self.__dict__)  # noqa: FS002
 
 
 class KojiBuild(Build):
@@ -72,7 +72,7 @@ class KojiBuild(Build):
         self.koji_tag = koji_tag
 
     def __repr__(self):
-        return '<KojiBuild {name}:{stream}:{version}>'.format(**self.__dict__)
+        return '<KojiBuild {name}:{stream}:{version}>'.format(**self.__dict__)  # noqa: FS002
 
 
 def get_module_info(module_name, stream, version=None, koji_config=None, koji_profile='koji'):
@@ -81,11 +81,14 @@ def get_module_info(module_name, stream, version=None, koji_config=None, koji_pr
                                include_rpms=True)
 
     if len(builds) == 0:
-        raise RuntimeError("No module builds found for {}"
-                           .format(ModuleSpec(module_name, stream, version).to_str()))
+        raise RuntimeError(
+            f"No module builds found for {ModuleSpec(module_name, stream, version).to_str()}"
+        )
     elif len(builds) > 1:
-        raise RuntimeError("Multiple builds against different contexts found for {}"
-                           .format(ModuleSpec(module_name, stream, version).to_str()))
+        raise RuntimeError(
+            "Multiple builds against different contexts found for "
+            f"{ModuleSpec(module_name, stream, version)}"
+        )
     build = builds[0]
 
     modulemd_str = build['extra']['typeinfo']['module']['modulemd_str']
@@ -93,7 +96,7 @@ def get_module_info(module_name, stream, version=None, koji_config=None, koji_pr
     # Make sure that we have the v2 'dependencies' format
     mmd = mmd.upgrade(Modulemd.ModuleStreamVersionEnum.TWO)
 
-    rpms = ['{name}-{epochnum}:{version}-{release}.{arch}.rpm'.format(
+    rpms = ['{name}-{epochnum}:{version}-{release}.{arch}.rpm'.format(  # noqa: FS002
                 epochnum=rpm['epoch'] or 0, **rpm
             )
             for rpm in build['gmb_rpms']
@@ -176,9 +179,8 @@ class ModuleLocator(object):
 
             if not found_build:
                 raise RuntimeError(
-                    'The local build "{0}" couldn\'t be found in "{1}"'.format(
-                        build_id, self.conf.mock_resultsdir
-                    ))
+                    f'The local build "{build_id}" '
+                    f'couldn\'t be found in "{self.conf.mock_resultsdir}"')
 
             local_build = LocalBuild(os.path.join(
                 self.conf.mock_resultsdir, found_build[3], 'results'
@@ -188,9 +190,9 @@ class ModuleLocator(object):
                found_build[1] != local_build.stream or \
                found_build[2] != local_build.version:
                 raise RuntimeError(
-                    'Parsed metadata results for "{0}" don\'t match the directory name'.format(
-                        found_build[3])
-                    )
+                    f'Parsed metadata results for "{found_build[3]}" '
+                    'don\'t match the directory name'
+                )
             result[(local_build.name, local_build.stream)] = local_build
 
         self._local_build_info = result
@@ -205,7 +207,7 @@ class ModuleLocator(object):
         if key in self._cached_remote_builds:
             return self._cached_remote_builds[key]
 
-        info("Querying Koji for information on %s:%s" % (name, stream))
+        info(f"Querying Koji for information on {name}:{stream}")
 
         modulemd, koji_tag, rpms = get_module_info(name, stream,
                                                    version=version,
@@ -239,7 +241,7 @@ class ModuleLocator(object):
 
         koji_path = os.path.join(self.conf.cache_dir, "koji_tags", build.koji_tag)
         if not os.path.exists(koji_path):
-            info("Downloading %s:%s to %s" % (build.name, build.stream, build.path))
+            info(f"Downloading {build.name}:{build.stream} to {build.path}")
             create_local_repo_from_koji_tag(self.conf, build.koji_tag, koji_path)
 
         os.makedirs(build.path)

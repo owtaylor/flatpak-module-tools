@@ -26,20 +26,20 @@ class ContainerBuilder(object):
         compose_yaml = container_yaml.get('compose', {})
         modules = compose_yaml.get('modules', [])
         if not modules:
-            die("No modules specified in the compose section of '{}'".format(self.containerspec))
+            die(f"No modules specified in the compose section of '{self.containerspec}'")
 
         self.flatpak_yaml = container_yaml.get('flatpak', None)
         if not self.flatpak_yaml:
-            die("No flatpak section in '{}'".format(containerspec))
+            die(f"No flatpak section in '{containerspec}'")
 
         compose_yaml = container_yaml.get('compose', {})
         modules = compose_yaml.get('modules', [])
         if not modules:
-            die("No modules specified in the compose section of '{}'".format(self.containerspec))
+            die(f"No modules specified in the compose section of '{self.containerspec}'")
 
         if len(modules) > 1:
-            warn("Multiple modules specified in compose section of '{}', "
-                 "using first".format(containerspec))
+            warn(f"Multiple modules specified in compose section of '{containerspec}', "
+                 "using first")
 
         self.module_spec = split_module_spec(modules[0])
 
@@ -48,8 +48,7 @@ class ContainerBuilder(object):
         #  modules were built against a particular dependency.
         def get_stream(module, req, req_streams):
             if len(req_streams) != 1:
-                die("%s: stream list for '%s' is not expanded (%s)" %
-                    (module.props.name, req, req_streams))
+                die(f"{module.props.name}: stream list for '{req}' is not expanded ({req_streams})")
             return req_streams[0]
 
         platform_stream = None
@@ -67,14 +66,14 @@ class ContainerBuilder(object):
 
         m = re.match(self.profile.platform_stream_pattern, platform_stream)
         if m is None:
-            die("'platform' module stream '{}' doesn't match '{}'".format(
-                platform_stream, self.profile.platform_stream_pattern))
+            die(f"'platform' module stream '{platform_stream}' "
+                "doesn't match '{self.profile.platform_stream_pattern}'")
 
         return m.group(1)
 
     def build(self):
         header('BUILDING CONTAINER')
-        important('container spec: {}'.format(self.containerspec))
+        important(f'container spec: {self.containerspec}')
         important('')
 
         module_build_id = self.module_spec.to_str(include_profile=False)
@@ -92,14 +91,14 @@ class ContainerBuilder(object):
 
         builddir = os.path.expanduser("~/modulebuild/flatpaks")
         workdir = os.path.join(
-            builddir, "{}-{}-{}".format(base_build.name, base_build.stream, base_build.version)
+            builddir, f"{base_build.name}-{base_build.stream}-{base_build.version}"
         )
         if os.path.exists(workdir):
-            info("Removing old output directory {}".format(workdir))
+            info(f"Removing old output directory {workdir}")
             shutil.rmtree(workdir)
 
         os.makedirs(workdir)
-        info("Writing results to {}".format(workdir))
+        info(f"Writing results to {workdir}")
 
         has_modulemd = {}
 
@@ -199,13 +198,11 @@ class ContainerBuilder(object):
         process.wait()
         process.stdout.close()
         if process.returncode != 0:
-            die("finalize.sh failed (exit status=%d)" % process.returncode)
+            die(f"finalize.sh failed (exit status={process.returncode})")
 
         ref_name, outfile, tarred_outfile = builder.build_container(filesystem_tar)
 
-        local_outname = "{}-{}-{}.oci.tar.gz".format(
-            base_build.name, base_build.stream, base_build.version
-        )
+        local_outname = f"{base_build.name}-{base_build.stream}-{base_build.version}.oci.tar.gz"
 
         info('Compressing result')
         with open(local_outname, 'wb') as f:

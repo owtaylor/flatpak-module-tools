@@ -65,7 +65,7 @@ def get_arch(oci_arch=None):
             if arch.flatpak == flatpak_arch:
                 return arch
 
-        raise RuntimeError("Unknown flatpak arch '{}'".format(flatpak_arch))
+        raise RuntimeError(f"Unknown flatpak arch '{format(flatpak_arch)}'")
 
 
 FLATPAK_METADATA_LABELS = "labels"
@@ -84,16 +84,12 @@ def build_init(directory, appname, sdk, runtime, runtime_branch, arch, tags=[]):
     if not os.path.isdir(directory):
         os.mkdir(directory)
     with open(os.path.join(directory, "metadata"), "w") as f:
-        f.write(dedent("""\
+        f.write(dedent(f"""\
                        [Application]
                        name={appname}
-                       runtime={runtime}/{arch}/{runtime_branch}
-                       sdk={sdk}/{arch}/{runtime_branch}
-                       """.format(appname=appname,
-                                  sdk=sdk,
-                                  runtime=runtime,
-                                  runtime_branch=runtime_branch,
-                                  arch=arch.flatpak)))
+                       runtime={runtime}/{arch.flatpak}/{runtime_branch}
+                       sdk={sdk}/{arch.flatpak}/{runtime_branch}
+                       """))
         if tags:
             f.write("tags=" + ";".join(tags) + "\n")
     os.mkdir(os.path.join(directory, "files"))
@@ -275,7 +271,7 @@ class FileTreeProcessor(object):
                                            full_dir, source_file)
 
         if not found_icon:
-            raise RuntimeError("icon {} not found below {}".format(self.rename_icon, icons_dir))
+            raise RuntimeError(f"icon {self.rename_icon} not found below {icons_dir}")
 
     def _rewrite_desktop_file(self):
         if not (self.rename_icon or self.desktop_file_name_prefix or self.desktop_file_name_suffix):
@@ -350,9 +346,10 @@ class FlatpakSourceInfo(object):
             profile = 'runtime' if self.runtime else 'default'
 
         if profile not in base_module.mmd.get_profile_names():
-            raise ValueError("{}:{}:{} doesn't have a profile '{}'".format(
-                base_module.name, base_module.stream, base_module.version,
-                profile))
+            raise ValueError(
+                f"{base_module.name}:{base_module.stream}:{base_module.version} "
+                f"doesn't have a profile '{profile}'"
+            )
 
         self.profile = profile
 
@@ -405,7 +402,7 @@ class FlatpakBuilder(object):
         if flatpak_metadata not in (FLATPAK_METADATA_ANNOTATIONS,
                                     FLATPAK_METADATA_LABELS,
                                     FLATPAK_METADATA_BOTH):
-            raise ValueError("Bad flatpak_metadata value %s" % flatpak_metadata)
+            raise ValueError(f"Bad flatpak_metadata value {flatpak_metadata}")
         self.flatpak_metadata = flatpak_metadata
 
         self.arch = get_arch(oci_arch)
@@ -431,7 +428,7 @@ class FlatpakBuilder(object):
             def check(condition, what):
                 if not condition:
                     raise RuntimeError(
-                        "Mismatch for {} betweeen module xmd and container.yaml".format(what))
+                        f"Mismatch for {what} betweeen module xmd and container.yaml")
 
             check(flatpak_yaml['branch'] == flatpak_xmd['branch'], "'branch'")
             check(source.profile in flatpak_xmd['runtimes'], 'profile name')
@@ -753,7 +750,7 @@ class FlatpakBuilder(object):
         with open(os.path.join(builddir, 'metadata'), 'r') as f:
             metadata = f.read()
 
-        runtime_ref = 'runtime/{id}/{arch}/{branch}'.format(**args)
+        runtime_ref = 'runtime/{id}/{arch}/{branch}'.format(**args)  # noqa: FS002
 
         commit_args = ['--repo', repo, '--owner-uid=0',
                        '--owner-gid=0', '--no-xattrs',
@@ -869,9 +866,7 @@ class FlatpakBuilder(object):
             outfile, app_id, app_branch
         ])
 
-        app_ref = 'app/{app_id}/{arch}/{branch}'.format(app_id=app_id,
-                                                        arch=self.arch.flatpak,
-                                                        branch=app_branch)
+        app_ref = f'app/{app_id}/{self.arch.flatpak}/{app_branch}'
 
         return app_ref
 

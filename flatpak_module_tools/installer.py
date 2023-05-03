@@ -26,9 +26,9 @@ def _download_url(url, outdir):
         r = requests.get(url, stream=True)
         r.raise_for_status()
     except requests.exceptions.ConnectionError as e:
-        die("Download failed for {}: {}".format(url, e))
+        die(f"Download failed for {url}: {e}")
     except requests.exceptions.HTTPError as e:
-        die("Download failed: {}".format(e))
+        die(f"Download failed: {e}")
 
     content_length_header = r.headers.get('content-length')
     assert content_length_header is not None
@@ -53,7 +53,7 @@ def _download_koji_name_stream(profile, koji_name_stream, outdir):
         name = parts[0]
         stream = parts[1]
     else:
-        die("Koji download should be NAME or NAME:STREAM, not {}".format(koji_name_stream))
+        die(f"Koji download should be NAME or NAME:STREAM, not {koji_name_stream}")
 
     options = koji.read_config(profile_name=profile.koji_profile, user_config=profile.koji_config)
     session_opts = koji.grab_session_options(options)
@@ -61,7 +61,7 @@ def _download_koji_name_stream(profile, koji_name_stream, outdir):
 
     package_id = session.getPackageID(name)
     if package_id is None:
-        die("Cannot find koji ID for {}".format(koji_name_stream))
+        die(f"Cannot find koji ID for {name}")
 
     kwargs = {
         'type': 'image',
@@ -77,7 +77,7 @@ def _download_koji_name_stream(profile, koji_name_stream, outdir):
         builds = [b for b in builds if b['version'] == stream]
 
     if len(builds) == 0:
-        die("Cannot find any Flatpak builds for {}".format(koji_name_stream))
+        die(f"Cannot find any Flatpak builds for {koji_name_stream}")
 
     build = builds[0]
     archives = session.listArchives(build['build_id'])

@@ -27,7 +27,7 @@ def cli(verbose, config, profile):
     try:
         get_profile()
     except KeyError:
-        die("Unknown profile '{}'".format(profile))
+        die(f"Unknown profile '{profile}'")
 
     if verbose:
         logging.basicConfig(level=logging.INFO)
