@@ -11,7 +11,7 @@ import re
 import smartcols
 import solv
 
-from . import _repodata
+from . import repodata
 from .util import arch_score, parse_dataset_name
 
 log = logging.getLogger(__name__)
@@ -24,7 +24,7 @@ def setup_pool(arch=None, repos=()):
     pool = solv.Pool()
     # pool.set_debuglevel(2)
     pool.setarch(arch)
-    pool.set_loadcallback(_repodata.load_stub)
+    pool.set_loadcallback(repodata.load_stub)
 
     for repo in repos:
         repo.metadata_path = repo.metadata_path.format(arch=arch)
@@ -246,7 +246,7 @@ def ensure_buildable(pool, pkgnames, full_info=False):
 
 
 def make_pool(arch=None):
-    return setup_pool(arch, _repodata.setup_repos())
+    return setup_pool(arch, repodata.setup_repos())
 
 
 _DEFAULT_HINTS = ("glibc-minimal-langpack",)

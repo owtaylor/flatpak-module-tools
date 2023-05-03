@@ -6,7 +6,7 @@ import tempfile
 
 import solv
 
-from ._fetchrepodata import load_cached_repodata
+from .fetchrepodata import load_cached_repodata
 from .config import config
 from .util import parse_dataset_name
 

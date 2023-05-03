@@ -12,8 +12,6 @@ import yaml
 from attr import attrib, attributes
 import click
 import gi
-gi.require_version('Modulemd', '1.0')  # noqa: E402
-from gi.repository import Modulemd
 from lxml import etree
 import requests
 from requests_toolbelt.downloadutils.tee import tee_to_file
@@ -21,6 +19,9 @@ from requests_toolbelt.downloadutils.tee import tee_to_file
 from .config import config
 from .util import display_dataset_name, parse_dataset_name
 from .util import yaml_safe_load, yaml_safe_load_all
+
+gi.require_version('Modulemd', '1.0')
+from gi.repository import Modulemd  # type: ignore # noqa: E402
 
 
 XDG_CACHE_HOME = (os.environ.get("XDG_CACHE_HOME")
