@@ -13,6 +13,7 @@ import requests
 
 from .utils import check_call, header, die
 
+
 def _download_url(url, outdir):
     parts = urlparse(url)
     basename = os.path.basename(parts.path)
@@ -65,7 +66,7 @@ def _download_koji_name_stream(profile, koji_name_stream, outdir):
     kwargs = {
         'type': 'image',
         'state': koji.BUILD_STATES['COMPLETE'],
-        'queryOpts': { 'order': '-completion_ts'}
+        'queryOpts': {'order': '-completion_ts'}
     }
 
     if stream is None:
@@ -117,7 +118,7 @@ class Installer(object):
             check_call(['flatpak', 'build-update-repo', self.repodir])
 
         output = subprocess.check_output(['flatpak', 'remotes', '--user'], encoding="UTF-8")
-        if not re.search('^flatpak-module-tools\s', output, re.MULTILINE):
+        if not re.search(r'^flatpak-module-tools\s', output, re.MULTILINE):
             check_call(['flatpak', 'remote-add',
                         '--user', '--no-gpg-verify',
                         'flatpak-module-tools', self.repodir])
@@ -134,7 +135,9 @@ class Installer(object):
             os.mkdir(ocidir)
 
             if self.source_koji_name_stream:
-                path = _download_koji_name_stream(self.profile, self.source_koji_name_stream, workdir)
+                path = _download_koji_name_stream(
+                    self.profile, self.source_koji_name_stream, workdir
+                )
             elif self.source_url:
                 path = _download_url(self.source_url, workdir)
             elif self.source_path:
@@ -149,11 +152,12 @@ class Installer(object):
 
             def get_path_from_descriptor(descriptor):
                 assert descriptor["digest"].startswith("sha256:")
-                return os.path.join(ocidir, "blobs", "sha256", descriptor["digest"][len("sha256:"):])
+                return os.path.join(
+                    ocidir, "blobs", "sha256", descriptor["digest"][len("sha256:"):]
+                )
 
             digest = index_json['manifests'][0]['digest']
             assert digest.startswith("sha256:")
-            manifest_path = os.path.join(ocidir, 'blobs', 'sha256', digest[7:])
 
             with open(get_path_from_descriptor(index_json['manifests'][0])) as f:
                 manifest_json = json.load(f)
@@ -170,7 +174,9 @@ class Installer(object):
                     ref = labels.get('org.flatpak.ref')
 
             if ref is None:
-                raise RuntimeError("org.flatpak.ref not found in annotations or labels - is this a Flatpak?")
+                raise RuntimeError(
+                    "org.flatpak.ref not found in annotations or labels - is this a Flatpak?"
+                )
 
             check_call(['flatpak', 'build-import-bundle',
                         '--update-appstream', '--oci',
@@ -190,6 +196,10 @@ class Installer(object):
             old_origin = None
 
         if old_origin == 'flatpak-module-tools':
-            check_call(['flatpak', 'update', '-y', '--user', ref])
+            check_call([
+                'flatpak', 'update', '-y', '--user', ref
+            ])
         else:
-            check_call(['flatpak', 'install', '-y', '--user', '--reinstall', 'flatpak-module-tools', ref])
+            check_call([
+                'flatpak', 'install', '-y', '--user', '--reinstall', 'flatpak-module-tools', ref
+            ])

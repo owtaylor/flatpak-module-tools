@@ -6,6 +6,7 @@ import sys
 
 from .utils import die, error, header, important, info
 
+
 # ModuleBuilder is a straightforward, simple wrapper around:
 #
 #   mbs-manager build_module_locally
@@ -61,8 +62,9 @@ class ModuleBuilder(object):
 
         try:
             with open(os.devnull, 'w') as devnull:
-                branch = subprocess.check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
-                                                  stderr=devnull, encoding="UTF-8").strip()
+                branch = subprocess.check_output(
+                    ['git', 'rev-parse', '--abbrev-ref', 'HEAD'], stderr=devnull, encoding="UTF-8"
+                ).strip()
         except subprocess.CalledProcessError:
             branch = None
 
@@ -74,9 +76,15 @@ class ModuleBuilder(object):
     def build(self):
         header('BUILDING MODULE')
 
-        log_line_re = re.compile(r'.*?-\s*(\S+)\s-\s*(DEBUG|INFO|WARNING|ERROR)\s*-\s*(.*)')
-        command_re = re.compile(r'Executing command: \[([^]]+)\](?:, stdout log: (\S+?))?(?:, stderr log: (\S+?))?$')
-        build_id_re = re.compile(r'The user "[^"]+" submitted the build "([^"]+)"')
+        log_line_re = re.compile(
+            r'.*?-\s*(\S+)\s-\s*(DEBUG|INFO|WARNING|ERROR)\s*-\s*(.*)'
+        )
+        command_re = re.compile(
+            r'Executing command: \[([^]]+)\](?:, stdout log: (\S+?))?(?:, stderr log: (\S+?))?$'
+        )
+        build_id_re = re.compile(
+            r'The user "[^"]+" submitted the build "([^"]+)"'
+        )
 
         # These define lines in the log output to ignore, in addition to all
         # messages at level DEBUG
@@ -149,15 +157,17 @@ class ModuleBuilder(object):
                 assert log_path is not None
                 if log_file is None:
                     log_file = open(log_path, 'w')
-                    for l in log_lines:
-                        log_file.write(l)
+                    for line in log_lines:
+                        log_file.write(line)
                 log_file.write(line)
                 log_file.flush()
 
             line = line.rstrip()
             m = log_line_re.match(line)
             if m is None:
-                if line == "The configuration file at /etc/module-build-service/config.py was not present":
+                if line == \
+                        "The configuration file at /etc/module-build-service/config.py " \
+                        "was not present":
                     continue
                 click.secho(line)
             else:
@@ -169,7 +179,9 @@ class ModuleBuilder(object):
                 # module-build-service messages are categorized as MBS.<subcategory>
                 # But then that broke and they were logged as "MBS "
                 # https://pagure.io/fm-orchestrator/pull-request/1679
-                if logname != 'module_build_service' and logname != 'MBS' and not logname.startswith('MBS.'):
+                if logname != 'module_build_service' and \
+                        logname != 'MBS' and \
+                        not logname.startswith('MBS.'):
                     continue
 
                 if level == 'DEBUG':
@@ -217,7 +229,9 @@ class ModuleBuilder(object):
                             click.secho('running: ', fg='blue', bold=True, err=True, nl=False)
                             pieces = m.group(1).split(', ')
                             click.echo(' '.join(p[1:-1] for p in pieces))
-                            if m.group(2) is not None and pieces[0] != "'mock'" and m.group(2) != '/dev/null':
+                            if m.group(2) is not None and \
+                                    pieces[0] != "'mock'" and \
+                                    m.group(2) != '/dev/null':
                                 click.secho('    stdout: ', fg='blue', err=True, nl=False)
                                 click.echo(m.group(2))
                             if m.group(3) is not None:
@@ -249,4 +263,3 @@ class ModuleBuilder(object):
             sys.exit(1)
 
         self.version = version
-

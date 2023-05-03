@@ -10,6 +10,7 @@ from .flatpak_builder import FlatpakBuilder, FlatpakSourceInfo, FLATPAK_METADATA
 from .module_locator import ModuleLocator
 from .utils import check_call, die, log_call, warn, header, important, info, split_module_spec
 
+
 class ContainerBuilder(object):
     def __init__(self, profile, containerspec, from_local=False, local_builds=[],
                  flatpak_metadata=FLATPAK_METADATA_ANNOTATIONS):
@@ -37,7 +38,8 @@ class ContainerBuilder(object):
             die("No modules specified in the compose section of '{}'".format(self.containerspec))
 
         if len(modules) > 1:
-            warn("Multiple modules specified in compose section of '{}', using first".format(containerspec))
+            warn("Multiple modules specified in compose section of '{}', "
+                 "using first".format(containerspec))
 
         self.module_spec = split_module_spec(modules[0])
 
@@ -83,11 +85,15 @@ class ContainerBuilder(object):
         for build_id in self.local_builds:
             locator.add_local_build(build_id)
 
-        builds = locator.get_builds(self.module_spec.name, self.module_spec.stream, self.module_spec.version)
+        builds = locator.get_builds(
+            self.module_spec.name, self.module_spec.stream, self.module_spec.version
+        )
         base_build = list(builds.values())[0]
 
         builddir = os.path.expanduser("~/modulebuild/flatpaks")
-        workdir = os.path.join(builddir, "{}-{}-{}".format(base_build.name, base_build.stream, base_build.version))
+        workdir = os.path.join(
+            builddir, "{}-{}-{}".format(base_build.name, base_build.stream, base_build.version)
+        )
         if os.path.exists(workdir):
             info("Removing old output directory {}".format(workdir))
             shutil.rmtree(workdir)
@@ -129,9 +135,9 @@ class ContainerBuilder(object):
         try:
             subprocess.check_output(['dnf', 'module', 'list', '--enabled'],
                                     stderr=subprocess.STDOUT)
-            have_dnf_module=True
+            have_dnf_module = True
         except subprocess.CalledProcessError:
-            have_dnf_module=False
+            have_dnf_module = False
 
         platform_version = self._get_platform_version(builds)
         base_repo_url = self.profile.base_repo_url.format(platform=platform_version)
@@ -148,7 +154,7 @@ class ContainerBuilder(object):
             """ + builder.get_cleanup_script()) + dedent("""\
             cd /
             exec tar cf - --anchored --exclude='./sys/*' --exclude='./proc/*' --exclude='./dev/*' --exclude='./run/*' ./
-        """)
+        """)  # noqa: E501
 
         finalize_script_path = os.path.join(workdir, 'finalize.sh')
         with open(finalize_script_path, 'w') as f:
@@ -168,10 +174,14 @@ class ContainerBuilder(object):
             check_call(['mock', '-r', output_path, '--dnf-cmd', 'module', 'enable'] + to_enable)
 
         info('Installing packages')
-        check_call(['mock', '-r', output_path, '--install'] + sorted(builder.get_install_packages()))
+        check_call(
+            ['mock', '-r', output_path, '--install'] + sorted(builder.get_install_packages())
+        )
 
         info('Cleaning and exporting filesystem')
-        check_call(['mock', '-q', '-r', output_path, '--copyin', finalize_script_path, '/root/finalize.sh'])
+        check_call([
+            'mock', '-q', '-r', output_path, '--copyin', finalize_script_path, '/root/finalize.sh'
+        ])
 
         builder.root = "."
 
@@ -183,7 +193,9 @@ class ContainerBuilder(object):
         # stream is closed before it exits, even if the child of systemd-nspawn isn't
         # writing anything.
         # https://github.com/systemd/systemd/issues/11533
-        filesystem_tar, manifestfile = builder._export_from_stream(process.stdout, close_stream=False)
+        filesystem_tar, manifestfile = builder._export_from_stream(
+            process.stdout, close_stream=False
+        )
         process.wait()
         process.stdout.close()
         if process.returncode != 0:
@@ -191,7 +203,9 @@ class ContainerBuilder(object):
 
         ref_name, outfile, tarred_outfile = builder.build_container(filesystem_tar)
 
-        local_outname = "{}-{}-{}.oci.tar.gz".format(base_build.name, base_build.stream, base_build.version)
+        local_outname = "{}-{}-{}.oci.tar.gz".format(
+            base_build.name, base_build.stream, base_build.version
+        )
 
         info('Compressing result')
         with open(local_outname, 'wb') as f:

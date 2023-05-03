@@ -5,11 +5,15 @@ import yaml
 
 
 _extra_config_files = []
+
+
 def add_config_file(config_file):
     _extra_config_files.append(config_file)
 
 
 _config = None
+
+
 def get_config():
     global _config
     if _config is None:
@@ -20,6 +24,8 @@ def get_config():
 
 
 _profile_name = None
+
+
 def set_profile_name(profile_name):
     global _profile_name
     _profile_name = profile_name
@@ -81,7 +87,7 @@ class Config(object):
             config_files += [
                 pkg_resources.resource_stream('flatpak_module_tools', 'config.yaml')
             ]
-        except:
+        except Exception:
             pass
 
         user_config = os.environ.get('XDG_CONFIG_HOME',

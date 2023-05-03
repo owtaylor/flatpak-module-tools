@@ -4,7 +4,7 @@ import sys
 # Only install the CLI for python3. For python2, all we want to work is
 # flatpak_builder.py
 if sys.version_info[0] == 3:
-    entry_points='''
+    entry_points = '''
         [console_scripts]
         flatpak-module=flatpak_module_tools.cli:cli
     '''

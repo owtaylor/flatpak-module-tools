@@ -6,15 +6,16 @@ import shutil
 
 from .utils import check_call
 
-import gi
-gi.require_version('Modulemd', '2.0')
-from gi.repository import Modulemd   # type: ignore
-
 from module_build_service.builder.utils import create_local_repo_from_koji_tag
 
 from .utils import info, ModuleSpec
 from .flatpak_builder import ModuleInfo
 from .get_module_builds import get_module_builds
+
+import gi
+gi.require_version('Modulemd', '2.0')
+from gi.repository import Modulemd   # type: ignore  # noqa: E402
+
 
 class Build(ModuleInfo):
     def __init__(self, mmd, path: str):
@@ -47,10 +48,11 @@ module_hotfixes=true
 
         return False
 
+
 class LocalBuild(Build):
     def __init__(self, path):
         mmd_path = os.path.join(path, 'modules.yaml')
-        mmd = Modulemd.ModuleStream.read_file (mmd_path, False)
+        mmd = Modulemd.ModuleStream.read_file(mmd_path, False)
         mmd = mmd.upgrade(Modulemd.ModuleStreamVersionEnum.TWO)
 
         super().__init__(mmd, path)
@@ -59,6 +61,7 @@ class LocalBuild(Build):
 
     def __repr__(self):
         return '<LocalBuild {name}:{stream}:{version}>'.format(**self.__dict__)
+
 
 class KojiBuild(Build):
     def __init__(self, mmd, path, koji_tag, rpms):
@@ -90,7 +93,9 @@ def get_module_info(module_name, stream, version=None, koji_config=None, koji_pr
     # Make sure that we have the v2 'dependencies' format
     mmd = mmd.upgrade(Modulemd.ModuleStreamVersionEnum.TWO)
 
-    rpms = ['{name}-{epochnum}:{version}-{release}.{arch}.rpm'.format(epochnum=rpm['epoch'] or 0, **rpm)
+    rpms = ['{name}-{epochnum}:{version}-{release}.{arch}.rpm'.format(
+                epochnum=rpm['epoch'] or 0, **rpm
+            )
             for rpm in build['gmb_rpms']
             if rpm['arch'] in ('x86_64', 'noarch')]
 
@@ -111,7 +116,7 @@ class ModuleLocator(object):
             koji_config=profile.koji_config,
             koji_profile=profile.koji_profile,
             cache_dir=os.path.expanduser('~/modulebuild/cache'),
-            mock_resultsdir = os.path.expanduser('~/modulebuild/builds')
+            mock_resultsdir=os.path.expanduser('~/modulebuild/builds')
         )
 
         self.local_build_ids = []
@@ -145,12 +150,13 @@ class ModuleLocator(object):
 
         result = {}
 
-        build_dir = self.conf.mock_resultsdir
         for build_id in self.local_build_ids:
             parts = build_id.split(':')
             if len(parts) < 1 or len(parts) > 3:
                 raise RuntimeError(
-                    'The local build "{0}" couldn\'t be be parsed into NAME[:STREAM[:VERSION]]'.format(build_id))
+                    f'The local build "{build_id}" couldn\'t be be parsed '
+                    "into NAME[:STREAM[:VERSION]]"
+                )
 
             name = parts[0]
             stream = parts[1] if len(parts) > 1 else None
@@ -170,15 +176,21 @@ class ModuleLocator(object):
 
             if not found_build:
                 raise RuntimeError(
-                    'The local build "{0}" couldn\'t be found in "{1}"'.format(build_id, self.conf.mock_resultsdir))
+                    'The local build "{0}" couldn\'t be found in "{1}"'.format(
+                        build_id, self.conf.mock_resultsdir
+                    ))
 
-            local_build = LocalBuild(os.path.join(self.conf.mock_resultsdir, found_build[3], 'results'))
+            local_build = LocalBuild(os.path.join(
+                self.conf.mock_resultsdir, found_build[3], 'results'
+            ))
 
             if found_build[0] != local_build.name or \
                found_build[1] != local_build.stream or \
                found_build[2] != local_build.version:
                 raise RuntimeError(
-                    'Parsed metadata results for "{0}" don\'t match the directory name'.format(found_build[3]))
+                    'Parsed metadata results for "{0}" don\'t match the directory name'.format(
+                        found_build[3])
+                    )
             result[(local_build.name, local_build.stream)] = local_build
 
         self._local_build_info = result
@@ -260,7 +272,6 @@ class ModuleLocator(object):
                 raise RuntimeError("Stream conflict for {}, both {} and {} are required",
                                    name, build.stream, stream)
             return build
-
 
         build = self.locate(name, stream)
         builds[name] = build

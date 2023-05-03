@@ -5,38 +5,47 @@ import subprocess
 import sys
 from typing import NoReturn
 
+
 def error(msg):
     click.secho('error: ', fg='red', bold=True, err=True, nl=False)
     click.echo(msg, err=True)
+
 
 def die(msg) -> NoReturn:
     error(msg)
     sys.exit(1)
 
+
 def warn(msg):
     click.secho('warning: ', fg='yellow', bold=True, err=True, nl=False)
     click.echo(msg, err=True)
 
+
 def important(msg):
     click.secho(msg, err=True, bold=True)
+
 
 def info(msg):
     click.secho('info: ', fg='blue', bold=True, err=True, nl=False)
     click.echo(msg, err=True)
 
+
 def header(msg):
     important(msg)
     important('=' * len(msg))
 
+
 def log_call(args):
     click.secho('running: ', fg='blue', bold=True, err=True, nl=False)
     click.echo(' '.join(pipes.quote(a) for a in args))
+
 
 def check_call(args, cwd=None):
     log_call(args)
     rv = subprocess.call(args, cwd=cwd)
     if rv != 0:
         die("%s failed (exit status=%d)" % (args[0], rv))
+
 
 class ModuleSpec(object):
     def __init__(self, name, stream, version=None, profile=None):

@@ -11,6 +11,7 @@ from .installer import Installer
 from .module_builder import ModuleBuilder
 from .utils import die
 
+
 @click.group()
 @click.option('-v', '--verbose', is_flag=True,
               help='Show verbose debugging output')
@@ -64,7 +65,7 @@ def local_build(add_local_build, containerspec, flatpak_metadata, modulemd, stre
                                          flatpak_metadata=flatpak_metadata)
 
     if (container_builder.module_spec.name != module_builder.name or
-        container_builder.module_spec.stream != module_builder.stream):
+            container_builder.module_spec.stream != module_builder.stream):
         die("Module will be built as {}:{}, but container.yaml calls for {}"
             .format(module_builder.name, module_builder.stream,
                     container_builder.module_spec.to_str(include_profile=False)))

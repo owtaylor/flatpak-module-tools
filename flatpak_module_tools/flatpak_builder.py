@@ -24,7 +24,6 @@ import re
 import shlex
 import shutil
 import subprocess
-import sys
 import tarfile
 from textwrap import dedent
 from xml.etree import ElementTree
@@ -55,6 +54,7 @@ def _get_flatpak_arch():
     return subprocess.check_output(
         ['flatpak', '--default-arch'], universal_newlines=True
     ).strip()
+
 
 def get_arch(oci_arch=None):
     if oci_arch:
@@ -659,7 +659,8 @@ class FlatpakBuilder(object):
         return outfile, manifestfile
 
     def _get_components(self, manifest):
-        assert self.parse_manifest is not None, "get_components(): parse_manifest callback must be provided"
+        assert self.parse_manifest is not None, \
+            "get_components(): parse_manifest callback must be provided"
 
         with open(manifest, 'r') as f:
             lines = f.readlines()
@@ -809,7 +810,8 @@ class FlatpakBuilder(object):
         # subprocess.check_call(['flatpak', 'build-init',
         #                        builddir, app_id, runtime_id, runtime_id, runtime_version])
         build_init(
-            builddir, app_id, sdk_id, runtime_id, runtime_version, self.arch, tags=info.get('tags', [])
+            builddir, app_id, sdk_id, runtime_id, runtime_version, self.arch,
+            tags=info.get('tags', [])
         )
 
         # with gzip'ed tarball, tar is several seconds faster than tarfile.extractall

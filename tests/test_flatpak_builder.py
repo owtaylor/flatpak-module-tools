@@ -5,10 +5,6 @@ from subprocess import check_call
 import tarfile
 from textwrap import dedent
 
-import gi
-gi.require_version('Modulemd', '2.0')
-from gi.repository import Modulemd  # type: ignore
-
 import configparser
 import pytest
 import yaml
@@ -16,6 +12,10 @@ import yaml
 from flatpak_module_tools.flatpak_builder import (
     FlatpakBuilder, FlatpakSourceInfo, FLATPAK_METADATA_BOTH, get_arch, ModuleInfo
 )
+
+import gi
+gi.require_version('Modulemd', '2.0')
+from gi.repository import Modulemd  # type: ignore  # noqa: E402
 
 
 FLATPAK_RUNTIME_MMD = """
@@ -156,13 +156,13 @@ flatpak:
 # We repeat the test with and without overriding the architectures
 @pytest.fixture(params=(None, "arm64", "testarch"))
 def oci_arch_override(request):
-  return request.param
+    return request.param
 
 
 # This is the Arch object corresponding to oci_arch_override
 @pytest.fixture
 def arch(oci_arch_override):
-  return get_arch(oci_arch_override)
+    return get_arch(oci_arch_override)
 
 
 # We need to substitute on the arch a lot, so define another fixture to do that
@@ -228,8 +228,10 @@ def runtime_source(runtime_module):
 
 
 def test_source_info_bad_profile(testapp_source):
-    with pytest.raises(ValueError,
-                       match=r"testapp:stable:3320201216094032 doesn't have a profile 'badprofile'"):
+    with pytest.raises(
+                ValueError,
+                match=r"testapp:stable:3320201216094032 doesn't have a profile 'badprofile'"
+            ):
         FlatpakSourceInfo(testapp_source.flatpak_yaml,
                           testapp_source.modules,
                           testapp_source.base_module,
@@ -269,7 +271,7 @@ def check_get_components(builder, tmpdir, manifest):
     with open(manifestfile, "w") as f:
         f.write(manifest)
 
-    manifest_lines = [l + "\n" for l in manifest.strip().split("\n")]
+    manifest_lines = [line + "\n" for line in manifest.strip().split("\n")]
 
     expected_components = [c for c in parse_manifest(manifest_lines) if c['include']]
     components = builder.get_components(manifestfile)

@@ -3,7 +3,6 @@ import gzip
 import os
 import re
 import shutil
-from textwrap import dedent
 import tempfile
 
 from flatpak_module_tools.flatpak_builder import FileTreeProcessor
@@ -88,12 +87,16 @@ class AppTree(object):
             return new
 
         if rename_desktop_file:
-            appdata_contents = assert_sub(r'<id>org\.gnome\.eog</id>',
-                                          r'<id>' + rename_desktop_file + r'</id>',
-                                          appdata_contents)
-            appdata_contents = assert_sub(r'<launchable type="desktop-id">org\.gnome\.eog\.desktop</launchable>',
-                                          r'<launchable type="desktop-id">' + rename_desktop_file + r'</launchable>',
-                                          appdata_contents)
+            appdata_contents = assert_sub(
+                r'<id>org\.gnome\.eog</id>',
+                r'<id>' + rename_desktop_file + r'</id>',
+                appdata_contents
+            )
+            appdata_contents = assert_sub(
+                r'<launchable type="desktop-id">org\.gnome\.eog\.desktop</launchable>',
+                r'<launchable type="desktop-id">' + rename_desktop_file + r'</launchable>',
+                appdata_contents
+            )
         if rename_icon:
             desktop_contents = assert_sub(r'Icon(\[de\])?=org.gnome.eog',
                                           r'Icon\1=' + rename_icon,
@@ -157,7 +160,8 @@ def test_renames(app_tree,
     })
     processor.process()
 
-    assert os.listdir(app_tree.path('files/share/icons/hicolor/64x64/apps')) == ['org.gnome.eog.png']
+    assert os.listdir(app_tree.path('files/share/icons/hicolor/64x64/apps')) \
+        == ['org.gnome.eog.png']
 
     contents = app_tree.contents('files/share/app-info/xmls/org.gnome.eog.xml.gz',
                                  decompress=True)
