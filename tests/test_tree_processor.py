@@ -8,7 +8,6 @@ import tempfile
 from flatpak_module_tools.flatpak_builder import FileTreeProcessor
 
 import pytest
-import six
 
 APPDATA_CONTENTS = """\
 <?xml version="1.0" encoding="UTF-8"?>
@@ -55,7 +54,7 @@ APP_TREE_FILES = {
 }
 
 
-class AppTree(object):
+class AppTree:
     def __init__(self, root):
         self.root = root
 
@@ -126,7 +125,7 @@ class AppTree(object):
             if not os.path.exists(parentpath):
                 os.makedirs(parentpath)
             with open(fullpath, "wb") as f:
-                if isinstance(contents, six.text_type):
+                if isinstance(contents, str):
                     contents = contents.encode("UTF-8")
                 f.write(contents)
 

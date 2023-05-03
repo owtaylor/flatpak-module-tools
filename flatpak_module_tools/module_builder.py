@@ -15,7 +15,7 @@ from .utils import die, error, header, important, info
 # to produce something that intended for a packager creating a module
 # rather than a maintainer of an MBS installation.
 
-class ModuleBuilder(object):
+class ModuleBuilder:
     def __init__(self, profile, modulemd, stream, local_builds=[]):
         self.profile = profile
         self.git_repo = self.find_git_repo()

@@ -95,7 +95,7 @@ def build_init(directory, appname, sdk, runtime, runtime_branch, arch, tags=[]):
     os.mkdir(os.path.join(directory, "files"))
 
 
-class ModuleInfo(object):
+class ModuleInfo:
     def __init__(self, name, stream, version, mmd, rpms):
         self.name = name
         self.stream = stream
@@ -113,7 +113,7 @@ class ModuleInfo(object):
         return result
 
 
-class FileTreeProcessor(object):
+class FileTreeProcessor:
     def __init__(self, builddir, flatpak_yaml):
         self.app_root = os.path.join(builddir, "files")
         self.app_id = flatpak_yaml['id']
@@ -332,7 +332,7 @@ class FileTreeProcessor(object):
         self._compose_appstream()
 
 
-class FlatpakSourceInfo(object):
+class FlatpakSourceInfo:
     def __init__(self, flatpak_yaml, modules, base_module, profile=None):
         self.flatpak_yaml = flatpak_yaml
         self.modules = modules
@@ -388,7 +388,7 @@ class FlatpakSourceInfo(object):
         return [m for m in self.modules.values() if is_app_module(m)]
 
 
-class FlatpakBuilder(object):
+class FlatpakBuilder:
     def __init__(
             self, source, workdir, root,
             parse_manifest: Callable[[Iterable[str]], Sequence[dict]] | None = None,

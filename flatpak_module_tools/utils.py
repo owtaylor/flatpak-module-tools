@@ -47,7 +47,7 @@ def check_call(args, cwd=None):
         die(f"{args[0]} failed (exit status={rv})")
 
 
-class ModuleSpec(object):
+class ModuleSpec:
     def __init__(self, name, stream, version=None, profile=None):
         self.name = name
         self.stream = stream

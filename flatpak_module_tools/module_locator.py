@@ -105,9 +105,9 @@ def get_module_info(module_name, stream, version=None, koji_config=None, koji_pr
     return mmd, build['extra']['typeinfo']['module']['content_koji_tag'], rpms
 
 
-class ModuleLocator(object):
+class ModuleLocator:
     @dataclass
-    class Config(object):
+    class Config:
         koji_config: str
         koji_profile: str
         cache_dir: str

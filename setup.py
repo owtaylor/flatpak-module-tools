@@ -1,15 +1,9 @@
 from setuptools import setup
-import sys
 
-# Only install the CLI for python3. For python2, all we want to work is
-# flatpak_builder.py
-if sys.version_info[0] == 3:
-    entry_points = '''
-        [console_scripts]
-        flatpak-module=flatpak_module_tools.cli:cli
-    '''
-else:
-    entry_points = None
+entry_points = '''
+    [console_scripts]
+    flatpak-module=flatpak_module_tools.cli:cli
+'''
 
 setup(name='flatpak-module-tools',
       version='0.14',

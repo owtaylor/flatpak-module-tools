@@ -88,7 +88,7 @@ def _download_koji_name_stream(profile, koji_name_stream, outdir):
     return _download_url(url, outdir)
 
 
-class Installer(object):
+class Installer:
     def __init__(self, profile):
         self.profile = profile
         self.source_koji_name_stream = None

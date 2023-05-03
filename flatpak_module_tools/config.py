@@ -35,7 +35,7 @@ def get_profile():
     return get_config().profiles[_profile_name]
 
 
-class ProfileConfig(object):
+class ProfileConfig:
     config_keys = [
         'base_repo_url',
         'koji_config',
@@ -61,7 +61,7 @@ class ProfileConfig(object):
                 setattr(self, k, getattr(other, k))
 
 
-class Config(object):
+class Config:
     def __init__(self):
         self.profiles = {}
 

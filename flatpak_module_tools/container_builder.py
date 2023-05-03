@@ -11,7 +11,7 @@ from .module_locator import ModuleLocator
 from .utils import check_call, die, log_call, warn, header, important, info, split_module_spec
 
 
-class ContainerBuilder(object):
+class ContainerBuilder:
     def __init__(self, profile, containerspec, from_local=False, local_builds=[],
                  flatpak_metadata=FLATPAK_METADATA_ANNOTATIONS):
         self.profile = profile
