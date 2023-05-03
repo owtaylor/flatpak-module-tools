@@ -176,4 +176,8 @@ Release process
 
 LICENSE
 =======
-flatpak-module-tools is licensed under the MIT license. See the LICENSE file for details.
+flatpak-module-tools-depchase is licensed under the terms of the GNU General Public License,
+version 3 or later. See the LICENSE.gplv3 file for details.
+
+The rest of flatpak-module-tools is licensed under the MIT license.
+See the LICENSE file for details.
