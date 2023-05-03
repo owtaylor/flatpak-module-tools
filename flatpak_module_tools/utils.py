@@ -3,12 +3,13 @@ import pipes
 import re
 import subprocess
 import sys
+from typing import NoReturn
 
 def error(msg):
     click.secho('error: ', fg='red', bold=True, err=True, nl=False)
     click.echo(msg, err=True)
 
-def die(msg):
+def die(msg) -> NoReturn:
     error(msg)
     sys.exit(1)
 

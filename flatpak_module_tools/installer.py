@@ -6,7 +6,7 @@ import shutil
 import subprocess
 import tempfile
 
-from six.moves.urllib.parse import urlparse
+from urllib.parse import urlparse
 
 import click
 import requests
@@ -29,7 +29,9 @@ def _download_url(url, outdir):
     except requests.exceptions.HTTPError as e:
         die("Download failed: {}".format(e))
 
-    total_length = int(r.headers.get('content-length'))
+    content_length_header = r.headers.get('content-length')
+    assert content_length_header is not None
+    total_length = int(content_length_header)
 
     with open(path, 'wb') as f:
         with click.progressbar(length=total_length, label="Downloading image") as pb:
@@ -125,6 +127,7 @@ class Installer(object):
 
         self.ensure_remote()
 
+        workdir = None
         try:
             workdir = tempfile.mkdtemp()
             ocidir = os.path.join(workdir, 'oci')
@@ -173,7 +176,8 @@ class Installer(object):
                         '--update-appstream', '--oci',
                         self.repodir, ocidir])
         finally:
-            shutil.rmtree(workdir)
+            if workdir:
+                shutil.rmtree(workdir)
 
         parts = ref.split('/')
         shortref = parts[0] + '/' + parts[1]

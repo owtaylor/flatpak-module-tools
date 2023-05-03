@@ -5,7 +5,7 @@ import yaml
 
 
 _extra_config_files = []
-def add_config_file(self, config_file):
+def add_config_file(config_file):
     _extra_config_files.append(config_file)
 
 

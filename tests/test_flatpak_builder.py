@@ -7,10 +7,10 @@ from textwrap import dedent
 
 import gi
 gi.require_version('Modulemd', '2.0')
-from gi.repository import Modulemd
+from gi.repository import Modulemd  # type: ignore
 
+import configparser
 import pytest
-from six.moves import configparser
 import yaml
 
 from flatpak_module_tools.flatpak_builder import (

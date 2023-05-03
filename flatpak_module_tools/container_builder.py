@@ -178,6 +178,7 @@ class ContainerBuilder(object):
         args = ['mock', '-q', '-r', output_path, '--shell', '/root/finalize.sh']
         log_call(args)
         process = subprocess.Popen(args, stdout=subprocess.PIPE)
+        assert process.stdout is not None
         # When mock is using systemd-nspawn, systemd-nspawn dies with EPIPE if the output
         # stream is closed before it exits, even if the child of systemd-nspawn isn't
         # writing anything.

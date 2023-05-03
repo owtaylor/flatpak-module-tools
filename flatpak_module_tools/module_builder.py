@@ -125,12 +125,18 @@ class ModuleBuilder(object):
                                    universal_newlines=True,
                                    stdout=subprocess.PIPE,
                                    stderr=subprocess.STDOUT)
+        assert process.stdout is not None
+        assert process.stderr is not None
 
         output_dir = None
         log_path = None
         log_file = None
         log_lines = []
         failed = False
+
+        name = "<Unknown>"
+        stream = "<Unknown>"
+        version = "<Unknown>"
 
         while True:
             line = process.stdout.readline()
@@ -140,6 +146,7 @@ class ModuleBuilder(object):
             if output_dir is None or not os.path.exists(output_dir):
                 log_lines.append(line)
             else:
+                assert log_path is not None
                 if log_file is None:
                     log_file = open(log_path, 'w')
                     for l in log_lines:

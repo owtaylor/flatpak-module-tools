@@ -12,13 +12,14 @@ image. It is shared between:
  https://pagure.io/flatpak-module-tools
 """
 
+from configparser import RawConfigParser
 import errno
 import functools
 import hashlib
 import json
 import logging
 import os
-from six.moves import configparser
+from typing import Callable, Iterable, Sequence
 import re
 import shlex
 import shutil
@@ -70,28 +71,6 @@ def get_arch(oci_arch=None):
 FLATPAK_METADATA_LABELS = "labels"
 FLATPAK_METADATA_ANNOTATIONS = "annotations"
 FLATPAK_METADATA_BOTH = "both"
-
-
-# Work around lack of RawConfigParser space_around_delimeters in Python-2.7
-if sys.version_info[0] == 2:
-    class MyConfigParser(configparser.RawConfigParser):
-        # Copy from configparser.RawConfigParser - Copyright (c) 2017 Python Software Foundation
-        # https://www.python.org/download/releases/2.7/license/
-        def write(self, fp, space_around_delimiters=False):
-            """Write an .ini-format representation of the configuration state."""
-            for section in self._sections:
-                fp.write("[%s]\n" % section)
-                for (key, value) in self._sections[section].items():
-                    if key == "__name__":
-                        continue
-                    if (value is not None) or (self._optcre == self.OPTCRE):
-                        key = "=".join((key, str(value).replace('\n', '\n\t')))
-                    fp.write("%s\n" % (key))
-                fp.write("\n")
-
-    CP = MyConfigParser
-else:
-    CP = configparser.RawConfigParser
 
 
 # flatpak build-init requires the sdk and runtime to be installed on the
@@ -183,6 +162,7 @@ class FileTreeProcessor(object):
         return None
 
     def _rewrite_appdata(self):
+        assert self.appdata_file is not None
         tree = ElementTree.parse(self.appdata_file)
 
         # replace component/id
@@ -307,8 +287,9 @@ class FileTreeProcessor(object):
 
         self.log.debug("Rewriting contents of %s", desktop_basename)
 
-        cp = CP()
-        cp.optionxform = str
+        cp = RawConfigParser()
+        cp.optionxform = str  # type: ignore
+
         with open(desktop) as f:
             cp.readfp(f)
 
@@ -411,8 +392,11 @@ class FlatpakSourceInfo(object):
 
 
 class FlatpakBuilder(object):
-    def __init__(self, source, workdir, root, parse_manifest=None,
-                 flatpak_metadata=FLATPAK_METADATA_ANNOTATIONS, oci_arch=None):
+    def __init__(
+            self, source, workdir, root,
+            parse_manifest: Callable[[Iterable[str]], Sequence[dict]] | None = None,
+            flatpak_metadata=FLATPAK_METADATA_ANNOTATIONS, oci_arch=None
+    ):
         self.source = source
         self.workdir = workdir
         self.root = root
@@ -597,12 +581,15 @@ class FlatpakBuilder(object):
         compress_process = subprocess.Popen(['gzip', '-c'],
                                             stdin=subprocess.PIPE,
                                             stdout=out_fileobj)
+        assert compress_process.stdin is not None
+        assert compress_process.stdout is not None
         in_tf = tarfile.open(fileobj=export_stream, mode='r|')
         out_tf = tarfile.open(fileobj=compress_process.stdin, mode='w|')
 
         for member in in_tf:
             if member.name == 'var/tmp/flatpak-build.rpm_qf':
                 reader = in_tf.extractfile(member)
+                assert reader is not None
                 with open(manifestfile, 'wb') as out:
                     out.write(reader.read())
                 reader.close()
@@ -635,7 +622,7 @@ class FlatpakBuilder(object):
             # member.pax_headers["path"] will stick around and override member.name;
             # it will be recreated if target_name > 100 characters
             if "path" in member.pax_headers:
-                del member.pax_headers["path"]
+                del member.pax_headers["path"]  # type: ignore
 
             if member.islnk():
                 # Hard links have full paths within the archive (no leading /)
@@ -649,7 +636,7 @@ class FlatpakBuilder(object):
                 # member.pax_headers["path"] will stick around and override member.name
                 # it will be recreated if link_target > 100 characters
                 if "linkpath" in member.pax_headers:
-                    del member.pax_headers["linkpath"]
+                    del member.pax_headers["linkpath"]  # type: ignore
 
                 out_tf.addfile(member)
             elif member.issym():
@@ -672,6 +659,8 @@ class FlatpakBuilder(object):
         return outfile, manifestfile
 
     def _get_components(self, manifest):
+        assert self.parse_manifest is not None, "get_components(): parse_manifest callback must be provided"
+
         with open(manifest, 'r') as f:
             lines = f.readlines()
 

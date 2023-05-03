@@ -1,4 +1,5 @@
 from collections import OrderedDict
+from dataclasses import dataclass
 import os
 import re
 import shutil
@@ -7,7 +8,7 @@ from .utils import check_call
 
 import gi
 gi.require_version('Modulemd', '2.0')
-from gi.repository import Modulemd
+from gi.repository import Modulemd   # type: ignore
 
 from module_build_service.builder.utils import create_local_repo_from_koji_tag
 
@@ -16,6 +17,13 @@ from .flatpak_builder import ModuleInfo
 from .get_module_builds import get_module_builds
 
 class Build(ModuleInfo):
+    def __init__(self, mmd, path: str):
+        self.mmd = mmd
+        self.name = mmd.props.module_name
+        self.stream = mmd.props.stream_name
+        self.version = mmd.props.version
+        self.path = path
+
     def yum_config(self):
         exclude = ','.join(self.mmd.get_rpm_filters())
 
@@ -45,12 +53,7 @@ class LocalBuild(Build):
         mmd = Modulemd.ModuleStream.read_file (mmd_path, False)
         mmd = mmd.upgrade(Modulemd.ModuleStreamVersionEnum.TWO)
 
-        self.name = mmd.props.module_name
-        self.stream = mmd.props.stream_name
-        self.version = mmd.props.version
-
-        self.path = path
-        self.mmd = mmd
+        super().__init__(mmd, path)
 
         self.rpms = [a + '.rpm' for a in mmd.get_rpm_artifacts()]
 
@@ -59,12 +62,7 @@ class LocalBuild(Build):
 
 class KojiBuild(Build):
     def __init__(self, mmd, path, koji_tag, rpms):
-        self.name = mmd.props.module_name
-        self.stream = mmd.props.stream_name
-        self.version = mmd.props.version
-
-        self.path = path
-        self.mmd = mmd
+        super().__init__(mmd, path)
 
         self.rpms = rpms
 
@@ -100,18 +98,21 @@ def get_module_info(module_name, stream, version=None, koji_config=None, koji_pr
 
 
 class ModuleLocator(object):
+    @dataclass
     class Config(object):
-        pass
+        koji_config: str
+        koji_profile: str
+        cache_dir: str
+        mock_resultsdir: str
 
     def __init__(self, profile):
         self.profile = profile
-        self.conf = ModuleLocator.Config()
-
-        self.conf.koji_config = profile.koji_config
-        self.conf.koji_profile = profile.koji_profile
-
-        self.conf.cache_dir = os.path.expanduser('~/modulebuild/cache')
-        self.conf.mock_resultsdir = os.path.expanduser('~/modulebuild/builds')
+        self.conf = ModuleLocator.Config(
+            koji_config=profile.koji_config,
+            koji_profile=profile.koji_profile,
+            cache_dir=os.path.expanduser('~/modulebuild/cache'),
+            mock_resultsdir = os.path.expanduser('~/modulebuild/builds')
+        )
 
         self.local_build_ids = []
         self._local_build_info = None
