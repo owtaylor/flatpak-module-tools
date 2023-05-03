@@ -1,6 +1,7 @@
 """_fetchrepodata: Map yum/dnf repo metadata to local lookup caches"""
 from collections import defaultdict
 import copy
+from dataclasses import dataclass
 import gzip
 import json
 import logging
@@ -9,7 +10,6 @@ import re
 from urllib.parse import urljoin
 import yaml
 
-from attr import attrib, attributes
 import click
 import gi
 from lxml import etree
@@ -35,10 +35,10 @@ class MissingMetadata(Exception):
     """Reports failure to find the local metadata cache"""
 
 
-@attributes
+@dataclass
 class RepoPaths:
-    remote_repo_url: str = attrib()
-    local_cache_path: str = attrib()
+    remote_repo_url: str
+    local_cache_path: str
 
     @property
     def remote_metadata_url(self):
@@ -60,10 +60,10 @@ class RepoPaths:
         self.local_cache_path = path[:-9]  # with 'repodata/' stripped
 
 
-@attributes
+@dataclass
 class RepoPathsPair:
-    arch = attrib(type=RepoPaths)
-    src = attrib(type=RepoPaths)
+    arch: RepoPaths
+    src: RepoPaths
 
 
 def _define_repo(remote_repo_template, subst_dict, local_cache_name,
@@ -475,19 +475,19 @@ def download_repo_metadata(dataset_name):
     _write_lookup_caches(paths)
 
 
-@attributes
+@dataclass
 class LocalMetadataCache:
-    dataset_name = attrib(type=str)
-    cache_dir = attrib(type=str)
-    merged_modulemds = attrib(type=list)
-    srpm_to_modules = attrib(type=dict)
-    rpm_to_modules = attrib(type=dict)
-    module_to_packages = attrib(type=dict)
-    module_to_profiles = attrib(type=dict)
-    module_to_deps = attrib(type=dict)
-    stream_defaults = attrib(type=dict)
-    profile_defaults = attrib(type=dict)
-    repo_cache_paths = attrib(type=dict)
+    dataset_name: str
+    cache_dir: str
+    merged_modulemds: str
+    srpm_to_modules: str
+    rpm_to_modules: dict
+    module_to_packages: dict
+    module_to_profiles: dict
+    module_to_deps: dict
+    stream_defaults: dict
+    profile_defaults: dict
+    repo_cache_paths: dict
 
 
 def load_cached_repodata(dataset_name):
