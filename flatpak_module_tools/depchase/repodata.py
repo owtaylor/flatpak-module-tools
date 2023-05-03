@@ -45,53 +45,6 @@ def set_dataset_name(name):
     dataset_name = name
 
 
-def list_modules():
-    return _get_dataset().module_to_packages.keys()
-
-
-def get_merged_modulemds():
-    return _get_dataset().merged_modulemds
-
-
-def get_rpms_in_module(module_name):
-    return _get_dataset().module_to_packages.get(module_name, [])
-
-
-def get_modules_for_rpm(rpm_name):
-    result = _get_dataset().rpm_to_modules.get(rpm_name)
-    return result
-
-
-def get_module_for_rpm(rpm_name):
-    result = _get_dataset().rpm_to_modules.get(rpm_name)
-    if result is not None:
-        if len(result) > 1:
-            log.warn(
-                f"Multiple modules found for {rpm_name!r}: {','.join(result)}")
-        result = result[0]
-    return result
-
-
-def get_rpm_reverse_lookup():
-    return _get_dataset().rpm_to_modules
-
-
-def get_modules_profiles_lookup():
-    return _get_dataset().module_to_profiles
-
-
-def get_modules_dependencies_lookup():
-    return _get_dataset().module_to_deps
-
-
-def get_modules_default_streams_lookup():
-    return _get_dataset().stream_defaults
-
-
-def get_modules_default_profiles_lookup():
-    return _get_dataset().profile_defaults
-
-
 class Repo(object):
     def __init__(self, name, metadata_path):
         self.name = name
