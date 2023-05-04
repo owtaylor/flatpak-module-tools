@@ -16,7 +16,7 @@ import requests
 from requests_toolbelt.downloadutils.tee import tee_to_file
 
 from ..config import get_profile
-from ..utils import Arch
+from ..utils import Arch, info, verbose
 
 
 XDG_CACHE_HOME = (os.environ.get("XDG_CACHE_HOME")
@@ -93,11 +93,11 @@ def _read_repomd_location(repomd_xml, section):
 
 def _download_one_file(remote_url, filename):
     if os.path.exists(filename) and not filename.endswith((".xml", ".yaml")):
-        print(f"  Skipping download; {filename} already exists")
+        verbose(f"  Skipping download; {filename} already exists")
         return
     response = requests.get(remote_url, stream=True)
     try:
-        print(f"  Downloading {remote_url}")
+        info(f"  Downloading {remote_url}")
         chunksize = 65536
         content_length = response.headers['content-length']
         assert content_length is not None
@@ -110,7 +110,7 @@ def _download_one_file(remote_url, filename):
                 pass
     finally:
         response.close()
-    print(f"  Added {filename} to cache")
+    info(f"  Added {filename} to cache")
 
 
 def _download_metadata_files(repo_paths, refresh):
@@ -135,19 +135,19 @@ def _download_metadata_files(repo_paths, refresh):
     if need_refresh:
         repomd_url = urljoin(repo_paths.remote_metadata_url, "repomd.xml")
 
-        print(f"Remote metadata: {repomd_url}")
+        info(f"Remote metadata: {repomd_url}")
         response = requests.get(repomd_url)
         if response.history:
             repomd_url = response.history[-1].headers['location']
             # avoid modifying external object
             repo_paths = copy.copy(repo_paths)
             repo_paths.remote_metadata_url = urljoin(repomd_url, ".")
-            print(f" -> redirected: {repomd_url}")
+            info(f" -> redirected: {repomd_url}")
         response.raise_for_status()
 
         with open(repomd_filename, "wb") as f:
             f.write(response.content)
-        print(f"  Cached metadata in {repomd_filename}")
+        info(f"  Cached metadata in {repomd_filename}")
 
     repomd_xml = etree.parse(repomd_filename, parser=None)
 

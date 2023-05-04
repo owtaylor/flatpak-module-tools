@@ -1,4 +1,5 @@
 import functools
+import logging
 import click
 import pipes
 import re
@@ -29,6 +30,12 @@ def important(msg):
 def info(msg):
     click.secho('info: ', fg='blue', bold=True, err=True, nl=False)
     click.echo(msg, err=True)
+
+
+def verbose(msg):
+    if logging.root.level <= logging.INFO:
+        click.secho('verbose: ', fg='black', bold=True, err=True, nl=False)
+        click.echo(msg, err=True)
 
 
 def header(msg):

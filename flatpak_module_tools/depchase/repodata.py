@@ -8,6 +8,7 @@ from typing import List
 import solv
 
 from .fetchrepodata import load_cached_repodata
+from ..utils import die
 
 
 log = logging.getLogger(__name__)
@@ -189,7 +190,7 @@ class Repo(object):
             chksum = dp.lookup_checksum(solv.REPOSITORY_REPOMD_CHECKSUM)
             if filename:
                 if not chksum:
-                    print(f"No {filename} file checksum!")
+                    die(f"No {filename} file checksum!")
                 return filename, chksum
         return None, None
 
