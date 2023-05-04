@@ -3,6 +3,8 @@ import os
 import pkg_resources
 import yaml
 
+from .utils import get_arch
+
 
 _extra_config_files = []
 
@@ -59,6 +61,19 @@ class ProfileConfig:
         for k in self.config_keys:
             if getattr(self, k) is None:
                 setattr(self, k, getattr(other, k))
+
+    def get_base_repo_url(self, release, arch=None):
+        if arch is None:
+            arch = get_arch()
+
+        result = getattr(self, "base_repo_url") \
+            .replace("$release", release) \
+            .replace("$basearch", get_arch().rpm)
+
+        if not result.endswith("/"):
+            result += "/"
+
+        return result
 
 
 class Config:

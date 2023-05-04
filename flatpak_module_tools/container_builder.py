@@ -139,7 +139,7 @@ class ContainerBuilder:
             have_dnf_module = False
 
         platform_version = self._get_platform_version(builds)
-        base_repo_url = self.profile.base_repo_url.format(platform=platform_version)
+        base_repo_url = self.profile.get_base_repo_url(release=platform_version)
         template.stream(arch='x86_64',
                         base_repo_url=base_repo_url,
                         includepkgs=builder.get_includepkgs(),

@@ -4,7 +4,7 @@ profiles:
         platform_stream_pattern: '^f(\d+)$'
     production:
         koji_profile: koji
-        base_repo_url: http://kojipkgs.fedoraproject.org/repos/f{platform}-build/latest/$basearch
+        base_repo_url: http://kojipkgs.fedoraproject.org/repos/f$release-build/latest/$basearch
     staging:
         koji_profile: staging
-        base_repo_url: http://kojipkgs.stg.fedoraproject.org/repos/f{platform}-build/latest/$basearch
+        base_repo_url: http://kojipkgs.stg.fedoraproject.org/repos/f$release-build/latest/$basearch
