@@ -1,10 +1,12 @@
 """_fetchrepodata: Map yum/dnf repo metadata to local lookup caches"""
 import copy
 from dataclasses import dataclass
+from enum import Enum
 import gzip
 import logging
 from math import ceil
 import os
+import time
 from typing import Dict
 from urllib.parse import urljoin
 
@@ -24,8 +26,10 @@ CACHEDIR = os.path.join(XDG_CACHE_HOME, "flatpak-module-tools")
 log = logging.getLogger(__name__)
 
 
-class MissingMetadata(Exception):
-    """Reports failure to find the local metadata cache"""
+class Refresh(Enum):
+    MISSING = 1
+    ALWAYS = 2
+    AUTO = 3
 
 
 @dataclass
@@ -109,25 +113,42 @@ def _download_one_file(remote_url, filename):
     print(f"  Added {filename} to cache")
 
 
-def _download_metadata_files(repo_paths):
+def _download_metadata_files(repo_paths, refresh):
     os.makedirs(repo_paths.local_metadata_path, exist_ok=True)
-
-    repomd_url = urljoin(repo_paths.remote_metadata_url, "repomd.xml")
-    print(f"Remote metadata: {repomd_url}")
-    response = requests.get(repomd_url)
-    if response.history:
-        repomd_url = response.history[-1].headers['location']
-        # avoid modifying external object
-        repo_paths = copy.copy(repo_paths)
-        repo_paths.remote_metadata_url = urljoin(repomd_url, ".")
-        print(f" -> redirected: {repomd_url}")
-    response.raise_for_status()
 
     repomd_filename = os.path.join(repo_paths.local_metadata_path,
                                    "repomd.xml")
-    with open(repomd_filename, "wb") as f:
-        f.write(response.content)
-    print(f"  Cached metadata in {repomd_filename}")
+
+    need_refresh = True
+    try:
+        st = os.stat(repomd_filename)
+    except FileNotFoundError:
+        st = None
+
+    if st is not None:
+        if refresh == Refresh.MISSING:
+            need_refresh = False
+        elif refresh == Refresh.AUTO:
+            if time.time() < st.st_mtime + 30 * 60:
+                need_refresh = False
+
+    if need_refresh:
+        repomd_url = urljoin(repo_paths.remote_metadata_url, "repomd.xml")
+
+        print(f"Remote metadata: {repomd_url}")
+        response = requests.get(repomd_url)
+        if response.history:
+            repomd_url = response.history[-1].headers['location']
+            # avoid modifying external object
+            repo_paths = copy.copy(repo_paths)
+            repo_paths.remote_metadata_url = urljoin(repomd_url, ".")
+            print(f" -> redirected: {repomd_url}")
+        response.raise_for_status()
+
+        with open(repomd_filename, "wb") as f:
+            f.write(response.content)
+        print(f"  Cached metadata in {repomd_filename}")
+
     repomd_xml = etree.parse(repomd_filename, parser=None)
 
     files_to_fetch = set()
@@ -217,12 +238,12 @@ def _read_packages(repo_paths):
     return package_dicts
 
 
-def download_repo_metadata(release, arch):
+def download_repo_metadata(release, arch, refresh: Refresh):
     """Downloads the latest repo metadata"""
 
     paths = _get_distro_paths(release, arch)
     for repo_definition in paths.repo_paths_by_name.values():
-        _download_metadata_files(repo_definition)
+        _download_metadata_files(repo_definition, refresh)
 
 
 @dataclass
@@ -234,18 +255,13 @@ class LocalMetadataCache:
 def load_cached_repodata(release: str, arch: Arch):
     paths = _get_distro_paths(release, arch)
 
-    args = f" --profile={get_profile().name} --release={release} --arch={arch.oci}"
-
-    # Check whether or not fetch-metadata has been run at all
+    # Sanity-check that all the repos we expect exist
     for repo_name, repo_path in paths.repo_paths_by_name.items():
         metadata_dir = os.path.join(repo_path.local_cache_path)
         repomd_fname = os.path.join(metadata_dir, "repodata", "repomd.xml")
 
         if not os.path.exists(repomd_fname):
-            raise MissingMetadata(
-                f"{repomd_fname!r} does not exist. Run "
-                f"`flatpak-module-depchase{args} fetch-metadata`."
-            )
+            raise RuntimeError(f"Cached repodata for {repo_name} not found at {repo_path}")
 
     # Load the metadata
     return LocalMetadataCache(
