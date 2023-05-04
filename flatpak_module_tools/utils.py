@@ -134,9 +134,9 @@ ARCHES = {
 
 
 @functools.lru_cache(maxsize=None)
-def _get_flatpak_arch():
+def _get_rpm_arch():
     return subprocess.check_output(
-        ['flatpak', '--default-arch'], universal_newlines=True
+        ["rpm", "--eval", "%{_arch}"], universal_newlines=True,
     ).strip()
 
 
@@ -144,12 +144,12 @@ def get_arch(oci_arch: str | None = None):
     if oci_arch:
         return ARCHES[oci_arch]
     else:
-        flatpak_arch = _get_flatpak_arch()
+        rpm_arch = _get_rpm_arch()
         for arch in ARCHES.values():
-            if arch.flatpak == flatpak_arch:
+            if arch.rpm == rpm_arch:
                 return arch
 
-        raise RuntimeError(f"Unknown flatpak arch '{format(flatpak_arch)}'")
+        raise RuntimeError(f"Unknown RPM arch '{format(rpm_arch)}'")
 
 
 def rpm_name_only(rpm_name):
