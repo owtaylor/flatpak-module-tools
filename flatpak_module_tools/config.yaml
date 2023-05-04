@@ -2,6 +2,7 @@ profiles:
     __default__:
         koji_config: /etc/module-build-service/koji.conf
         platform_stream_pattern: '^f(\d+)$'
+        release_name: 'f$release'
     production:
         koji_profile: koji
         base_repo_url: http://kojipkgs.fedoraproject.org/repos/f$release-build/latest/$basearch

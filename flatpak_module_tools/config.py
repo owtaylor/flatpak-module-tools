@@ -40,6 +40,7 @@ def get_profile():
 class ProfileConfig:
     config_keys = [
         'base_repo_url',
+        'release_name',
         'koji_config',
         'koji_profile',
         'mbs_config_file',
@@ -74,6 +75,9 @@ class ProfileConfig:
             result += "/"
 
         return result
+
+    def get_release_name(self, release):
+        return getattr(self, "release_name").replace("$release", release)
 
 
 class Config:
