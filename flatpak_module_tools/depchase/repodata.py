@@ -3,59 +3,24 @@ import logging
 import os.path
 import sys
 import tempfile
+from typing import List
 
 import solv
 
-from .fetchrepodata import LocalMetadataCache, load_cached_repodata
-from .config import config
-from .util import parse_dataset_name
+from .fetchrepodata import load_cached_repodata
 
 
 log = logging.getLogger(__name__)
 
-_ACTIVE_DATASET = None
-# default to rawhide, default arch
-dataset_name = config.get('options', {}).get('dataset', 'rawhide')
-
-
-def _load_dataset():
-    global _ACTIVE_DATASET
-    _ACTIVE_DATASET = load_cached_repodata(dataset_name)
-
-    return _ACTIVE_DATASET
-
-
-def _get_dataset() -> LocalMetadataCache:
-    if _ACTIVE_DATASET is None:
-        return _load_dataset()
-    else:
-        return _ACTIVE_DATASET
-
-
-def dataset_release_name():
-    return parse_dataset_name(dataset_name)[0]
-
-
-def set_dataset_name(name):
-    """
-    Set the dataset name that will be used for further operations
-
-    Raises ValueError if validation fails.
-    """
-    global dataset_name
-    # validates as a side effect
-    parse_dataset_name(name)
-    dataset_name = name
-
 
 class Repo(object):
-    def __init__(self, name, metadata_path):
+    def __init__(self, name, metadata_path, cachedir):
         self.name = name
         self.metadata_path = metadata_path
+        self.cachedir = cachedir
         self._handle: solv.Repo | None = None
         self.cookie = None
         self.extcookie = None
-        self.srcrepo = None
 
     @property
     def handle(self) -> solv.Repo:
@@ -83,7 +48,7 @@ class Repo(object):
             path = f"{path}-{ext}.solvx"
         else:
             path = f"{path}.solv"
-        return os.path.join(_get_dataset().cache_dir, path.replace("/", "_"))
+        return os.path.join(self.cachedir, path.replace("/", "_"))
 
     def usecachedrepo(self, ext, mark=False):
         try:
@@ -130,7 +95,7 @@ class Repo(object):
         tmpname = None
         try:
             fd, tmpname = tempfile.mkstemp(prefix=".newsolv-",
-                                           dir=_get_dataset().cache_dir)
+                                           dir=self.cachedir)
             os.fchmod(fd, 0o444)
             f = os.fdopen(fd, "wb+")
             f = solv.xfopen_fd(None, f.fileno())
@@ -305,16 +270,11 @@ def load_stub(repodata):
     return False
 
 
-def setup_repos():
-    dataset = _get_dataset()
+def setup_repos(release, arch):
+    cached_repodata = load_cached_repodata(release, arch)
 
-    repos = []
-    for reponame, (arch_cache_path, src_cache_path) in (
-            dataset.repo_cache_paths.items()):
-        archrepo = Repo(reponame, arch_cache_path)
-        srcrepo = Repo(reponame + '-source', src_cache_path)
-        archrepo.srcrepo = srcrepo  # type: ignore
-
-        repos.extend((archrepo, srcrepo))
+    repos: List[Repo] = []
+    for reponame, cache_path in cached_repodata.repo_cache_paths.items():
+        repos.append(Repo(reponame, cache_path, cached_repodata.cache_dir))
 
     return repos

@@ -5,7 +5,7 @@ import gzip
 import logging
 from math import ceil
 import os
-import re
+from typing import Dict
 from urllib.parse import urljoin
 
 import click
@@ -13,13 +13,13 @@ from lxml import etree
 import requests
 from requests_toolbelt.downloadutils.tee import tee_to_file
 
-from .config import config
-from .util import display_dataset_name, parse_dataset_name
+from ..config import get_profile
+from ..utils import Arch
 
 
 XDG_CACHE_HOME = (os.environ.get("XDG_CACHE_HOME")
                   or os.path.expanduser("~/.cache"))
-CACHEDIR = os.path.join(XDG_CACHE_HOME, "fedmod")
+CACHEDIR = os.path.join(XDG_CACHE_HOME, "flatpak-module-tools")
 
 log = logging.getLogger(__name__)
 
@@ -53,70 +53,25 @@ class RepoPaths:
         self.local_cache_path = path[:-9]  # with 'repodata/' stripped
 
 
-@dataclass
-class RepoPathsPair:
-    arch: RepoPaths
-    src: RepoPaths
-
-
-def _define_repo(remote_repo_template, subst_dict, local_cache_name,
-                 arch=None):
-
-    # expand placeholders in URLs
-    remote_repo_url = remote_repo_template
-    for subst_key, subst_value in subst_dict.items():
-        remote_repo_url = re.sub(fr"\${subst_key}", subst_value,
-                                 remote_repo_url)
-
-    local_arch_path = arch or 'source'
-    local_cache_path = os.path.join(CACHEDIR, "repos", local_cache_name,
-                                    local_arch_path)
+def _define_repo(remote_repo_url: str, local_cache_name: str, arch: Arch):
+    local_cache_path = os.path.join(CACHEDIR, "repos", local_cache_name, arch.rpm)
 
     return RepoPaths(remote_repo_url, local_cache_path)
 
 
-def _define_repos(arch_remote_prefix, src_remote_prefix, subst_dict,
-                  local_cache_name, arch):
-    return RepoPathsPair(arch=_define_repo(arch_remote_prefix, subst_dict,
-                                           local_cache_name, arch),
-                         src=_define_repo(src_remote_prefix, subst_dict,
-                                          local_cache_name))
-
-
-class DistroPaths(object):
-    def __init__(self, release_name, arch):
-        self.release_name = release_name
-        self.release = config.releases[release_name]
-        self.arch = arch
-
-        subst_dict = {
-            'basearch': arch or 'source',
-        }
-
-        dataset_regex = self.release.get('dataset-regex')
-        if dataset_regex:
-            match = re.match(dataset_regex, release_name)
-
-            if not match:
-                raise ValueError(
-                    f"Couldn't parse release name {release_name!r} with"
-                    f" dataset-regex {dataset_regex!r}")
-
-            subst_dict.update(match.groupdict())
+class DistroPaths:
+    def __init__(self, release: str, arch: Arch):
+        profile = get_profile()
 
         self.repo_paths_by_name = {
-            repo_name: _define_repos(repo_def['arch']['baseurl'],
-                                     repo_def['source']['baseurl'],
-                                     subst_dict,
-                                     release_name + "--" + repo_name, arch)
-            for repo_name, repo_def in
-            config.releases[release_name]['repositories'].items()
+            "base": _define_repo(profile.get_base_repo_url(release=release, arch=arch),
+                                 profile.get_release_name(release=release) + "--base",
+                                 arch)
         }
 
 
-def _get_distro_paths(dataset_name):
-    release_name, arch = parse_dataset_name(dataset_name)
-    return DistroPaths(release_name, arch)
+def _get_distro_paths(release, arch):
+    return DistroPaths(release, arch)
 
 
 METADATA_SECTIONS = ("filelists", "primary")
@@ -262,43 +217,41 @@ def _read_packages(repo_paths):
     return package_dicts
 
 
-def download_repo_metadata(dataset_name):
+def download_repo_metadata(release, arch):
     """Downloads the latest repo metadata"""
 
-    paths = _get_distro_paths(dataset_name)
-    for repo_pair in paths.repo_paths_by_name.values():
-        for repo_definition in (repo_pair.arch, repo_pair.src):
-            _download_metadata_files(repo_definition)
+    paths = _get_distro_paths(release, arch)
+    for repo_definition in paths.repo_paths_by_name.values():
+        _download_metadata_files(repo_definition)
 
 
 @dataclass
 class LocalMetadataCache:
-    dataset_name: str
     cache_dir: str
-    repo_cache_paths: dict
+    repo_cache_paths: Dict[str, str]
 
 
-def load_cached_repodata(dataset_name):
-    paths = _get_distro_paths(dataset_name)
+def load_cached_repodata(release: str, arch: Arch):
+    paths = _get_distro_paths(release, arch)
 
-    display_name = display_dataset_name(dataset_name)
-    arg = f" --dataset={display_name}" if display_name else ""
+    args = f" --profile={get_profile().name} --release={release} --arch={arch.oci}"
 
     # Check whether or not fetch-metadata has been run at all
-    for repo_name, repo_paths in paths.repo_paths_by_name.items():
-        metadata_dir = os.path.join(repo_paths.arch.local_cache_path)
+    for repo_name, repo_path in paths.repo_paths_by_name.items():
+        metadata_dir = os.path.join(repo_path.local_cache_path)
         repomd_fname = os.path.join(metadata_dir, "repodata", "repomd.xml")
 
         if not os.path.exists(repomd_fname):
-            raise MissingMetadata(f"{repomd_fname!r} does not exist. Run "
-                                  f"`fedmod{arg} fetch-metadata`.")
+            raise MissingMetadata(
+                f"{repomd_fname!r} does not exist. Run "
+                f"`flatpak-module-depchase{args} fetch-metadata`."
+            )
 
     # Load the metadata
     return LocalMetadataCache(
-        dataset_name=dataset_name,
         cache_dir=CACHEDIR,
         repo_cache_paths={
-            n: (c.arch.local_cache_path, c.src.local_cache_path)
+            n: c.local_cache_path
             for n, c in paths.repo_paths_by_name.items()
         }
     )

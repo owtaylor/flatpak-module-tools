@@ -150,3 +150,7 @@ def get_arch(oci_arch: str | None = None):
                 return arch
 
         raise RuntimeError(f"Unknown flatpak arch '{format(flatpak_arch)}'")
+
+
+def rpm_name_only(rpm_name):
+    return rpm_name.rsplit("-", 2)[0]

@@ -6,27 +6,23 @@ import collections
 import functools
 import logging
 import re
+from typing import Iterable
 
 import smartcols
 import solv
 
 from . import repodata
-from .util import parse_dataset_name
+from .repodata import Repo
+from ..utils import Arch
 
 log = logging.getLogger(__name__)
 
 
-def setup_pool(arch=None, repos=()):
-    if arch is None:
-        release_name, arch = parse_dataset_name()
-
+def setup_pool(arch: Arch, repos: Iterable[Repo]):
     pool = solv.Pool()
     # pool.set_debuglevel(2)
-    pool.setarch(arch)
+    pool.setarch(arch.rpm)
     pool.set_loadcallback(repodata.load_stub)
-
-    for repo in repos:
-        repo.metadata_path = repo.metadata_path.format(arch=arch)
 
     for repo in repos:
         assert repo.load(pool)
@@ -224,14 +220,14 @@ def _solve(solver, pkgnames, full_info=False):
     return result
 
 
-def make_pool(arch=None):
-    return setup_pool(arch, repodata.setup_repos())
+def make_pool(release: str, arch: Arch) -> solv.Pool:
+    return setup_pool(arch, repodata.setup_repos(release, arch))
 
 
 _DEFAULT_HINTS = ("glibc-minimal-langpack",)
 
 
-def ensure_installable(pool, pkgnames, hints=_DEFAULT_HINTS,
+def ensure_installable(pool: solv.Pool, pkgnames, hints=_DEFAULT_HINTS,
                        recommendations=False, full_info=False):
     """Iterate over the resolved dependency set for the given packages
 
@@ -241,8 +237,6 @@ def ensure_installable(pool, pkgnames, hints=_DEFAULT_HINTS,
                        well as required dependencies (Default: required deps
                        only)
     """
-    if pool is None:
-        pool = make_pool()
     # Set up initial hints
     favorq = []
     for n in hints:
