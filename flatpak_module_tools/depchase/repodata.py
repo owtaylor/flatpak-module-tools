@@ -6,7 +6,7 @@ import tempfile
 
 import solv
 
-from .fetchrepodata import load_cached_repodata
+from .fetchrepodata import LocalMetadataCache, load_cached_repodata
 from .config import config
 from .util import parse_dataset_name
 
@@ -22,11 +22,14 @@ def _load_dataset():
     global _ACTIVE_DATASET
     _ACTIVE_DATASET = load_cached_repodata(dataset_name)
 
-
-def _get_dataset():
-    if _ACTIVE_DATASET is None:
-        _load_dataset()
     return _ACTIVE_DATASET
+
+
+def _get_dataset() -> LocalMetadataCache:
+    if _ACTIVE_DATASET is None:
+        return _load_dataset()
+    else:
+        return _ACTIVE_DATASET
 
 
 def dataset_release_name():
@@ -49,10 +52,15 @@ class Repo(object):
     def __init__(self, name, metadata_path):
         self.name = name
         self.metadata_path = metadata_path
-        self.handle = None
+        self._handle: solv.Repo | None = None
         self.cookie = None
         self.extcookie = None
         self.srcrepo = None
+
+    @property
+    def handle(self) -> solv.Repo:
+        assert self._handle is not None
+        return self._handle
 
     @staticmethod
     def calc_cookie_fp(fp):
@@ -70,11 +78,11 @@ class Repo(object):
         return chksum.raw()
 
     def cachepath(self, ext=None):
-        path = "{}-{}".format(self.name.replace(".", "_"), self.metadata_path)
+        path = f"{self.name.replace('.', '_')}-{self.metadata_path}"
         if ext:
-            path = "{}-{}.solvx".format(path, ext)
+            path = f"{path}-{ext}.solvx"
         else:
-            path = "{}.solv".format(path)
+            path = f"{path}.solv"
         return os.path.join(_get_dataset().cache_dir, path.replace("/", "_"))
 
     def usecachedrepo(self, ext, mark=False):
@@ -88,6 +96,7 @@ class Repo(object):
             cookie = self.extcookie if ext else self.cookie
             if cookie and fcookie != cookie:
                 return False
+            fextcookie = None
             if not ext:
                 f.seek(-32 * 2, os.SEEK_END)
                 fextcookie = f.read(32)
@@ -104,6 +113,7 @@ class Repo(object):
             if not self.handle.add_solv(f, flags):
                 return False
             if not ext:
+                assert fextcookie is not None
                 self.cookie = fcookie
                 self.extcookie = fextcookie
             if mark:
@@ -116,7 +126,7 @@ class Repo(object):
             return False
         return True
 
-    def writecachedrepo(self, ext, repodata=None):
+    def writecachedrepo(self, ext, repodata: solv.XRepodata | None = None):
         tmpname = None
         try:
             fd, tmpname = tempfile.mkstemp(prefix=".newsolv-",
@@ -154,6 +164,7 @@ class Repo(object):
                     if not self.handle.add_solv(nf, flags):
                         sys.exit("internal error, cannot reload solv file")
                 else:
+                    assert repodata is not None
                     # extension repodata
                     # need to extend to repo boundaries, as this is how
                     # repodata.write() has written the data
@@ -167,37 +178,43 @@ class Repo(object):
             if tmpname:
                 os.unlink(tmpname)
 
-    def load(self, pool):
-        assert not self.handle
-        self.handle = pool.add_repo(self.name)
-        self.handle.appdata = self
+    def load(self, pool: solv.Pool):
+        assert not self._handle
+        handle = pool.add_repo(self.name)
+        self._handle = handle
+        handle.appdata = self
         f = self.read_repo_metadata("repodata/repomd.xml", False, None)
         if not f:
-            self.handle.free(True)
-            self.handle = None
+            handle.free(True)
+            self._handle = None
             return False
         self.cookie = self.calc_cookie_fp(f)
         if self.usecachedrepo(None, True):
             return True
-        self.handle.add_repomdxml(f)
+        handle.add_repomdxml(f)
         fname, fchksum = self.find("primary")
         if not fname:
+            handle.free(True)
+            self._handle = None
             return False
         f = self.read_repo_metadata(fname, True, fchksum)
         if not f:
+            handle.free(True)
+            self._handle = None
             return False
-        self.handle.add_rpmmd(f, None)
+        handle.add_rpmmd(f, None)
         self.add_exts()
         self.writecachedrepo(None)
         # Must be called after writing the repo
-        self.handle.create_stubs()
+        handle.create_stubs()
         return True
 
     def read_repo_metadata(self, fname, uncompress, chksum):
-        f = open("{}/{}".format(self.metadata_path, fname))
+        f = open(f"{self.metadata_path}/{fname}")
         return solv.xfopen_fd(fname if uncompress else None, f.fileno())
 
     def find(self, what):
+        assert self.handle is not None
         di = self.handle.Dataiterator_meta(solv.REPOSITORY_REPOMD_TYPE, what,
                                            solv.Dataiterator.SEARCH_STRING)
         di.prepend_keyname(solv.REPOSITORY_REPOMD)
@@ -207,7 +224,7 @@ class Repo(object):
             chksum = dp.lookup_checksum(solv.REPOSITORY_REPOMD_CHECKSUM)
             if filename:
                 if not chksum:
-                    print("No {} file checksum!".format(filename))
+                    print(f"No {filename} file checksum!")
                 return filename, chksum
         return None, None
 
@@ -233,11 +250,13 @@ class Repo(object):
                                handle)
 
     def add_exts(self):
+        assert self.handle is not None
         repodata = self.handle.add_repodata()
         self.add_ext(repodata, "filelists", "FL")
         repodata.internalize()
 
-    def load_ext(self, repodata):
+    def load_ext(self, repodata: solv.XRepodata):
+        assert self.handle is not None
         repomdtype = repodata.lookup_str(solv.SOLVID_META,
                                          solv.REPOSITORY_REPOMD_TYPE)
         if repomdtype == "filelists":
@@ -262,6 +281,7 @@ class Repo(object):
         return True
 
     def updateaddedprovides(self, addedprovides):
+        assert self.handle is not None
         if self.handle.isempty():
             return
         # make sure there's just one real repodata with extensions
@@ -293,7 +313,7 @@ def setup_repos():
             dataset.repo_cache_paths.items()):
         archrepo = Repo(reponame, arch_cache_path)
         srcrepo = Repo(reponame + '-source', src_cache_path)
-        archrepo.srcrepo = srcrepo
+        archrepo.srcrepo = srcrepo  # type: ignore
 
         repos.extend((archrepo, srcrepo))
 

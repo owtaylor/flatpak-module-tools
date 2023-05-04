@@ -51,5 +51,5 @@ class DefaultDictWithKey(defaultdict):
         if self.default_factory is None:
             raise KeyError(key)
 
-        ret = self[key] = self.default_factory(key)
+        ret = self[key] = self.default_factory(key)  # type: ignore
         return ret

@@ -3,6 +3,7 @@ import copy
 from dataclasses import dataclass
 import gzip
 import logging
+from math import ceil
 import os
 import re
 from urllib.parse import urljoin
@@ -103,22 +104,11 @@ class DistroPaths(object):
 
             subst_dict.update(match.groupdict())
 
-        localrepodatapath = self.release.get('_localrepodatapath')
-        if localrepodatapath:
-            # use the real local repo instead of anything we haven't downloaded
-            def define_repos(arp, srp, sd, lcn, arch):
-                repopaths = RepoPaths(remote_repo_url=f"file://{localrepodatapath}",
-                                      local_cache_path="")
-                repopaths.local_metadata_path = localrepodatapath
-                return RepoPathsPair(arch=repopaths, src=repopaths)
-        else:
-            define_repos = _define_repos
-
         self.repo_paths_by_name = {
-            repo_name: define_repos(repo_def['arch']['baseurl'],
-                                    repo_def['source']['baseurl'],
-                                    subst_dict,
-                                    release_name + "--" + repo_name, arch)
+            repo_name: _define_repos(repo_def['arch']['baseurl'],
+                                     repo_def['source']['baseurl'],
+                                     subst_dict,
+                                     release_name + "--" + repo_name, arch)
             for repo_name, repo_def in
             config.releases[release_name]['repositories'].items()
         }
@@ -150,14 +140,12 @@ def _download_one_file(remote_url, filename):
     try:
         print(f"  Downloading {remote_url}")
         chunksize = 65536
-        try:
-            expected_chunks = int(
-                response.headers['content-length']) / chunksize
-        except (KeyError, ValueError):
-            expected_chunks = None
+        content_length = response.headers['content-length']
+        assert content_length is not None
+        expected_chunks = int(content_length) / chunksize
         downloader = tee_to_file(response, filename=filename,
                                  chunksize=chunksize)
-        show_progress = click.progressbar(downloader, length=expected_chunks)
+        show_progress = click.progressbar(downloader, length=ceil(expected_chunks))
         with show_progress:
             for chunk in show_progress:
                 pass
@@ -185,7 +173,7 @@ def _download_metadata_files(repo_paths):
     with open(repomd_filename, "wb") as f:
         f.write(response.content)
     print(f"  Cached metadata in {repomd_filename}")
-    repomd_xml = etree.parse(repomd_filename)
+    repomd_xml = etree.parse(repomd_filename, parser=None)
 
     files_to_fetch = set()
     for section in METADATA_SECTIONS:
@@ -212,14 +200,15 @@ def _read_packages(repo_paths):
     log.debug(f"_read_packages({repo_paths!r})")
     metadata_dir = os.path.join(repo_paths.local_cache_path)
     repomd_fname = os.path.join(metadata_dir, "repodata", "repomd.xml")
-    repomd_xml = etree.parse(repomd_fname)
+    repomd_xml = etree.parse(repomd_fname, parser=None)
     repo_relative_primary = _read_repomd_location(repomd_xml, "primary")
+    assert repo_relative_primary is not None
     repo_primary_fname = os.path.join(metadata_dir, repo_relative_primary)
 
     package_dicts = []
 
     with gzip.open(repo_primary_fname, "rb") as primary_xml_gz:
-        primary_xml = etree.fromstring(primary_xml_gz.read())
+        primary_xml = etree.fromstring(primary_xml_gz.read(), parser=None)
 
         # the default namespace makes accessing things really annoying
         XMLNS = f"{{{primary_xml.nsmap[None]}}}"
@@ -228,7 +217,7 @@ def _read_packages(repo_paths):
             pkg_dct = {}
             ntag = pkg.find(XMLNS + 'name')
             if ntag is None:
-                log.debug(f"Skipping package without name.")
+                log.debug("Skipping package without name.")
                 continue
             pkg_dct['name'] = name = ntag.text
 

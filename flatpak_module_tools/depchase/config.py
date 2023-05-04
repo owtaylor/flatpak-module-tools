@@ -33,8 +33,8 @@ class Config(dict):
     )
 
     def __init__(self, config_paths=None):
-        self.templates = DefaultDictWithKey(self._template_merge_bases)
-        self.releases = DefaultDictWithKey(self._release_expand)
+        self.templates = DefaultDictWithKey(self._template_merge_bases)  # type: ignore
+        self.releases = DefaultDictWithKey(self._release_expand)  # type: ignore
 
         if not config_paths:
             config_paths = self.config_paths
@@ -66,7 +66,7 @@ class Config(dict):
             with open(conf_file, 'r') as f:
                 try:
                     partial_conf = yaml.safe_load(f)
-                except yaml.scanner.ScannerError:
+                except yaml.scanner.ScannerError:  # type: ignore
                     log.warn(f"Can't parse configuration file '{conf_file}' as"
                              " YAML, skipping.")
                     continue
@@ -254,8 +254,8 @@ class Config(dict):
                     if unknown_keys:
                         unknown_keys = (str(x) for x in unknown_keys)
                         errors.append(
-                            f"'{rpath}': unknown key(s): {{}}".format(
-                                ", ".join(unknown_keys)))
+                            f"'{rpath}': unknown key(s): {', '.join(unknown_keys)}"
+                        )
 
         return errors
 
@@ -269,7 +269,7 @@ class Config(dict):
             for name in release_names:
                 self._datasets.append(name)
                 self._datasets.extend(
-                    "{name}-{arch}".format(name=name, arch=a)
+                    f"{name}-{a}"
                     for a in sorted(
                         self.releases[name].get('architectures', ())))
 

@@ -1,7 +1,13 @@
 # dataset: utility functions for dataset names
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..config import Config
+
+
 # can't import config here because it would introduce a circular dependency
-config = None
+config: "Config" = None  # type: ignore
 
 
 def _setup_module():
@@ -10,9 +16,11 @@ def _setup_module():
         from ..config import config
 
 
-def get_default_dataset():
+def get_default_dataset() -> str:
     _setup_module()
-    return config.get('options', {}).get('dataset')
+    dataset = config.get('options', {}).get('dataset')
+    assert isinstance(dataset, str)
+    return dataset
 
 
 def parse_dataset_name(dataset_name=None):
@@ -45,8 +53,7 @@ def parse_dataset_name(dataset_name=None):
 
     architectures = dataset_config.get('architectures')
     if architectures and arch not in architectures:
-        raise ValueError("Unknown architecture: {}. Known releases: {}".format(
-            arch, ", ".join(sorted(dataset_config['architectures']))))
+        raise ValueError("Unknown architecture: {arch}. Known architectures: {architectures}")
 
     return release_name, arch
 

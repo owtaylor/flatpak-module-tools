@@ -1,5 +1,5 @@
 """
-_depchase: Resolve dependency & build relationships between RPMs and SRPMs
+depchase: Resolve dependency & build relationships between RPMs and SRPMs
 """
 
 import collections
@@ -81,6 +81,7 @@ def _iterate_all_requires(package):
 
 _BOOLEAN_KEYWORDS = re.compile(r" (?:and|or|if|with|without|unless) ")
 
+
 def _dependency_is_conditional(dependency):
     return _BOOLEAN_KEYWORDS.search(str(dependency)) is not None
 
@@ -114,9 +115,11 @@ def _get_dependency_details(pool, transaction):
                 # It was possible to resolve set, so something is wrong here
                 if not matches:
                     if _dependency_is_conditional(dep):
-                        log.debug("Conditional dependency {} doesn't need to be satisfied".format(dep))
+                        log.debug(f"Conditional dependency {dep} doesn't need to be satisfied")
                     else:
-                        raise RuntimeError("Dependency {} isn't satisfied in resolved packages!".format(dep))
+                        raise RuntimeError(
+                            f"Dependency {dep} isn't satisfied in resolved packages!"
+                        )
                 cache[dep] = matches
 
             # While multiple packages providing the same thing is rare, it's
@@ -145,6 +148,8 @@ def print_transaction(details, pool):
             lns = tb.new_line(ln)
             lns[cl] = dep
             first = True
+            m = None
+            lnc = None
             for m in matches:
                 if first:
                     lnc = lns
@@ -153,13 +158,14 @@ def print_transaction(details, pool):
                     lnc = lnss
                     first = False
                 lnc[cl_match] = m
-            sel = pool.select(m, solv.Selection.SELECTION_CANON)
-            if sel.isempty():
-                lnc[cl_repo] = "Unknown repo"
-            else:
-                s = sel.solvables()
-                assert len(s) == 1
-                lnc[cl_repo] = str(s[0].repo)
+            if m is not None and lnc is not None:
+                sel = pool.select(m, solv.Selection.SELECTION_CANON)
+                if sel.isempty():
+                    lnc[cl_repo] = "Unknown repo"
+                else:
+                    s = sel.solvables()
+                    assert len(s) == 1
+                    lnc[cl_repo] = str(s[0].repo)
     log.info(tb)
 
 
@@ -178,12 +184,12 @@ def _solve(solver, pkgnames, full_info=False):
     # Initial jobs, no conflicting packages
     for n in pkgnames:
         search_criteria = (solv.Selection.SELECTION_NAME
-                        | solv.Selection.SELECTION_DOTARCH)
+                           | solv.Selection.SELECTION_DOTARCH)
         if "." in n:
             search_criteria |= solv.Selection.SELECTION_CANON
         sel = pool.select(n, search_criteria)
         if sel.isempty():
-            log.warn("Could not find package for {}".format(n))
+            log.warn(f"Could not find package for {n}")
             continue
         jobs += sel.jobs(solv.Job.SOLVER_INSTALL)
     problems = solver.solve(jobs)
@@ -191,25 +197,29 @@ def _solve(solver, pkgnames, full_info=False):
         for problem in problems:
             log.warn(problem)
 
+    dep_details = None
     if log.getEffectiveLevel() <= logging.INFO or full_info:
         dep_details = _get_dependency_details(pool, solver.transaction())
         if log.getEffectiveLevel() <= logging.INFO:
             print_transaction(dep_details, pool)
 
     if full_info:
+        assert dep_details is not None
         result = []
+        for s in solver.transaction().newpackages():
+            if s.arch in ("src", "nosrc"):
+                continue
+            # Ensure the solvables don't outlive the solver that created them by
+            # extracting the information we want but not returning the solvable.
+            rpm = str(s)
+            result.append(FullInfo(
+                s.name, rpm, s.lookup_sourcepkg()[:-4], dep_details[rpm])
+            )
     else:
         result = set()
-    for s in solver.transaction().newpackages():
-        if s.arch in ("src", "nosrc"):
-            continue
-        # Ensure the solvables don't outlive the solver that created them by
-        # extracting the information we want but not returning the solvable.
-        if full_info:
-            rpm = str(s)
-            result.append(FullInfo(s.name, rpm, s.lookup_sourcepkg()[:-4],
-                                   dep_details[rpm]))
-        else:
+        for s in solver.transaction().newpackages():
+            if s.arch in ("src", "nosrc"):
+                continue
             result.add(s.name)
     return result
 
