@@ -14,7 +14,6 @@ image. It is shared between:
 
 from configparser import RawConfigParser
 import errno
-import functools
 import hashlib
 import json
 import logging
@@ -28,44 +27,7 @@ import tarfile
 from textwrap import dedent
 from xml.etree import ElementTree
 
-
-class Arch:
-    def __init__(self, oci, flatpak, rpm):
-        self.oci = oci
-        self.flatpak = flatpak
-        self.rpm = rpm
-
-
-ARCHES = {
-    arch.oci: arch for arch in [
-        Arch(oci="amd64", flatpak="x86_64", rpm="x86_64"),
-        Arch(oci="arm64", flatpak="aarch64", rpm="aarch64"),
-        Arch(oci="s390x", flatpak="s390x", rpm="s390x"),
-        Arch(oci="ppc64le", flatpak="ppc64le", rpm="ppc64le"),
-        # This is used in tests to test the case where the Flatpak and RPM names are
-        # different - this does not happen naturally at the moment as far as I know.
-        Arch(oci="testarch", flatpak="testarch", rpm="testarch_rpm"),
-    ]
-}
-
-
-@functools.lru_cache(maxsize=None)
-def _get_flatpak_arch():
-    return subprocess.check_output(
-        ['flatpak', '--default-arch'], universal_newlines=True
-    ).strip()
-
-
-def get_arch(oci_arch=None):
-    if oci_arch:
-        return ARCHES[oci_arch]
-    else:
-        flatpak_arch = _get_flatpak_arch()
-        for arch in ARCHES.values():
-            if arch.flatpak == flatpak_arch:
-                return arch
-
-        raise RuntimeError(f"Unknown flatpak arch '{format(flatpak_arch)}'")
+from .utils import get_arch
 
 
 FLATPAK_METADATA_LABELS = "labels"
