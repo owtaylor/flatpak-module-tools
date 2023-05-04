@@ -300,7 +300,6 @@ def check_exported_oci(oci_outdir, arch, R, runtime=False):
     with open(descriptor_to_path(manifest["config"])) as f:
         config = json.load(f)
 
-    print(config)
     assert config['architecture'] == arch.oci
 
     labels = config["config"]["Labels"]
