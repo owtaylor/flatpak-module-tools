@@ -39,6 +39,20 @@ def setup_pool(arch: Arch, repos: Iterable[Repo]):
     return pool
 
 
+def change_dep(pool, txt, flags, func, before, after):
+    for s in pool.select(txt, flags).solvables():
+        deps = s.lookup_deparray(before)
+        fixing = [dep for dep in deps if func(str(dep))]
+        for dep in fixing:
+            deps.remove(dep)
+            if after is not None:
+                s.add_deparray(after, dep)
+        # Use s.set_deparray() once will be available
+        s.unset(before)
+        for dep in deps:
+            s.add_deparray(before, dep)
+
+
 def fix_deps(pool):
     to_fix = (
         # Weak libcrypt-nss deps due to
@@ -53,17 +67,13 @@ def fix_deps(pool):
          lambda s: s in ("gnu-efi = 3.0w", "gnu-efi-devel = 3.0w"), None),
     )
     for txt, flags, before, func, after in to_fix:
-        for s in pool.select(txt, flags).solvables():
-            deps = s.lookup_deparray(before)
-            fixing = [dep for dep in deps if func(str(dep))]
-            for dep in fixing:
-                deps.remove(dep)
-                if after is not None:
-                    s.add_deparray(after, dep)
-            # Use s.set_deparray() once will be available
-            s.unset(before)
-            for dep in deps:
-                s.add_deparray(before, dep)
+        change_dep(pool, txt, flags, func, before, after)
+
+
+def remove_requires(pool, pkg, required):
+    change_dep(pool, pkg, solv.Selection.SELECTION_NAME,
+               lambda s: s == required,
+               solv.SOLVABLE_REQUIRES, None)
 
 
 def _iterate_all_requires(package):
