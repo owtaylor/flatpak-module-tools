@@ -48,7 +48,8 @@ class ProfileConfig:
         'platform_stream_pattern',
     ]
 
-    def __init__(self):
+    def __init__(self, name):
+        self.name = name
         for k in self.config_keys:
             setattr(self, k, None)
 
@@ -96,7 +97,7 @@ class Config:
 
         for profile, profile_yml in yml['profiles'].items():
             if profile not in self.profiles:
-                self.profiles[profile] = ProfileConfig()
+                self.profiles[profile] = ProfileConfig(profile)
             self.profiles[profile].merge(profile_yml)
 
     def read(self):
