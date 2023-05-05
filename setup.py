@@ -3,6 +3,7 @@ from setuptools import setup
 entry_points = '''
     [console_scripts]
     flatpak-module=flatpak_module_tools.cli:cli
+    flatpak-module-depchase=flatpak_module_tools.depchase.cli:cli
 '''
 
 setup(name='flatpak-module-tools',
