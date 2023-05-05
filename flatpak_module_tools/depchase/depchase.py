@@ -6,9 +6,8 @@ import collections
 import functools
 import logging
 import re
-from typing import Iterable
+from typing import Iterable, List
 
-import smartcols
 import solv
 
 from . import repodata
@@ -35,6 +34,8 @@ def setup_pool(arch: Arch, repos: Iterable[Repo]):
             repo.updateaddedprovides(addedprovides)
 
     pool.createwhatprovides()
+
+    fix_deps(pool)
 
     return pool
 
@@ -92,142 +93,8 @@ def _dependency_is_conditional(dependency):
     return _BOOLEAN_KEYWORDS.search(str(dependency)) is not None
 
 
-def _get_dependency_details(pool, transaction):
-    cache = {}
-
-    candq = transaction.newpackages()
-    result = {}
-    for p in candq:
-        pkg_details = {}
-        for dep in _iterate_all_requires(p):
-            if dep in cache:
-                matches = cache[dep]
-            else:
-                matches = {
-                    s
-                    for s in candq
-                    if s.matchesdep(solv.SOLVABLE_PROVIDES, dep)
-                }
-                if not matches and str(dep).startswith("/"):
-                    # Append provides by files
-                    # TODO: use Dataiterator for getting filelist
-                    matches = {
-                        s
-                        for s in pool.select(
-                            str(dep), solv.Selection.SELECTION_FILELIST
-                        ).solvables()
-                        if s in candq
-                    }
-                # It was possible to resolve set, so something is wrong here
-                if not matches:
-                    if _dependency_is_conditional(dep):
-                        log.debug(f"Conditional dependency {dep} doesn't need to be satisfied")
-                    else:
-                        raise RuntimeError(
-                            f"Dependency {dep} isn't satisfied in resolved packages!"
-                        )
-                cache[dep] = matches
-
-            # While multiple packages providing the same thing is rare, it's
-            # the kind of duplication we want fedmod to be able to help find.
-            # So we always return a list here, even though it will normally
-            # only have one entry in it
-            pkg_details[str(dep)] = sorted(str(m) for m in matches)
-        result[str(p)] = pkg_details
-
-    return result
-
-
-def print_transaction(details, pool):
-    tb = smartcols.Table()
-    tb.title = "DEPENDENCY INFORMATION"
-    cl = tb.new_column("INFO")
-    cl.tree = True
-    cl_match = tb.new_column("MATCH")
-    cl_repo = tb.new_column("REPO")
-    for p in sorted(details):
-        ln = tb.new_line()
-        ln[cl] = p
-        deps = details[p]
-        for dep in sorted(deps):
-            matches = deps[dep]
-            lns = tb.new_line(ln)
-            lns[cl] = dep
-            first = True
-            m = None
-            lnc = None
-            for m in matches:
-                if first:
-                    lnc = lns
-                else:
-                    lnss = tb.new_line(lns)
-                    lnc = lnss
-                    first = False
-                lnc[cl_match] = m
-            if m is not None and lnc is not None:
-                sel = pool.select(m, solv.Selection.SELECTION_CANON)
-                if sel.isempty():
-                    lnc[cl_repo] = "Unknown repo"
-                else:
-                    s = sel.solvables()
-                    assert len(s) == 1
-                    lnc[cl_repo] = str(s[0].repo)
-    log.info(tb)
-
-
 FullInfo = collections.namedtuple('FullInfo',
                                   ['name', 'rpm', 'srpm', 'requires'])
-
-
-def _solve(solver, pkgnames, full_info=False):
-    """Given a set of package names, returns a list of solvables to install"""
-    pool = solver.pool
-
-    # We have to =(
-    fix_deps(pool)
-
-    jobs = []
-    # Initial jobs, no conflicting packages
-    for n in pkgnames:
-        search_criteria = (solv.Selection.SELECTION_NAME
-                           | solv.Selection.SELECTION_DOTARCH)
-        if "." in n:
-            search_criteria |= solv.Selection.SELECTION_CANON
-        sel = pool.select(n, search_criteria)
-        if sel.isempty():
-            log.warn(f"Could not find package for {n}")
-            continue
-        jobs += sel.jobs(solv.Job.SOLVER_INSTALL)
-    problems = solver.solve(jobs)
-    if problems:
-        for problem in problems:
-            log.warn(problem)
-
-    dep_details = None
-    if log.getEffectiveLevel() <= logging.INFO or full_info:
-        dep_details = _get_dependency_details(pool, solver.transaction())
-        if log.getEffectiveLevel() <= logging.INFO:
-            print_transaction(dep_details, pool)
-
-    if full_info:
-        assert dep_details is not None
-        result = []
-        for s in solver.transaction().newpackages():
-            if s.arch in ("src", "nosrc"):
-                continue
-            # Ensure the solvables don't outlive the solver that created them by
-            # extracting the information we want but not returning the solvable.
-            rpm = str(s)
-            result.append(FullInfo(
-                s.name, rpm, s.lookup_sourcepkg()[:-4], dep_details[rpm])
-            )
-    else:
-        result = set()
-        for s in solver.transaction().newpackages():
-            if s.arch in ("src", "nosrc"):
-                continue
-            result.add(s.name)
-    return result
 
 
 def make_pool(release: str, arch: Arch) -> solv.Pool:
@@ -237,29 +104,134 @@ def make_pool(release: str, arch: Arch) -> solv.Pool:
 _DEFAULT_HINTS = ("glibc-minimal-langpack",)
 
 
-def ensure_installable(pool: solv.Pool, pkgnames, hints=_DEFAULT_HINTS,
-                       recommendations=False, full_info=False):
-    """Iterate over the resolved dependency set for the given packages
+class Transaction:
+    def __init__(self, pool: solv.Pool, recommendations=False):
+        self.pool = pool
+        self.solver = pool.Solver()
+        if not recommendations:
+            # Ignore weak deps
+            self.solver.set_flag(solv.Solver.SOLVER_FLAG_IGNORE_RECOMMENDED, 1)
+        self.jobs = []
+        self._dep_to_packages_cache = {}
+        self.hints = _DEFAULT_HINTS
 
-    *hints*:  Packages that have higher priority when more than one package
-              could satisfy a dependency.
-    *recommendations*: Whether or not to report recommended dependencies as
-                       well as required dependencies (Default: required deps
-                       only)
-    """
-    # Set up initial hints
-    favorq = []
-    for n in hints:
-        sel = pool.select(n, solv.Selection.SELECTION_NAME)
-        favorq += sel.jobs(solv.Job.SOLVER_FAVOR)
-    pool.setpooljobs(favorq)
+    def add_packages(self, pkgnames: Iterable[str]):
+        for n in pkgnames:
+            search_criteria = (solv.Selection.SELECTION_NAME | solv.Selection.SELECTION_DOTARCH)
+            if "." in n:
+                search_criteria |= solv.Selection.SELECTION_CANON
+            sel = self.pool.select(n, search_criteria)
+            if sel.isempty():
+                log.warn(f"Could not find package for {n}")
+                continue
+            self.jobs += sel.jobs(solv.Job.SOLVER_INSTALL)
 
-    solver = pool.Solver()
-    if not recommendations:
-        # Ignore weak deps
-        solver.set_flag(solv.Solver.SOLVER_FLAG_IGNORE_RECOMMENDED, 1)
+    def add_provides(self, provides: Iterable[str]):
+        for provide in provides:
+            search_criteria = solv.Selection.SELECTION_PROVIDES | solv.Selection.SELECTION_REL
+            sel = self.pool.select(provide, search_criteria)
+            if sel.isempty() and provide.startswith("/"):
+                sel = self.pool.select(provide, solv.Selection.SELECTION_FILELIST)
+            if sel.isempty():
+                log.warn(f"Could not find package providing {provide}")
+                continue
+            self.jobs += sel.jobs(solv.Job.SOLVER_INSTALL)
 
-    return _solve(solver, pkgnames, full_info=full_info)
+    def set_hints(self, hints: Iterable[str]):
+        self.hints = list(hints)
+
+    def solve(self):
+        for n in self.hints:
+            sel = self.pool.select(n, solv.Selection.SELECTION_NAME)
+            self.jobs += sel.jobs(solv.Job.SOLVER_FAVOR)
+
+        problems = self.solver.solve(self.jobs)
+        if problems:
+            for problem in problems:
+                log.warn(problem)
+
+        self.transaction = self.solver.transaction()
+        self.newpackages = self.transaction.newpackages()
+
+    def _get_packages_providing_dep(self, dep):
+        result = self._dep_to_packages_cache.get(dep)
+        if result is not None:
+            return result
+
+        matches = {
+            s
+            for s in self.newpackages
+            if s.matchesdep(solv.SOLVABLE_PROVIDES, dep)
+        }
+        if not matches and str(dep).startswith("/"):
+            # Append provides by files
+            # TODO: use Dataiterator for getting filelist
+            matches = {
+                s
+                for s in self.pool.select(
+                    str(dep), solv.Selection.SELECTION_FILELIST
+                ).solvables()
+                if s in self.newpackages
+            }
+        # It was possible to resolve set, so something is wrong here
+        if not matches:
+            if _dependency_is_conditional(dep):
+                log.debug(f"Conditional dependency {dep} doesn't need to be satisfied")
+            else:
+                raise RuntimeError(
+                    f"Dependency {dep} isn't satisfied in resolved packages!"
+                )
+
+        result = sorted(str(m) for m in matches)
+
+        self._dep_to_packages_cache[dep] = result
+
+        return result
+
+    def get_packages_providing_dep(self, dep):
+        m = re.match(r'^(\S+)\s*([<>=]+)\s*(\S+)$', dep)
+        if m is not None:
+            name = m.group(1)
+            rel = m.group(2)
+            ver = m.group(3)
+
+            flags = 0
+            if "<" in rel:
+                flags |= solv.REL_LT
+            if ">" in rel:
+                flags |= solv.REL_GT
+            if "=" in rel:
+                flags |= solv.REL_EQ
+
+            base_dep = self.pool.Dep(name, create=True)
+            ver_id = self.pool.Dep(ver)
+            dep_id = base_dep.Rel(flags, ver_id)
+        else:
+            dep_id = self.pool.Dep(dep, create=True)
+
+        return self._get_packages_providing_dep(dep_id)
+
+    def get_packages(self):
+        return {s.name for s in self.newpackages if s.arch not in ("src", "nosrc")}
+
+    def get_full_infos(self):
+        result: List[FullInfo] = []
+        for s in self.newpackages:
+            if s.arch in ("src", "nosrc"):
+                continue
+            # Ensure the solvables don't outlive the solver that created them by
+            # extracting the information we want but not returning the solvable.
+            rpm = str(s)
+
+            pkg_details = {}
+            for dep in _iterate_all_requires(s):
+                pkg_details[str(dep)] = self._get_packages_providing_dep(dep)
+
+            result.append(FullInfo(
+                s.name, rpm, s.lookup_sourcepkg()[:-4], pkg_details)
+            )
+
+        return result
 
 
 def _get_rpm(pool, pkg):
