@@ -94,7 +94,7 @@ def _dependency_is_conditional(dependency):
 
 
 FullInfo = collections.namedtuple('FullInfo',
-                                  ['name', 'rpm', 'srpm', 'requires'])
+                                  ['name', 'rpm', 'srpm', 'repo', 'requires'])
 
 
 def make_pool(release: str, arch: Arch) -> solv.Pool:
@@ -228,7 +228,7 @@ class Transaction:
                 pkg_details[str(dep)] = self._get_packages_providing_dep(dep)
 
             result.append(FullInfo(
-                s.name, rpm, s.lookup_sourcepkg()[:-4], pkg_details)
+                s.name, rpm, s.lookup_sourcepkg()[:-4], s.repo.name, pkg_details)
             )
 
         return result

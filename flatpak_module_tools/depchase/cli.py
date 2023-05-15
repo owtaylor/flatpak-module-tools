@@ -80,6 +80,8 @@ def cli(ctx, verbose, config, profile, release, arch, refresh):
 class PackageInfo:
     def __init__(self, name):
         self.name = name
+        self.nvra = None
+        self.repo = None
         self.source = None
         self.explanation: List[str] | None = None
         self.required_by: List[Tuple[str, str]] = []
@@ -104,7 +106,9 @@ class PackageInfo:
 
     def to_json(self, include_source=True):
         result = {
-            "name": self.name
+            "name": self.name,
+            "nvra": self.nvra,
+            "repo": self.repo,
         }
         if include_source:
             result["source"] = self.source
@@ -136,9 +140,13 @@ def collate_packages(
         package_info = packages.get(p.name, None)
         if package_info is None:
             package_info = PackageInfo(p.name)
+            package_info.nvra = p.rpm
+            package_info.repo = p.repo
             package_info.source = srpm
             packages[p.name] = package_info
         else:
+            package_info.nvra = p.rpm
+            package_info.repo = p.repo
             package_info.source = srpm
 
         for requirement, provided_bys in p.requires.items():
