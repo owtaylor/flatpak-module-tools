@@ -27,6 +27,7 @@ class CliData:
     release: str
     arch: Arch
     refresh: fetchrepodata.Refresh
+    local_repos: List[str]
 
     @staticmethod
     def from_context(ctx: click.Context):
@@ -35,7 +36,7 @@ class CliData:
 
     def make_pool(self):
         fetchrepodata.download_repo_metadata(self.release, self.arch, self.refresh)
-        return depchase.make_pool(self.release, self.arch)
+        return depchase.make_pool(self.release, self.arch, self.local_repos)
 
 
 @click.group()
@@ -57,8 +58,12 @@ class CliData:
     '--refresh', type=click.Choice(['missing', 'always', 'auto']), default='auto',
     help="Whether to refresh metadata (only if missing, always, periodically)"
 )
+@click.option(
+    '-l', '--local-repo', metavar='NAME:REPO_PATH', multiple=True,
+    help="Add a local repository as a source for package resolution"
+)
 @click.pass_context
-def cli(ctx, verbose, config, profile, release, arch, refresh):
+def cli(ctx, verbose, config, profile, release, arch, refresh, local_repo):
     for c in reversed(config):
         add_config_file(c)
 
@@ -69,7 +74,9 @@ def cli(ctx, verbose, config, profile, release, arch, refresh):
         die(f"Unknown profile '{profile}'")
 
     refresh = fetchrepodata.Refresh[refresh.upper()]
-    ctx.obj = CliData(arch=get_arch(arch), release=release, refresh=refresh)
+    ctx.obj = CliData(
+        arch=get_arch(arch), release=release, refresh=refresh, local_repos=local_repo
+    )
 
     if verbose:
         logging.basicConfig(level=logging.INFO)

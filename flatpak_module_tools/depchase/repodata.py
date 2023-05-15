@@ -271,11 +271,15 @@ def load_stub(repodata):
     return False
 
 
-def setup_repos(release, arch):
+def setup_repos(release, arch, local_repos):
     cached_repodata = load_cached_repodata(release, arch)
 
     repos: List[Repo] = []
     for reponame, cache_path in cached_repodata.repo_cache_paths.items():
         repos.append(Repo(reponame, cache_path, cached_repodata.cache_dir))
+
+    for localrepo in local_repos:
+        name, path = localrepo.split(":", 1)
+        repos.append(Repo(name, os.path.abspath(path), cached_repodata.cache_dir))
 
     return repos
