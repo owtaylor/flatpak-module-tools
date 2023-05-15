@@ -228,11 +228,12 @@ def runtime_source(runtime_module):
 
 
 def test_source_info_bad_profile(testapp_source):
+    container_yaml = yaml.safe_load(TESTAPP_CONTAINER_YAML)
     with pytest.raises(
                 ValueError,
                 match=r"testapp:stable:3320201216094032 doesn't have a profile 'badprofile'"
             ):
-        FlatpakSourceInfo(testapp_source.flatpak_yaml,
+        FlatpakSourceInfo(container_yaml['flatpak'],
                           testapp_source.modules,
                           testapp_source.base_module,
                           profile='badprofile')

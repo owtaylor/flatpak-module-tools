@@ -1,47 +1,35 @@
 import jinja2
 import os
-import yaml
 import re
 import shutil
 import subprocess
 from textwrap import dedent
 
+from .container_spec import ContainerSpec
 from .flatpak_builder import FlatpakBuilder, FlatpakSourceInfo, FLATPAK_METADATA_ANNOTATIONS
 from .module_locator import ModuleLocator
 from .utils import check_call, die, log_call, warn, header, important, info, split_module_spec
 
 
 class ContainerBuilder:
-    def __init__(self, profile, containerspec, from_local=False, local_builds=[],
+    def __init__(self, profile, container_spec: ContainerSpec, from_local=False, local_builds=[],
                  flatpak_metadata=FLATPAK_METADATA_ANNOTATIONS):
         self.profile = profile
-        self.containerspec = os.path.abspath(containerspec)
         self.from_local = from_local
         self.local_builds = local_builds
         self.flatpak_metadata = flatpak_metadata
 
-        with open(self.containerspec) as f:
-            container_yaml = yaml.safe_load(f)
+        self.container_spec = container_spec
 
-        compose_yaml = container_yaml.get('compose', {})
-        modules = compose_yaml.get('modules', [])
-        if not modules:
-            die(f"No modules specified in the compose section of '{self.containerspec}'")
+        compose_spec = container_spec.compose
+        if not compose_spec.modules:
+            die(f"No modules specified in the compose section of '{container_spec.path}'")
 
-        self.flatpak_yaml = container_yaml.get('flatpak', None)
-        if not self.flatpak_yaml:
-            die(f"No flatpak section in '{containerspec}'")
-
-        compose_yaml = container_yaml.get('compose', {})
-        modules = compose_yaml.get('modules', [])
-        if not modules:
-            die(f"No modules specified in the compose section of '{self.containerspec}'")
-
-        if len(modules) > 1:
-            warn(f"Multiple modules specified in compose section of '{containerspec}', "
+        if len(compose_spec.modules) > 1:
+            warn(f"Multiple modules specified in compose section of '{container_spec.path}', "
                  "using first")
 
-        self.module_spec = split_module_spec(modules[0])
+        self.module_spec = split_module_spec(compose_spec.modules[0])
 
     def _get_platform_version(self, builds):
         # Streams should already be expanded in the modulemd's that we retrieve
@@ -73,7 +61,7 @@ class ContainerBuilder:
 
     def build(self):
         header('BUILDING CONTAINER')
-        important(f'container spec: {self.containerspec}')
+        important(f'container spec: {self.container_spec.path}')
         important('')
 
         module_build_id = self.module_spec.to_str(include_profile=False)
@@ -108,12 +96,14 @@ class ContainerBuilder:
 
         repos = [build.yum_config() for build in builds.values()]
 
-        source = FlatpakSourceInfo(self.flatpak_yaml, builds, base_build, self.module_spec.profile)
+        source = FlatpakSourceInfo(
+            self.container_spec.flatpak, builds, base_build, self.module_spec.profile
+        )
 
         builder = FlatpakBuilder(source, workdir, ".", flatpak_metadata=self.flatpak_metadata)
 
-        component_label = self.flatpak_yaml.get('component', base_build.name)
-        name_label = self.flatpak_yaml.get('name', base_build.name)
+        component_label = source.spec.component or base_build.name
+        name_label = source.spec.name or base_build.name
         version_label = base_build.stream
         release_label = base_build.version
 

@@ -4,6 +4,7 @@ import os
 import re
 import shutil
 import tempfile
+from flatpak_module_tools.container_spec import FlatpakSpec
 
 from flatpak_module_tools.flatpak_builder import FileTreeProcessor
 
@@ -151,12 +152,12 @@ def test_renames(app_tree,
                     rename_desktop_file,
                     rename_icon)
 
-    processor = FileTreeProcessor(app_tree.root, {
+    processor = FileTreeProcessor(app_tree.root, FlatpakSpec("flatpak", {
         'id': 'org.gnome.eog',
         'rename-appdata-file': rename_appdata_file,
         'rename-desktop-file': rename_desktop_file,
         'rename-icon': rename_icon,
-    })
+    }))
     processor.process()
 
     assert os.listdir(app_tree.path('files/share/icons/hicolor/64x64/apps')) \
@@ -171,11 +172,11 @@ def test_renames(app_tree,
 def test_copy_icon(app_tree):
     app_tree.create(rename_icon='eog')
 
-    processor = FileTreeProcessor(app_tree.root, {
+    processor = FileTreeProcessor(app_tree.root, FlatpakSpec("flatpak", {
         'id': 'org.gnome.eog',
         'rename-icon': 'eog',
         'copy-icon': True
-    })
+    }))
     processor.process()
 
     assert os.path.exists(app_tree.path('files/share/icons/hicolor/64x64/apps/eog.png'))
@@ -187,11 +188,11 @@ def test_copy_icon(app_tree):
 def test_desktop_file_name_prefix_suffix(app_tree, prefix, suffix):
     app_tree.create()
 
-    processor = FileTreeProcessor(app_tree.root, {
+    processor = FileTreeProcessor(app_tree.root, FlatpakSpec("flatpak", {
         'id': 'org.gnome.eog',
         'desktop-file-name-prefix': prefix,
         'desktop-file-name-suffix': suffix,
-    })
+    }))
     processor.process()
 
     expected_en = "Name=" + (prefix or "") + "Image Viewer" + (suffix or "") + "\n"
@@ -205,10 +206,10 @@ def test_desktop_file_name_prefix_suffix(app_tree, prefix, suffix):
 def test_appdata_license(app_tree):
     app_tree.create()
 
-    processor = FileTreeProcessor(app_tree.root, {
+    processor = FileTreeProcessor(app_tree.root, FlatpakSpec("flatpak", {
         'id': 'org.gnome.eog',
         'appdata-license': 'GPL-2.0+ and GFDL-1.3 and LGPL-2.1+',
-    })
+    }))
     processor.process()
 
     contents = app_tree.contents('files/share/app-info/xmls/org.gnome.eog.xml.gz',
@@ -220,10 +221,10 @@ def test_appdata_license(app_tree):
 def test_appstream_compose(app_tree, appstream_compose):
     app_tree.create()
 
-    processor = FileTreeProcessor(app_tree.root, {
+    processor = FileTreeProcessor(app_tree.root, FlatpakSpec("flatpak", {
         'id': 'org.gnome.eog',
         'appstream-compose': appstream_compose,
-    })
+    }))
     processor.process()
 
     composed_path = app_tree.path('files/share/app-info/xmls/org.gnome.eog.xml.gz')

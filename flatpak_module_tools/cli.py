@@ -4,6 +4,7 @@ import click
 
 from .config import add_config_file, set_profile_name, get_profile
 from .container_builder import ContainerBuilder
+from .container_spec import ContainerSpec
 from .flatpak_builder import (FLATPAK_METADATA_ANNOTATIONS,
                               FLATPAK_METADATA_BOTH,
                               FLATPAK_METADATA_LABELS)
@@ -59,7 +60,7 @@ def local_build(add_local_build, containerspec, flatpak_metadata, modulemd, stre
                                    modulemd=modulemd, stream=stream,
                                    local_builds=add_local_build)
     container_builder = ContainerBuilder(profile=get_profile(),
-                                         containerspec=containerspec,
+                                         container_spec=ContainerSpec(containerspec),
                                          local_builds=add_local_build,
                                          from_local=True,
                                          flatpak_metadata=flatpak_metadata)
@@ -115,7 +116,7 @@ def build_container(add_local_build, from_local, flatpak_metadata, containerspec
     """Build a container from local or remote module"""
 
     container_builder = ContainerBuilder(profile=get_profile(),
-                                         containerspec=containerspec,
+                                         container_spec=ContainerSpec(containerspec),
                                          local_builds=add_local_build,
                                          from_local=from_local,
                                          flatpak_metadata=flatpak_metadata)

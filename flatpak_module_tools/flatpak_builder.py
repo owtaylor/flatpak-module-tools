@@ -27,6 +27,7 @@ import tarfile
 from textwrap import dedent
 from xml.etree import ElementTree
 
+from .container_spec import FlatpakSpec
 from .utils import get_arch
 
 
@@ -76,18 +77,9 @@ class ModuleInfo:
 
 
 class FileTreeProcessor:
-    def __init__(self, builddir, flatpak_yaml):
+    def __init__(self, builddir, spec: FlatpakSpec):
         self.app_root = os.path.join(builddir, "files")
-        self.app_id = flatpak_yaml['id']
-
-        self.appdata_license = flatpak_yaml.get('appdata-license', None)
-        self.appstream_compose = flatpak_yaml.get('appstream-compose', True)
-        self.copy_icon = flatpak_yaml.get('copy-icon', False)
-        self.desktop_file_name_prefix = flatpak_yaml.get('desktop-file-name-prefix')
-        self.desktop_file_name_suffix = flatpak_yaml.get('desktop-file-name-suffix')
-        self.rename_appdata_file = flatpak_yaml.get('rename-appdata-file', None)
-        self.rename_desktop_file = flatpak_yaml.get('rename-desktop-file')
-        self.rename_icon = flatpak_yaml.get('rename-icon')
+        self.spec = spec
 
         self.log = logging.getLogger(__name__)
 
@@ -108,10 +100,10 @@ class FileTreeProcessor:
         for d in dirs:
             appdata_dir = os.path.join(self.app_root, d)
             for ext in extensions:
-                if self.rename_appdata_file is not None:
-                    basename = self.rename_appdata_file
+                if self.spec.rename_appdata_file is not None:
+                    basename = self.spec.rename_appdata_file
                 else:
-                    basename = self.app_id + ext
+                    basename = self.spec.app_id + ext
 
                 source = os.path.join(appdata_dir, basename)
                 if os.path.exists(source):
@@ -130,7 +122,7 @@ class FileTreeProcessor:
 
         n_license = n_root.find("project_license")
         if n_license is not None:
-            n_license.text = self.appdata_license
+            n_license.text = self.spec.appdata_license
 
         tree.write(self.appdata_file, encoding="UTF-8", xml_declaration=True)
 
@@ -141,7 +133,7 @@ class FileTreeProcessor:
         if appdata_source:
             # We always use the old name / dir, in case the runtime has older appdata tools
             appdata_dir = os.path.join(self.app_root, "share", "appdata")
-            appdata_basename = self.app_id + ".appdata.xml"
+            appdata_basename = self.spec.app_id + ".appdata.xml"
             self.appdata_file = os.path.join(appdata_dir, appdata_basename)
 
             if appdata_source != self.appdata_file:
@@ -152,19 +144,19 @@ class FileTreeProcessor:
                     os.makedirs(appdata_dir)
                 os.rename(appdata_source, self.appdata_file)
 
-            if self.appdata_license:
+            if self.spec.appdata_license:
                 self._rewrite_appdata()
 
     def _rename_desktop_file(self):
-        if not self.rename_desktop_file:
+        if not self.spec.rename_desktop_file:
             return
 
         applications_dir = os.path.join(self.app_root, "share", "applications")
-        src = os.path.join(applications_dir, self.rename_desktop_file)
-        desktop_basename = self.app_id + ".desktop"
+        src = os.path.join(applications_dir, self.spec.rename_desktop_file)
+        desktop_basename = self.spec.app_id + ".desktop"
         dest = os.path.join(applications_dir, desktop_basename)
 
-        self.log.info("Renaming %s to %s", self.rename_desktop_file, desktop_basename)
+        self.log.info("Renaming %s to %s", self.spec.rename_desktop_file, desktop_basename)
         os.rename(src, dest)
 
         if self.appdata_file:
@@ -177,19 +169,19 @@ class FileTreeProcessor:
 
             n_id = n_root.find("id")
             if n_id is not None:
-                if n_id.text == self.rename_desktop_file:
-                    n_id.text = self.app_id
+                if n_id.text == self.spec.rename_desktop_file:
+                    n_id.text = self.spec.app_id
 
             # replace any optional launchable
             n_launchable = n_root.find("launchable")
             if n_launchable is not None:
-                if n_launchable.text == self.rename_desktop_file:
+                if n_launchable.text == self.spec.rename_desktop_file:
                     n_launchable.text = desktop_basename
 
             tree.write(self.appdata_file, encoding="UTF-8", xml_declaration=True)
 
     def _rename_icon(self):
-        if not self.rename_icon:
+        if not self.spec.rename_icon:
             return
 
         found_icon = False
@@ -200,23 +192,23 @@ class FileTreeProcessor:
             depth = relative.count("/")
 
             for source_file in filenames:
-                if source_file.startswith(self.rename_icon):
+                if source_file.startswith(self.spec.rename_icon):
                     source_path = os.path.join(full_dir, source_file)
                     is_file = os.path.isfile(source_path)
-                    extension = source_file[len(self.rename_icon):]
+                    extension = source_file[len(self.spec.rename_icon):]
 
                     if is_file and depth == 3 and (extension.startswith(".") or
                                                    extension.startswith("-symbolic")):
                         found_icon = True
-                        new_name = self.app_id + extension
+                        new_name = self.spec.app_id + extension
 
                         self.log.info("%s icon %s/%s to %s/%s",
-                                      "Copying" if self.copy_icon else "Renaming",
+                                      "Copying" if self.spec.copy_icon else "Renaming",
                                       relative[1:], source_file,
                                       relative[1:], new_name)
 
                         dest_path = os.path.join(full_dir, new_name)
-                        if self.copy_icon:
+                        if self.spec.copy_icon:
                             shutil.copy(source_path, dest_path)
                         else:
                             os.rename(source_path, dest_path)
@@ -233,14 +225,18 @@ class FileTreeProcessor:
                                            full_dir, source_file)
 
         if not found_icon:
-            raise RuntimeError(f"icon {self.rename_icon} not found below {icons_dir}")
+            raise RuntimeError(f"icon {self.spec.rename_icon} not found below {icons_dir}")
 
     def _rewrite_desktop_file(self):
-        if not (self.rename_icon or self.desktop_file_name_prefix or self.desktop_file_name_suffix):
+        if not (
+            self.spec.rename_icon or
+            self.spec.desktop_file_name_prefix or
+            self.spec.desktop_file_name_suffix
+        ):
             return
 
         applications_dir = os.path.join(self.app_root, "share/applications")
-        desktop_basename = self.app_id + ".desktop"
+        desktop_basename = self.spec.app_id + ".desktop"
         desktop = os.path.join(applications_dir, desktop_basename)
 
         self.log.debug("Rewriting contents of %s", desktop_basename)
@@ -253,38 +249,38 @@ class FileTreeProcessor:
 
         desktop_keys = cp.options('Desktop Entry')
 
-        if self.rename_icon:
-            if self.rename_icon:
+        if self.spec.rename_icon:
+            if self.spec.rename_icon:
                 original_icon_name = cp.get('Desktop Entry', 'Icon')
-                cp.set('Desktop Entry', 'Icon', self.app_id)
+                cp.set('Desktop Entry', 'Icon', self.spec.app_id)
 
                 for key in desktop_keys:
                     if key.startswith("Icon["):
                         if cp.get('Desktop Entry', key) == original_icon_name:
-                            cp.set('Desktop Entry', key, self.app_id)
+                            cp.set('Desktop Entry', key, self.spec.app_id)
 
-        if self.desktop_file_name_suffix or self.desktop_file_name_prefix:
+        if self.spec.desktop_file_name_suffix or self.spec.desktop_file_name_prefix:
             for key in desktop_keys:
                 if key == "Name" or key.startswith("Name["):
                     name = cp.get('Desktop Entry', key)
-                    new_name = ((self.desktop_file_name_prefix or "") +
+                    new_name = ((self.spec.desktop_file_name_prefix or "") +
                                 name +
-                                (self.desktop_file_name_suffix or ""))
+                                (self.spec.desktop_file_name_suffix or ""))
                     cp.set('Desktop Entry', key, new_name)
 
         with open(desktop, "w") as f:
             cp.write(f, space_around_delimiters=False)
 
     def _compose_appstream(self):
-        if not self.appstream_compose or not self.appdata_file:
+        if not self.spec.appstream_compose or not self.appdata_file:
             return
 
         subprocess.check_call(['appstream-compose',
                                '--verbose',
                                '--prefix', self.app_root,
-                               '--basename', self.app_id,
+                               '--basename', self.spec.app_id,
                                '--origin', 'flatpak',
-                               self.app_id])
+                               self.spec.app_id])
 
     def process(self):
         self._process_appdata_file()
@@ -295,8 +291,8 @@ class FileTreeProcessor:
 
 
 class FlatpakSourceInfo:
-    def __init__(self, flatpak_yaml, modules, base_module, profile=None):
-        self.flatpak_yaml = flatpak_yaml
+    def __init__(self, spec: FlatpakSpec, modules, base_module, profile=None):
+        self.spec = spec
         self.modules = modules
         self.base_module = base_module
 
@@ -352,7 +348,7 @@ class FlatpakSourceInfo:
 
 class FlatpakBuilder:
     def __init__(
-            self, source, workdir, root,
+            self, source: FlatpakSourceInfo, workdir, root,
             parse_manifest: Callable[[Iterable[str]], Sequence[dict]] | None = None,
             flatpak_metadata=FLATPAK_METADATA_ANNOTATIONS, oci_arch=None
     ):
@@ -384,7 +380,7 @@ class FlatpakBuilder:
         # For a runtime, certain information is duplicated between the container.yaml
         # and the modulemd, check that it matches
         if source.runtime:
-            flatpak_yaml = source.flatpak_yaml
+            spec = source.spec
             flatpak_xmd = self.source.base_module.mmd.get_xmd()['flatpak']
 
             def check(condition, what):
@@ -392,15 +388,14 @@ class FlatpakBuilder:
                     raise RuntimeError(
                         f"Mismatch for {what} betweeen module xmd and container.yaml")
 
-            check(flatpak_yaml['branch'] == flatpak_xmd['branch'], "'branch'")
+            check(spec.branch == flatpak_xmd['branch'], "'branch'")
             check(source.profile in flatpak_xmd['runtimes'], 'profile name')
 
             profile_xmd = flatpak_xmd['runtimes'][source.profile]
 
-            check(flatpak_yaml['id'] == profile_xmd['id'], "'id'")
-            check(flatpak_yaml.get('runtime', None) ==
-                  profile_xmd.get('runtime', None), "'runtime'")
-            check(flatpak_yaml.get('sdk', None) == profile_xmd.get('sdk', None), "'sdk'")
+            check(spec.app_id == profile_xmd['id'], "'id'")
+            check(spec.runtime == profile_xmd.get('runtime', None), "'runtime'")
+            check(spec.sdk == profile_xmd.get('sdk', None), "'sdk'")
 
     def get_enable_modules(self):
         # We need to enable all the modules other than the platform pseudo-module
@@ -466,7 +461,7 @@ class FlatpakBuilder:
         return available_packages
 
     def get_cleanup_script(self):
-        cleanup_commands = self.source.flatpak_yaml.get('cleanup-commands')
+        cleanup_commands = self.source.spec.cleanup_commands
         if cleanup_commands is not None:
             return cleanup_commands.rstrip() + '\n'
         else:
@@ -660,19 +655,19 @@ class FlatpakBuilder:
         return image_components
 
     def _build_finish(self, builddir):
-        info = self.source.flatpak_yaml
+        spec = self.source.spec
 
         finish_args = []
-        if 'finish-args' in info:
+        if spec.finish_args:
             # shlex.split(None) reads from standard input, so avoid that
-            finish_args = shlex.split(info['finish-args'] or '', comments=True)
-        if 'command' in info and not self.source.runtime:
-            finish_args = ['--command', info['command']] + finish_args
+            finish_args = shlex.split(spec.finish_args, comments=True)
+        if spec.command and not self.source.runtime:
+            finish_args = ['--command', spec.command] + finish_args
 
         subprocess.check_call(['flatpak', 'build-finish'] + finish_args + [builddir])
 
     def _create_runtime_oci(self, tarred_filesystem, outfile):
-        info = self.source.flatpak_yaml
+        spec = self.source.spec
 
         builddir = os.path.join(self.workdir, "build")
         os.mkdir(builddir)
@@ -683,10 +678,10 @@ class FlatpakBuilder:
         repo = os.path.join(self.workdir, "repo")
         subprocess.check_call(['ostree', 'init', '--mode=archive-z2', '--repo', repo])
 
-        id_ = info['id']
-        runtime_id = info.get('runtime', id_)
-        sdk_id = info.get('sdk', id_)
-        branch = info['branch']
+        id_ = spec.app_id
+        runtime_id = spec.runtime or id_
+        sdk_id = spec.sdk or id_
+        branch = spec.branch
 
         args = {
             'id': id_,
@@ -723,12 +718,12 @@ class FlatpakBuilder:
                        '--tree=dir=' + builddir,
                        '--add-metadata-string', 'xa.metadata=' + metadata]
 
-        if 'end-of-life' in info:
+        if spec.end_of_life:
             commit_args += ['--add-metadata-string',
-                            'ostree.endoflife=' + info['end-of-life']]
-        if 'end-of-life-rebase' in info:
+                            'ostree.endoflife=' + spec.end_of_life]
+        if spec.end_of_life_rebase:
             commit_args += ['--add-metadata-string',
-                            'ostree.endoflife-rebase=' + info['end-of-life-rebase']]
+                            'ostree.endoflife-rebase=' + spec.end_of_life_rebase]
 
         subprocess.check_call(['ostree', 'commit'] + commit_args)
         subprocess.check_call(['ostree', 'summary', '-u', '--repo', repo])
@@ -754,9 +749,9 @@ class FlatpakBuilder:
         return runtime_id, sdk_id, runtime_version
 
     def _create_app_oci(self, tarred_filesystem, outfile):
-        info = self.source.flatpak_yaml
-        app_id = info['id']
-        app_branch = info.get('branch', 'master')
+        spec = self.source.spec
+        app_id = spec.app_id
+        app_branch = spec.branch or "master"
 
         builddir = os.path.join(self.workdir, "build")
         os.mkdir(builddir)
@@ -770,13 +765,13 @@ class FlatpakBuilder:
         #                        builddir, app_id, runtime_id, runtime_id, runtime_version])
         build_init(
             builddir, app_id, sdk_id, runtime_id, runtime_version, self.arch,
-            tags=info.get('tags', [])
+            tags=spec.tags
         )
 
         # with gzip'ed tarball, tar is several seconds faster than tarfile.extractall
         subprocess.check_call(['tar', 'xvCfz', builddir, tarred_filesystem])
 
-        processor = FileTreeProcessor(builddir, info)
+        processor = FileTreeProcessor(builddir, spec)
         processor.process()
 
         self._build_finish(builddir)
@@ -799,10 +794,10 @@ class FlatpakBuilder:
             args = ['flatpak', 'build-export', '-v', repo, builddir, app_branch]
             if disable_sandbox:
                 args += ['--disable-sandbox']
-            if 'end-of-life' in info:
-                args += ['--end-of-life=' + info['end-of-life']]
-            if 'end-of-life-rebase' in info:
-                args += ['--end-of-life-rebase=' + info['end-of-life-rebase']]
+            if spec.end_of_life:
+                args += ['--end-of-life=' + spec.end_of_life]
+            if spec.end_of_life_rebase:
+                args += ['--end-of-life-rebase=' + spec.end_of_life_rebase]
             subprocess.check_call(args)
 
         with open(os.devnull) as devnull:
