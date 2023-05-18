@@ -6,8 +6,6 @@ import shutil
 
 from .utils import check_call
 
-from module_build_service.builder.utils import create_local_repo_from_koji_tag
-
 from .utils import info, ModuleSpec
 from .flatpak_builder import ModuleInfo
 from .get_module_builds import get_module_builds
@@ -242,6 +240,7 @@ class ModuleLocator:
         koji_path = os.path.join(self.conf.cache_dir, "koji_tags", build.koji_tag)
         if not os.path.exists(koji_path):
             info(f"Downloading {build.name}:{build.stream} to {build.path}")
+            from module_build_service.builder.utils import create_local_repo_from_koji_tag
             create_local_repo_from_koji_tag(self.conf, build.koji_tag, koji_path)
 
         os.makedirs(build.path)

@@ -5,6 +5,7 @@ import click
 from .config import add_config_file, set_profile_name, get_profile
 from .container_builder import ContainerBuilder
 from .container_spec import ContainerSpec
+from .console_logging import ConsoleHandler
 from .flatpak_builder import (FLATPAK_METADATA_ANNOTATIONS,
                               FLATPAK_METADATA_BOTH,
                               FLATPAK_METADATA_LABELS)
@@ -30,10 +31,13 @@ def cli(verbose, config, profile):
     except KeyError:
         die(f"Unknown profile '{profile}'")
 
+    handlers = [ConsoleHandler()]
+
     if verbose:
-        logging.basicConfig(level=logging.INFO)
+        logging.basicConfig(level=logging.INFO, handlers=handlers)
     else:
-        logging.basicConfig(level=logging.WARNING)
+        logging.basicConfig(handlers=handlers, level=logging.WARNING)
+        logging.getLogger("flatpak_module_tools").setLevel(level=logging.INFO)
 
 
 @cli.command(name="local-build")
