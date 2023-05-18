@@ -23,7 +23,7 @@ config_opts['description'] = 'Flatpak Buildroot for {{ runtimever }}'
 config_opts['chroot_setup_cmd'] = '{{ chroot_setup_cmd }}'
 
 config_opts['extra_chroot_dirs'] = [ '/run/lock', ]
-config_opts['use_bootstrap_container'] = False
+config_opts['use_bootstrap'] = False
 
 config_opts['plugin_conf']['root_cache_enable'] = {{ root_cache_enable }}
 
@@ -45,15 +45,11 @@ best=1
 module_platform_id=platform:{{ runtimever }}
 protected_packages=
 user_agent={{ user_agent }}
+{% if includepkgs -%}
 includepkgs={{includepkgs|join(',')}}
+{%- endif %}
 
 # repos
-
-[base]
-name=base
-baseurl={{ base_repo_url }}
-priority=20
-
 {% for repo in repos %}
 {{ repo }}
 {%- endfor %}

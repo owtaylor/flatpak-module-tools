@@ -6,29 +6,15 @@ applications and runtimes as Fedora modules.
 
 flatpak-module build-container
 ==============================
-Creates a OCI container of an Flatpak application or runtime from a module build.
-
-Output file is:
-
- NAME-STREAM-VERSION-oci.tar.gz
-
-For example:
-
- org.example.MyApp-stable-20180205192824.oci.tar.gz
+Creates a OCI container of an Flatpak application or runtime from packages downloaded
+from Koji or in a local repository.
 
 Usage:
     flatpak-module [global options] build-container
-	     [--add-local-build=NAME:STREAM[:VERSION]]
-	     [--from-local]
-	     [--install/--install-user]
-		 [--containerspec=somedir/container.yaml]
+         [--install]
+         [--containerspec=somedir/container.yaml]
          [--flatpak-metadata=labels/annotations/both]
-
-**--add-local-build**
-include a local MBS module build  as a source for the build
-
-**--from-local**
-Specifies to build the container from a local module build. Shorthand for '--add-local-build=NAME:STREAM' with the name and stream from container.yaml.
+         [--target=some-koji-target]
 
 **--install**
 automatically install the resulting Flatpak or runtime systemwide
@@ -39,6 +25,9 @@ path to container.yaml - defaults to `./container.yaml`
 **--flatpak-metadata**
 how flatpak metadata should be stored. Defaults to `both`. Using
 only labels require Flatpak >= 1.6.
+
+**--target**
+Koji target to build against. Determined from runtime_version if missing.
 
 flatpak-module install
 ======================

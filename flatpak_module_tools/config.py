@@ -52,9 +52,6 @@ class ProfileConfig:
         'koji_profile',
         'rpm_koji_target',
         'flatpak_koji_target',
-        'mbs_config_file',
-        'mbs_config_section',
-        'platform_stream_pattern',
     ]
 
     def __init__(self, name):

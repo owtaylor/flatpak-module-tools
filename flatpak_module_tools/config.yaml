@@ -1,7 +1,6 @@
 profiles:
     __default__:
-        koji_config: /etc/module-build-service/koji.conf
-        platform_stream_pattern: '^f(\d+)$'
+        koji_config: /etc/koji.conf
         release_name: f$release
         rpm_koji_target: f$release-candidate
         flatpak_koji_target: f$release-flatpak-candidate

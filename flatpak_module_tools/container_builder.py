@@ -1,6 +1,5 @@
 from pathlib import Path
 import os
-import re
 import shutil
 import subprocess
 from textwrap import dedent
@@ -8,9 +7,14 @@ from textwrap import dedent
 from flatpak_module_tools.mock import make_mock_cfg
 
 from .container_spec import ContainerSpec
-from .flatpak_builder import FlatpakBuilder, FlatpakSourceInfo, FLATPAK_METADATA_ANNOTATIONS
-from .module_locator import ModuleLocator
-from .utils import check_call, die, log_call, warn, header, important, info, split_module_spec
+from .flatpak_builder import (
+    FlatpakBuilder,
+    PackageFlatpakSourceInfo, FLATPAK_METADATA_ANNOTATIONS
+)
+from .rpm_builder import RpmBuilder
+from .utils import (
+    check_call, die, get_arch, log_call, header, important, info
+)
 
 
 class ContainerBuilder:
@@ -23,61 +27,25 @@ class ContainerBuilder:
 
         self.container_spec = container_spec
 
-        compose_spec = container_spec.compose
-        if not compose_spec.modules:
-            die(f"No modules specified in the compose section of '{container_spec.path}'")
-
-        if len(compose_spec.modules) > 1:
-            warn(f"Multiple modules specified in compose section of '{container_spec.path}', "
-                 "using first")
-
-        self.module_spec = split_module_spec(compose_spec.modules[0])
-
-    def _get_platform_version(self, builds):
-        # Streams should already be expanded in the modulemd's that we retrieve
-        #  modules were built against a particular dependency.
-        def get_stream(module, req, req_streams):
-            if len(req_streams) != 1:
-                die(f"{module.props.name}: stream list for '{req}' is not expanded ({req_streams})")
-            return req_streams[0]
-
-        platform_stream = None
-
-        # Find the platform stream to get the base package set
-        for build in builds.values():
-            for dep in build.mmd.get_dependencies():
-                for req in dep.get_runtime_modules():
-                    if req == 'platform':
-                        req_streams = dep.get_runtime_streams(req)
-                        platform_stream = get_stream(build.mmd, req, req_streams)
-
-        if platform_stream is None:
-            die("Unable to determine base OS version from 'platform' module stream")
-
-        m = re.match(self.profile.platform_stream_pattern, platform_stream)
-        if m is None:
-            die(f"'platform' module stream '{platform_stream}' "
-                "doesn't match '{self.profile.platform_stream_pattern}'")
-
-        return m.group(1)
-
     def build(self):
         header('BUILDING CONTAINER')
         important(f'container spec: {self.container_spec.path}')
         important('')
 
-        module_build_id = self.module_spec.to_str(include_profile=False)
+        rpm_builder = RpmBuilder(profile=self.profile, container_spec=self.container_spec)
 
-        locator = ModuleLocator(self.profile)
-        if self.from_local:
-            locator.add_local_build(module_build_id)
-        for build_id in self.local_builds:
-            locator.add_local_build(build_id)
+        nvr = rpm_builder.get_main_package_nvr()
+        name, version, _ = nvr.rsplit('-', 2)
+        release = 1
 
-        builds = locator.get_builds(
-            self.module_spec.name, self.module_spec.stream, self.module_spec.version
+        source = PackageFlatpakSourceInfo(
+            self.container_spec.flatpak, rpm_builder.runtime_info
         )
-        base_build = list(builds.values())[0]
+
+        runtimever = source.spec.runtime_version
+        assert runtimever
+
+        repos = rpm_builder.get_repos(for_container=True)
 
         arch = get_arch()
 
@@ -89,29 +57,15 @@ class ContainerBuilder:
         os.makedirs(workdir)
         info(f"Writing results to {workdir}")
 
-        has_modulemd = {}
-
-        for build in builds.values():
-            locator.ensure_downloaded(build)
-            has_modulemd[build.name + ':' + build.stream] = build.has_module_metadata()
-
-        repos = [build.yum_config() for build in builds.values()]
-
-        source = FlatpakSourceInfo(
-            self.container_spec.flatpak, builds, base_build, self.module_spec.profile
-        )
-
         builder = FlatpakBuilder(source, workdir, ".", flatpak_metadata=self.flatpak_metadata)
 
-        component_label = source.spec.component or base_build.name
-        name_label = source.spec.name or base_build.name
-        version_label = base_build.stream
-        release_label = base_build.version
+        component_label = source.spec.component or name
+        name_label = source.spec.name or name
 
         builder.add_labels({'name': name_label,
                             'com.redhat.component': component_label,
-                            'version': version_label,
-                            'release': release_label})
+                            'version': version,
+                            'release': release})
 
         mock_cfg_path = workdir / "mock.cfg"
         mock_cfg = make_mock_cfg(
@@ -144,15 +98,6 @@ class ContainerBuilder:
         info('Initializing installation path')
         check_call(['mock', '-q', '-r', mock_cfg_path, '--clean'])
 
-        # Using mock's config_opts['module_enable'] doesn't work because dnf tries
-        # to enable modules before chroot_setup_cmd installs system-release, but
-        # dnf needs /etc/os-release to figure out the platform module. So we do it this way.
-        # https://github.com/rpm-software-management/mock/issues/232#issuecomment-456340663
-        if have_dnf_module:
-            info('Enabling modules')
-            to_enable = [x for x in builder.get_enable_modules() if has_modulemd[x]]
-            check_call(['mock', '-r', mock_cfg_path, '--dnf-cmd', 'module', 'enable'] + to_enable)
-
         info('Installing packages')
         check_call(
             ['mock', '-r', mock_cfg_path, '--install'] + sorted(builder.get_install_packages())
@@ -183,7 +128,7 @@ class ContainerBuilder:
 
         ref_name, outfile, tarred_outfile = builder.build_container(filesystem_tar)
 
-        local_outname = f"{base_build.name}-{base_build.stream}-{base_build.version}.oci.tar.gz"
+        local_outname = f"{name}-{version}-{release}.oci.tar.gz"
 
         info('Compressing result')
         with open(local_outname, 'wb') as f:
