@@ -2,10 +2,17 @@ profiles:
     __default__:
         koji_config: /etc/module-build-service/koji.conf
         platform_stream_pattern: '^f(\d+)$'
-        release_name: 'f$release'
+        release_name: f$release
+        rpm_koji_target: f$release-candidate
+        flatpak_koji_target: f$release-flatpak-candidate
     production:
         koji_profile: koji
         base_repo_url: http://kojipkgs.fedoraproject.org/repos/f$release-build/latest/$basearch
+        release_name: 'f$release-app'
+    production_runtime:
+        koji_profile: koji
+        base_repo_url: http://kojipkgs.fedoraproject.org/repos/f$release-flatpak-runtime-build/latest/$basearch
+        release_name: 'f$release-flatpak-runtime'
     staging:
         koji_profile: staging
         base_repo_url: http://kojipkgs.stg.fedoraproject.org/repos/f$release-build/latest/$basearch

@@ -119,10 +119,13 @@ class FlatpakSpec(BaseSpec):
         self.end_of_life_rebase = self._get_str('end-of-life-rebase', None)
         self.finish_args = self._get_str('finish-args', None)
         self.name = self._get_str('name', None)
+        self.packages = self._get_str_list('packages', [])
         self.rename_appdata_file = self._get_str('rename-appdata-file', None)
         self.rename_desktop_file = self._get_str('rename-desktop-file', None)
         self.rename_icon = self._get_str('rename-icon', None)
         self.runtime = self._get_str('runtime', None)
+        self.runtime_name = self._get_str('runtime-name', None)
+        self.runtime_version = self._get_str('runtime-version', None)
         self.sdk = self._get_str('sdk', None)
         self.tags = self._get_str_list('tags', [])
 
@@ -148,3 +151,27 @@ class ContainerSpec(BaseSpec):
 
         compose_yaml = container_yaml.get('compose', {})
         self.compose = ComposeSpec(f"{path}:compose", compose_yaml)
+
+        NEW_STYLE_ATTRS = ["packages", "runtime_name", "runtime_version"]
+
+        if self.compose.modules:
+            set_attrs = [a for a in NEW_STYLE_ATTRS if getattr(self.flatpak, a) is not None]
+            if set_attrs:
+                die(
+                    f"{path} is old style (compose:modules is set). Disallowed keys:\n" +
+                    "\n".join(
+                        f"    flatpak:{a.replace('_', '-')}" for a in set_attrs
+                    )
+                )
+        else:
+            unset_attrs = [a for a in NEW_STYLE_ATTRS if getattr(self.flatpak, a) is None]
+            if unset_attrs:
+                die(
+                    f"{path} is old style (compose:modules is not set). Missing keys:\n" +
+                    "\n".join(
+                        f"    flatpak:{a.replace('_', '-')}" for a in unset_attrs
+                    )
+                )
+
+        if self.compose.modules and self.flatpak.packages:
+            die("{path}: Both compose:modules (deprecated) and flatpak:packages are set")

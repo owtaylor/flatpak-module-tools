@@ -1,4 +1,6 @@
 import logging
+from pathlib import Path
+from typing import List
 
 import click
 
@@ -11,7 +13,8 @@ from .flatpak_builder import (FLATPAK_METADATA_ANNOTATIONS,
                               FLATPAK_METADATA_LABELS)
 from .installer import Installer
 from .module_builder import ModuleBuilder
-from .utils import die
+from .rpm_builder import RpmBuilder
+from .utils import die, info
 
 
 @click.group()
@@ -148,3 +151,28 @@ def install(koji, path_or_url):
         installer.set_source_path(path_or_url)
 
     installer.install()
+
+
+@cli.command()
+@click.option('--containerspec', metavar='CONTAINER_YAML', default='./container.yaml',
+              help='path to container.yaml - defaults to ./container.yaml')
+@click.option('--all-missing', is_flag=True,
+              help='Build all packages needed to build ')
+@click.argument('packages', nargs=-1, metavar="PKGS")
+def build_rpms_local(containerspec, packages: List[str], all_missing: bool):
+    spec = ContainerSpec(containerspec)
+
+    manual_packages: List[str] = []
+    manual_repos: List[Path] = []
+
+    for pkg in packages:
+        if '/' in pkg:
+            manual_repos.append(Path(pkg))
+        else:
+            manual_packages.append(pkg)
+
+    builder = RpmBuilder(profile=get_profile(), container_spec=spec)
+    if packages is [] and not all_missing:
+        info("Nothing to rebuild, specify packages or --all-missing")
+    else:
+        builder.build_rpms_local(manual_packages, manual_repos, all_missing=all_missing)

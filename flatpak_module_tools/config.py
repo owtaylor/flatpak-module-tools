@@ -1,6 +1,9 @@
+from functools import cached_property
 import os
 
+import koji
 import pkg_resources
+import re
 import yaml
 
 from .utils import get_arch
@@ -33,16 +36,21 @@ def set_profile_name(profile_name):
     _profile_name = profile_name
 
 
-def get_profile():
+def get_profile() -> "ProfileConfig":
     return get_config().profiles[_profile_name]
 
 
 class ProfileConfig:
+    koji_config: str | None
+    koji_profile: str | None
+
     config_keys = [
         'base_repo_url',
         'release_name',
         'koji_config',
         'koji_profile',
+        'rpm_koji_target',
+        'flatpak_koji_target',
         'mbs_config_file',
         'mbs_config_section',
         'platform_stream_pattern',
@@ -52,6 +60,8 @@ class ProfileConfig:
         self.name = name
         for k in self.config_keys:
             setattr(self, k, None)
+
+        self._koji_session: koji.ClientSession | None = None
 
     def merge(self, yml):
         for k in self.config_keys:
@@ -79,6 +89,27 @@ class ProfileConfig:
 
     def get_release_name(self, release):
         return getattr(self, "release_name").replace("$release", release)
+
+    def release_from_runtime_version(self, runtime_version: str):
+        return re.sub(r'^[^\d]+', '', runtime_version)
+
+    def get_rpm_koji_target(self, release):
+        return getattr(self, "rpm_koji_target").replace("$release", release)
+
+    def get_flatpak_koji_target(self, release):
+        return getattr(self, "flatpak_koji_target").replace("$release", release)
+
+    @cached_property
+    def koji_options(self):
+        assert self.koji_profile is not None
+        return koji.read_config(
+            profile_name=self.koji_profile, user_config=self.koji_config
+        )
+
+    @cached_property
+    def koji_session(self):
+        session_opts = koji.grab_session_options(self.koji_options)
+        return koji.ClientSession(self.koji_options['server'], session_opts)
 
 
 class Config:
