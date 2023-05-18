@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import functools
 import logging
 import click
@@ -53,6 +54,13 @@ def check_call(args, cwd=None):
     rv = subprocess.call(args, cwd=cwd)
     if rv != 0:
         die(f"{args[0]} failed (exit status={rv})")
+
+
+@dataclass
+class RuntimeInfo:
+    runtime_id: str
+    sdk_id: str
+    version: str
 
 
 class ModuleSpec:

@@ -12,13 +12,14 @@ image. It is shared between:
  https://pagure.io/flatpak-module-tools
 """
 
+from abc import ABC, abstractmethod
 from configparser import RawConfigParser
 import errno
 import hashlib
 import json
 import logging
 import os
-from typing import Callable, Iterable, Sequence
+from typing import Any, Callable, Dict, Iterable, List, Sequence
 import re
 import shlex
 import shutil
@@ -28,7 +29,7 @@ from textwrap import dedent
 from xml.etree import ElementTree
 
 from .container_spec import FlatpakSpec
-from .utils import get_arch
+from .utils import Arch, RuntimeInfo, get_arch
 
 
 FLATPAK_METADATA_LABELS = "labels"
@@ -290,8 +291,43 @@ class FileTreeProcessor:
         self._compose_appstream()
 
 
-class FlatpakSourceInfo:
-    def __init__(self, spec: FlatpakSpec, modules, base_module, profile=None):
+class BaseFlatpakSourceInfo(ABC):
+    runtime: bool
+    spec: FlatpakSpec
+
+    @abstractmethod
+    def precheck(self):
+        """Do any checks before build"""
+        ...
+
+    @abstractmethod
+    def get_enable_modules(self) -> List[str]:
+        """Get modules to enable"""
+        ...
+
+    @abstractmethod
+    def get_install_packages(self, arch: Arch) -> List[str]:
+        """Get packages to install"""
+        ...
+
+    @abstractmethod
+    def get_includepkgs(self, arch: Arch) -> List[str]:
+        """Get global includepkgs dnf configuration items (if empty, line will be omitted)"""
+        ...
+
+    @abstractmethod
+    def find_runtime_info(self) -> RuntimeInfo:
+        """Get the runtime and SDK names and versions"""
+        ...
+
+    @abstractmethod
+    def filter_app_manifest(self, components: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Filter the installed buildroot RPMs to only the ones that install things into /app"""
+        ...
+
+
+class ModuleFlatpakSourceInfo(BaseFlatpakSourceInfo):
+    def __init__(self, spec: FlatpakSpec, modules, base_module, profile: str | None = None):
         self.spec = spec
         self.modules = modules
         self.base_module = base_module
@@ -345,12 +381,138 @@ class FlatpakSourceInfo:
 
         return [m for m in self.modules.values() if is_app_module(m)]
 
+    def precheck(self):
+        # For a runtime, certain information is duplicated between the container.yaml
+        # and the modulemd, check that it matches
+        if self.runtime:
+            spec = self.spec
+            flatpak_xmd = self.base_module.mmd.get_xmd()['flatpak']
+
+            def check(condition, what):
+                if not condition:
+                    raise RuntimeError(
+                        f"Mismatch for {what} betweeen module xmd and container.yaml")
+
+            check(spec.branch == flatpak_xmd['branch'], "'branch'")
+            check(self.profile in flatpak_xmd['runtimes'], 'profile name')
+
+            profile_xmd = flatpak_xmd['runtimes'][self.profile]
+
+            check(spec.app_id == profile_xmd['id'], "'id'")
+            check(spec.runtime == profile_xmd.get('runtime', None), "'runtime'")
+            check(spec.sdk == profile_xmd.get('sdk', None), "'sdk'")
+
+    def get_enable_modules(self) -> List[str]:
+        # We need to enable all the modules other than the platform pseudo-module
+        # sorted for testability.
+        return sorted(m.mmd.props.module_name + ':' + m.mmd.props.stream_name
+                      for m in self.modules.values()
+                      if m.mmd.props.module_name != 'platform')
+
+    def get_install_packages(self, arch: Arch) -> List[str]:
+        packages = self.base_module.get_profile_packages(self.profile, arch)
+        if not self.runtime:
+            # The flatpak-runtime-config package is needed when building an application
+            # Flatpak because it includes file triggers for files in /app. (Including just
+            # this package avoids having to install the entire runtime package set; if
+            # we need to make this configurable it could be a separate profile of
+            # the runtime.)
+            packages.append('flatpak-runtime-config')
+
+        return packages
+
+    def get_includepkgs(self, arch: Arch) -> List[str]:
+        # For a runtime, we want to make sure that the set of RPMs that is installed
+        # into the filesystem is *exactly* the set that is listed in the runtime
+        # profile. Requiring the full listed set of RPMs to be listed makes it
+        # easier to catch unintentional changes in the package list that might break
+        # applications depending on the runtime. It also simplifies the checking we
+        # do for application flatpaks, since we can simply look at the runtime
+        # modulemd to find out what packages are present in the runtime.
+        #
+        # For an application, we want to make sure that each RPM that is installed
+        # into the filesystem is *either* an RPM that is part of the 'runtime'
+        # profile of the base runtime, or from a module that was built with
+        # flatpak-rpm-macros in the install root and, thus, prefix=/app.
+        #
+        # We achieve this by restricting the set of available packages in the dnf
+        # configuration to just the ones that we want.
+        #
+        # The advantage of doing this upfront, rather than just checking after the
+        # fact is that this makes sure that when a application is being installed,
+        # we don't get a different package to satisfy a dependency than the one
+        # in the runtime - e.g. aajohan-comfortaa-fonts to satisfy font(:lang=en)
+        # because it's alphabetically first.
+
+        if not self.runtime:
+            runtime_module = self.runtime_module
+            available_packages = sorted(
+                runtime_module.get_profile_packages('runtime', arch)
+            )
+
+            for m in self.app_modules:
+                # Strip off the '.rpm' suffix from the filename to get something
+                # that DNF can parse.
+                available_packages.extend(x[:-4] for x in m.rpms)
+        else:
+            base_module = self.base_module
+            available_packages = sorted(
+                base_module.get_profile_packages(self.profile, arch)
+            )
+
+        return available_packages
+
+    def find_runtime_info(self) -> RuntimeInfo:
+        runtime_module = self.runtime_module
+
+        flatpak_xmd = runtime_module.mmd.get_xmd()['flatpak']
+        runtime_id = flatpak_xmd['runtimes']['runtime']['id']
+        sdk_id = flatpak_xmd['runtimes']['runtime'].get('sdk', runtime_id)
+        runtime_version = flatpak_xmd['branch']
+
+        return RuntimeInfo(
+            runtime_id=runtime_id,
+            sdk_id=sdk_id,
+            version=runtime_version
+        )
+
+    def filter_app_manifest(self, components):
+        # DNF filtering from get_includepkgs() restricts the installed packages
+        # to:
+        #
+        #  Runtime packages: libfoo
+        #  App module packages: libbar-0:1.2.3-1.module_1.33+11439+4b44cd2d.x86_64.rpm
+        #
+        # We want to filter the set of installed packages to only ones installed from
+        # the app module packages. We used to do this by excluding packages where
+        # c['name'] was in the runtime, but this doesn't work - even if 'libfoo' is in
+        # the runtime, a different 'libfoo' might be in a module. We need to instead
+        # compare against the particular versions in the app modules.
+
+        app_packages = set()
+        for m in self.app_modules:
+            app_packages.update(m.rpms)
+
+        def is_app_package(component):
+            pkg_string = ('{name}-{epochnum}:{version}-{release}.{arch}.rpm'
+                          .format(epochnum=component['epoch'] or 0, **component))
+            return pkg_string in app_packages
+
+        return [c for c in components if is_app_package(c)]
+
+
+class FlatpakSourceInfo(ModuleFlatpakSourceInfo):
+    """Compatibility wrapper around ModuleFlatpakSourceInfo"""
+    def __init__(self, flatpak_yaml: str, modules, base_module, profile: str | None = None):
+        super().__init__(FlatpakSpec("flatpak", flatpak_yaml), modules, base_module, profile)
+
 
 class FlatpakBuilder:
     def __init__(
-            self, source: FlatpakSourceInfo, workdir, root,
+            self, source: BaseFlatpakSourceInfo, workdir, root,
             parse_manifest: Callable[[Iterable[str]], Sequence[dict]] | None = None,
-            flatpak_metadata=FLATPAK_METADATA_ANNOTATIONS, oci_arch=None
+            flatpak_metadata: str = FLATPAK_METADATA_ANNOTATIONS,
+            oci_arch: str | None = None
     ):
         self.source = source
         self.workdir = workdir
@@ -375,90 +537,16 @@ class FlatpakBuilder:
         self.extra_labels.update({k: str(v) for k, v in labels.items()})
 
     def precheck(self):
-        source = self.source
-
-        # For a runtime, certain information is duplicated between the container.yaml
-        # and the modulemd, check that it matches
-        if source.runtime:
-            spec = source.spec
-            flatpak_xmd = self.source.base_module.mmd.get_xmd()['flatpak']
-
-            def check(condition, what):
-                if not condition:
-                    raise RuntimeError(
-                        f"Mismatch for {what} betweeen module xmd and container.yaml")
-
-            check(spec.branch == flatpak_xmd['branch'], "'branch'")
-            check(source.profile in flatpak_xmd['runtimes'], 'profile name')
-
-            profile_xmd = flatpak_xmd['runtimes'][source.profile]
-
-            check(spec.app_id == profile_xmd['id'], "'id'")
-            check(spec.runtime == profile_xmd.get('runtime', None), "'runtime'")
-            check(spec.sdk == profile_xmd.get('sdk', None), "'sdk'")
+        self.source.precheck()
 
     def get_enable_modules(self):
-        # We need to enable all the modules other than the platform pseudo-module
-        # sorted for testability.
-        return sorted(m.mmd.props.module_name + ':' + m.mmd.props.stream_name
-                      for m in self.source.modules.values()
-                      if m.mmd.props.module_name != 'platform')
+        return self.source.get_enable_modules()
 
     def get_install_packages(self):
-        source = self.source
-        packages = source.base_module.get_profile_packages(source.profile, self.arch)
-        if not source.runtime:
-            # The flatpak-runtime-config package is needed when building an application
-            # Flatpak because it includes file triggers for files in /app. (Including just
-            # this package avoids having to install the entire runtime package set; if
-            # we need to make this configurable it could be a separate profile of
-            # the runtime.)
-            packages.append('flatpak-runtime-config')
-
-        return packages
+        return self.source.get_install_packages(self.arch)
 
     def get_includepkgs(self):
-        source = self.source
-
-        # For a runtime, we want to make sure that the set of RPMs that is installed
-        # into the filesystem is *exactly* the set that is listed in the runtime
-        # profile. Requiring the full listed set of RPMs to be listed makes it
-        # easier to catch unintentional changes in the package list that might break
-        # applications depending on the runtime. It also simplifies the checking we
-        # do for application flatpaks, since we can simply look at the runtime
-        # modulemd to find out what packages are present in the runtime.
-        #
-        # For an application, we want to make sure that each RPM that is installed
-        # into the filesystem is *either* an RPM that is part of the 'runtime'
-        # profile of the base runtime, or from a module that was built with
-        # flatpak-rpm-macros in the install root and, thus, prefix=/app.
-        #
-        # We achieve this by restricting the set of available packages in the dnf
-        # configuration to just the ones that we want.
-        #
-        # The advantage of doing this upfront, rather than just checking after the
-        # fact is that this makes sure that when a application is being installed,
-        # we don't get a different package to satisfy a dependency than the one
-        # in the runtime - e.g. aajohan-comfortaa-fonts to satisfy font(:lang=en)
-        # because it's alphabetically first.
-
-        if not source.runtime:
-            runtime_module = source.runtime_module
-            available_packages = sorted(
-                runtime_module.get_profile_packages('runtime', self.arch)
-            )
-
-            for m in source.app_modules:
-                # Strip off the '.rpm' suffix from the filename to get something
-                # that DNF can parse.
-                available_packages.extend(x[:-4] for x in m.rpms)
-        else:
-            base_module = source.base_module
-            available_packages = sorted(
-                base_module.get_profile_packages(source.profile, self.arch)
-            )
-
-        return available_packages
+        return self.source.get_includepkgs(self.arch)
 
     def get_cleanup_script(self):
         cleanup_commands = self.source.spec.cleanup_commands
@@ -536,7 +624,6 @@ class FlatpakBuilder:
                                             stdin=subprocess.PIPE,
                                             stdout=out_fileobj)
         assert compress_process.stdin is not None
-        assert compress_process.stdout is not None
         in_tf = tarfile.open(fileobj=export_stream, mode='r|')
         out_tf = tarfile.open(fileobj=compress_process.stdin, mode='w|')
 
@@ -621,36 +708,12 @@ class FlatpakBuilder:
 
         return self.parse_manifest(lines)
 
-    def _filter_app_manifest(self, components):
-        # DNF filtering from get_includepkgs() restricts the installed packages
-        # to:
-        #
-        #  Runtime packages: libfoo
-        #  App module packages: libbar-0:1.2.3-1.module_1.33+11439+4b44cd2d.x86_64.rpm
-        #
-        # We want to filter the set of installed packages to only ones installed from
-        # the app module packages. We used to do this by excluding packages where
-        # c['name'] was in the runtime, but this doesn't work - even if 'libfoo' is in
-        # the runtime, a different 'libfoo' might be in a module. We need to instead
-        # compare against the particular versions in the app modules.
-
-        app_packages = set()
-        for m in self.source.app_modules:
-            app_packages.update(m.rpms)
-
-        def is_app_package(component):
-            pkg_string = ('{name}-{epochnum}:{version}-{release}.{arch}.rpm'
-                          .format(epochnum=component['epoch'] or 0, **component))
-            return pkg_string in app_packages
-
-        return [c for c in components if is_app_package(c)]
-
     def get_components(self, manifest):
         all_components = self._get_components(manifest)
         if self.source.runtime:
             image_components = all_components
         else:
-            image_components = self._filter_app_manifest(all_components)
+            image_components = self.source.filter_app_manifest(all_components)
 
         return image_components
 
@@ -738,16 +801,6 @@ class FlatpakBuilder:
 
         return runtime_ref
 
-    def _find_runtime_info(self):
-        runtime_module = self.source.runtime_module
-
-        flatpak_xmd = runtime_module.mmd.get_xmd()['flatpak']
-        runtime_id = flatpak_xmd['runtimes']['runtime']['id']
-        sdk_id = flatpak_xmd['runtimes']['runtime'].get('sdk', runtime_id)
-        runtime_version = flatpak_xmd['branch']
-
-        return runtime_id, sdk_id, runtime_version
-
     def _create_app_oci(self, tarred_filesystem, outfile):
         spec = self.source.spec
         app_id = spec.app_id
@@ -758,13 +811,18 @@ class FlatpakBuilder:
 
         repo = os.path.join(self.workdir, "repo")
 
-        runtime_id, sdk_id, runtime_version = self._find_runtime_info()
+        runtime_info = self.source.find_runtime_info()
 
         # See comment for build_init() for why we can't use 'flatpak build-init'
         # subprocess.check_call(['flatpak', 'build-init',
         #                        builddir, app_id, runtime_id, runtime_id, runtime_version])
         build_init(
-            builddir, app_id, sdk_id, runtime_id, runtime_version, self.arch,
+            builddir,
+            app_id,
+            runtime_info.sdk_id,
+            runtime_info.runtime_id,
+            runtime_info.version,
+            self.arch,
             tags=spec.tags
         )
 
