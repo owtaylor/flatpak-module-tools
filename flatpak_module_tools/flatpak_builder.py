@@ -507,6 +507,37 @@ class FlatpakSourceInfo(ModuleFlatpakSourceInfo):
         super().__init__(FlatpakSpec("flatpak", flatpak_yaml), modules, base_module, profile)
 
 
+class PackageFlatpakSourceInfo(BaseFlatpakSourceInfo):
+    def __init__(self, spec: FlatpakSpec, runtime_info: RuntimeInfo | None):
+        if spec.build_runtime and runtime_info:
+            raise RuntimeError("runtime_info can only be set for an application")
+        if not spec.build_runtime and not runtime_info:
+            raise RuntimeError("runtime_info must be set for an application")
+        self.spec = spec
+        self.runtime = spec.build_runtime
+        self.runtime_info = runtime_info
+
+    def precheck(self):
+        pass
+
+    def get_enable_modules(self) -> List[str]:
+        return []
+
+    def get_install_packages(self, arch: Arch) -> List[str]:
+        return self.spec.packages
+
+    def get_includepkgs(self, arch: Arch) -> List[str]:
+        # We use different includepkgs for different repos instead of a global includepkgs
+        return []
+
+    def find_runtime_info(self) -> RuntimeInfo:
+        assert self.runtime_info
+        return self.runtime_info
+
+    def filter_app_manifest(self, components: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return list(components)
+
+
 class FlatpakBuilder:
     def __init__(
             self, source: BaseFlatpakSourceInfo, workdir, root,
