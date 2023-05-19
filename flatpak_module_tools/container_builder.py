@@ -1,9 +1,10 @@
-import jinja2
 import os
 import re
 import shutil
 import subprocess
 from textwrap import dedent
+
+from flatpak_module_tools.mock import make_mock_cfg
 
 from .container_spec import ContainerSpec
 from .flatpak_builder import FlatpakBuilder, FlatpakSourceInfo, FLATPAK_METADATA_ANNOTATIONS
@@ -112,28 +113,18 @@ class ContainerBuilder:
                             'version': version_label,
                             'release': release_label})
 
-        env = jinja2.Environment(loader=jinja2.PackageLoader('flatpak_module_tools', 'templates'),
-                                 autoescape=False)
-        template = env.get_template('mock.cfg.j2')
-
-        output_path = os.path.join(workdir, 'mock.cfg')
-
-        # Check if DNF is new enough to support modules, if not, all packages from modular
-        # repositories will automatically be enabled. If yes, we'll need to enable any
-        # modular repositories - *if they actually have module metadata*
-        try:
-            subprocess.check_output(['dnf', 'module', 'list', '--enabled'],
-                                    stderr=subprocess.STDOUT)
-            have_dnf_module = True
-        except subprocess.CalledProcessError:
-            have_dnf_module = False
-
-        platform_version = self._get_platform_version(builds)
-        base_repo_url = self.profile.get_base_repo_url(release=platform_version)
-        template.stream(arch='x86_64',
-                        base_repo_url=base_repo_url,
-                        includepkgs=builder.get_includepkgs(),
-                        repos=repos).dump(output_path)
+        mock_cfg_path = workdir / "mock.cfg"
+        mock_cfg = make_mock_cfg(
+            arch=arch,
+            chroot_setup_cmd='install /bin/bash glibc-minimal-langpack shadow-utils tar',
+            includepkgs=builder.get_includepkgs(),
+            releasever=self.profile.release_from_runtime_version(runtimever),
+            repos=repos,
+            root_cache_enable=False,
+            runtimever=runtimever
+        )
+        with open(mock_cfg_path, "w") as f:
+            f.write(mock_cfg)
 
         finalize_script = dedent("""\
             #!/bin/sh
@@ -151,7 +142,7 @@ class ContainerBuilder:
             os.fchmod(f.fileno(), 0o0755)
 
         info('Initializing installation path')
-        check_call(['mock', '-q', '-r', output_path, '--clean'])
+        check_call(['mock', '-q', '-r', mock_cfg_path, '--clean'])
 
         # Using mock's config_opts['module_enable'] doesn't work because dnf tries
         # to enable modules before chroot_setup_cmd installs system-release, but
@@ -160,21 +151,21 @@ class ContainerBuilder:
         if have_dnf_module:
             info('Enabling modules')
             to_enable = [x for x in builder.get_enable_modules() if has_modulemd[x]]
-            check_call(['mock', '-r', output_path, '--dnf-cmd', 'module', 'enable'] + to_enable)
+            check_call(['mock', '-r', mock_cfg_path, '--dnf-cmd', 'module', 'enable'] + to_enable)
 
         info('Installing packages')
         check_call(
-            ['mock', '-r', output_path, '--install'] + sorted(builder.get_install_packages())
+            ['mock', '-r', mock_cfg_path, '--install'] + sorted(builder.get_install_packages())
         )
 
         info('Cleaning and exporting filesystem')
         check_call([
-            'mock', '-q', '-r', output_path, '--copyin', finalize_script_path, '/root/finalize.sh'
+            'mock', '-q', '-r', mock_cfg_path, '--copyin', finalize_script_path, '/root/finalize.sh'
         ])
 
         builder.root = "."
 
-        args = ['mock', '-q', '-r', output_path, '--shell', '/root/finalize.sh']
+        args = ['mock', '-q', '-r', mock_cfg_path, '--shell', '/root/finalize.sh']
         log_call(args)
         process = subprocess.Popen(args, stdout=subprocess.PIPE)
         assert process.stdout is not None
