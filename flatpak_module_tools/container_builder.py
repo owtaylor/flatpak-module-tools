@@ -1,3 +1,4 @@
+from pathlib import Path
 import os
 import re
 import shutil
@@ -78,10 +79,9 @@ class ContainerBuilder:
         )
         base_build = list(builds.values())[0]
 
-        builddir = os.path.expanduser("~/modulebuild/flatpaks")
-        workdir = os.path.join(
-            builddir, f"{base_build.name}-{base_build.stream}-{base_build.version}"
-        )
+        arch = get_arch()
+
+        workdir = Path(arch.rpm) / "work/oci"
         if os.path.exists(workdir):
             info(f"Removing old output directory {workdir}")
             shutil.rmtree(workdir)
