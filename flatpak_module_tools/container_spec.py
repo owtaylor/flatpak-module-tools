@@ -76,25 +76,29 @@ class BaseSpec:
         return self._get(key, type_convert, default)
 
     @overload
-    def _get_str_list(self, key: str, default: Literal[Option.REQUIRED]) -> List[str]:
+    def _get_str_list(self, key: str,
+                      default: Literal[Option.REQUIRED], allow_scalar=False) -> List[str]:
         ...
 
     @overload
-    def _get_str_list(self, key: str, default: List[str]) -> List[str]:
+    def _get_str_list(self, key: str, default: List[str], allow_scalar=False) -> List[str]:
         ...
 
     @overload
-    def _get_str_list(self, key: str, default: None) -> List[str] | None:
+    def _get_str_list(self, key: str, default: None, allow_scalar=False) -> List[str] | None:
         ...
 
     def _get_str_list(
-            self, key: str, default: Literal[Option.REQUIRED] | List[str] | None
+            self, key: str, default: Literal[Option.REQUIRED] | List[str] | None,
+            allow_scalar=False
     ) -> List[str] | None:
         def type_convert(val):
             if isinstance(val, List) and all(isinstance(v, (int, float, str)) for v in val):
                 return [
                     str(v) for v in val
                 ]
+            elif allow_scalar and isinstance(val, (int, float, str)):
+                return [str(val)]
             else:
                 die(f"{self.path}, {key} must be a list of strings")
 
@@ -137,6 +141,13 @@ class ComposeSpec(BaseSpec):
         self.modules = self._get_str_list('modules', [])
 
 
+class PlatformsSpec(BaseSpec):
+    def __init__(self, path, platforms_yaml):
+        super().__init__(path, platforms_yaml)
+        self.only = self._get_str_list('only', [], allow_scalar=True)
+        self.not_ = self._get_str_list('not', [], allow_scalar=True)
+
+
 class ContainerSpec(BaseSpec):
     def __init__(self, path):
         with open(path) as f:
@@ -152,6 +163,9 @@ class ContainerSpec(BaseSpec):
 
         compose_yaml = container_yaml.get('compose', {})
         self.compose = ComposeSpec(f"{path}:compose", compose_yaml)
+
+        platforms_yaml = container_yaml.get('compose', {})
+        self.platforms = PlatformsSpec(f"{path}:platforms", platforms_yaml)
 
         NEW_STYLE_ATTRS = ["packages", "runtime_name", "runtime_version"]
 
