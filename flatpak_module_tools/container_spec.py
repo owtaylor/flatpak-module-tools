@@ -112,6 +112,7 @@ class FlatpakSpec(BaseSpec):
         self.app_id = self._get_str("id")
         self.appdata_license = self._get_str('appdata-license', None)
         self.appstream_compose = self._get_bool('appstream-compose', True)
+        self.base_image = self._get_str('base_image', None)
         self.branch = self._get_str('branch', 'stable')
         self.build_runtime = self._get_bool('build-runtime', False)
         self.cleanup_commands = self._get_str('cleanup_commands', None)
