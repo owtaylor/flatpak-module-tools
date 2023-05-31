@@ -171,9 +171,10 @@ class ContainerSpec(BaseSpec):
         self.platforms = PlatformsSpec(f"{path}:platforms", platforms_yaml)
 
         NEW_STYLE_ATTRS = ["packages", "runtime_name", "runtime_version"]
+        NEW_STYLE_ATTRS_RUNTME = ["packages", "name", "branch"]
 
         if self.compose.modules:
-            set_attrs = [a for a in NEW_STYLE_ATTRS if getattr(self.flatpak, a) is not None]
+            set_attrs = [a for a in NEW_STYLE_ATTRS if getattr(self.flatpak, a)]
             if set_attrs:
                 raise ValidationError(
                     f"{path} is old style (compose:modules is set). Disallowed keys:\n" +
@@ -182,14 +183,16 @@ class ContainerSpec(BaseSpec):
                     )
                 )
         else:
-            unset_attrs = [a for a in NEW_STYLE_ATTRS if getattr(self.flatpak, a) is None]
+            if self.flatpak.build_runtime:
+                required_attrs = NEW_STYLE_ATTRS_RUNTME
+            else:
+                required_attrs = NEW_STYLE_ATTRS
+
+            unset_attrs = [a for a in required_attrs if not getattr(self.flatpak, a)]
             if unset_attrs:
                 raise ValidationError(
-                    f"{path} is old style (compose:modules is not set). Missing keys:\n" +
+                    f"{path} is new style (compose:modules is not set). Missing keys:\n" +
                     "\n".join(
                         f"    flatpak:{a.replace('_', '-')}" for a in unset_attrs
                     )
                 )
-
-        if self.compose.modules and self.flatpak.packages:
-            raise ValidationError("{path}: Both compose:modules (deprecated) and flatpak:packages are set")
