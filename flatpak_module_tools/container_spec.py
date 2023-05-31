@@ -2,11 +2,13 @@ from enum import Enum
 from typing import Any, List, Literal, overload
 import yaml
 
-from .utils import die
-
 
 class Option(Enum):
     REQUIRED = 1
+
+
+class ValidationError(Exception):
+    pass
 
 
 class BaseSpec:
@@ -18,14 +20,14 @@ class BaseSpec:
         val = self._yaml_dict.get(key)
         if val is None:
             if default == Option.REQUIRED:
-                die(f"{self.path}, {key} is missing")
+                raise ValidationError(f"{self.path}, {key} is missing")
             else:
                 return default
         else:
             try:
                 return type_convert(val)
             except ValueError as e:
-                die(f"{self.path}, {key} {e}")
+                raise ValidationError(f"{self.path}, {key} {e}")
 
     @overload
     def _get_str(self, key: str, default: Literal[Option.REQUIRED]) -> str:
@@ -50,7 +52,7 @@ class BaseSpec:
             if isinstance(val, (str, int, float)):
                 return str(val)
             else:
-                die(f"{self.path}, {key} must be a string")
+                raise ValidationError(f"{self.path}, {key} must be a string")
 
         return self._get(key, type_convert, default)
 
@@ -71,7 +73,7 @@ class BaseSpec:
             if isinstance(val, bool):
                 return val
             else:
-                die(f"{self.path}, {key} must be a boolean")
+                raise ValidationError(f"{self.path}, {key} must be a boolean")
 
         return self._get(key, type_convert, default)
 
@@ -100,7 +102,7 @@ class BaseSpec:
             elif allow_scalar and isinstance(val, (int, float, str)):
                 return [str(val)]
             else:
-                die(f"{self.path}, {key} must be a list of strings")
+                raise ValidationError(f"{self.path}, {key} must be a list of strings")
 
         return self._get(key, type_convert, default)
 
@@ -158,7 +160,7 @@ class ContainerSpec(BaseSpec):
 
         flatpak_yaml = container_yaml.get('flatpak', None)
         if not flatpak_yaml:
-            die(f"No flatpak section in '{path}'")
+            raise ValidationError(f"No flatpak section in '{path}'")
 
         self.flatpak = FlatpakSpec(f"{path}:flatpak", flatpak_yaml)
 
@@ -173,7 +175,7 @@ class ContainerSpec(BaseSpec):
         if self.compose.modules:
             set_attrs = [a for a in NEW_STYLE_ATTRS if getattr(self.flatpak, a) is not None]
             if set_attrs:
-                die(
+                raise ValidationError(
                     f"{path} is old style (compose:modules is set). Disallowed keys:\n" +
                     "\n".join(
                         f"    flatpak:{a.replace('_', '-')}" for a in set_attrs
@@ -182,7 +184,7 @@ class ContainerSpec(BaseSpec):
         else:
             unset_attrs = [a for a in NEW_STYLE_ATTRS if getattr(self.flatpak, a) is None]
             if unset_attrs:
-                die(
+                raise ValidationError(
                     f"{path} is old style (compose:modules is not set). Missing keys:\n" +
                     "\n".join(
                         f"    flatpak:{a.replace('_', '-')}" for a in unset_attrs
@@ -190,4 +192,4 @@ class ContainerSpec(BaseSpec):
                 )
 
         if self.compose.modules and self.flatpak.packages:
-            die("{path}: Both compose:modules (deprecated) and flatpak:packages are set")
+            raise ValidationError("{path}: Both compose:modules (deprecated) and flatpak:packages are set")

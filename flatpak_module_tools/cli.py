@@ -6,7 +6,7 @@ import click
 
 from .config import add_config_file, set_profile_name, get_profile
 from .container_builder import ContainerBuilder
-from .container_spec import ContainerSpec
+from .container_spec import ContainerSpec, ValidationError
 from .console_logging import ConsoleHandler
 from .flatpak_builder import (FLATPAK_METADATA_ANNOTATIONS,
                               FLATPAK_METADATA_BOTH,
@@ -15,6 +15,13 @@ from .installer import Installer
 from .module_builder import ModuleBuilder
 from .rpm_builder import RpmBuilder
 from .utils import die, info
+
+
+def make_container_spec(location):
+    try:
+        return ContainerSpec(location)
+    except ValidationError as e:
+        raise click.ClickException(str(e))
 
 
 @click.group()
@@ -67,7 +74,7 @@ def local_build(add_local_build, containerspec, flatpak_metadata, modulemd, stre
                                    modulemd=modulemd, stream=stream,
                                    local_builds=add_local_build)
     container_builder = ContainerBuilder(profile=get_profile(),
-                                         container_spec=ContainerSpec(containerspec),
+                                         container_spec=make_container_spec(containerspec),
                                          local_builds=add_local_build,
                                          from_local=True,
                                          flatpak_metadata=flatpak_metadata)
@@ -123,7 +130,7 @@ def build_container(add_local_build, from_local, flatpak_metadata, containerspec
     """Build a container from local or remote module"""
 
     container_builder = ContainerBuilder(profile=get_profile(),
-                                         container_spec=ContainerSpec(containerspec),
+                                         container_spec=make_container_spec(containerspec),
                                          local_builds=add_local_build,
                                          from_local=from_local,
                                          flatpak_metadata=flatpak_metadata)
@@ -160,7 +167,7 @@ def install(koji, path_or_url):
               help='Build all packages needed to build ')
 @click.argument('packages', nargs=-1, metavar="PKGS")
 def build_rpms_local(containerspec, packages: List[str], all_missing: bool):
-    spec = ContainerSpec(containerspec)
+    spec = make_container_spec(containerspec)
 
     manual_packages: List[str] = []
     manual_repos: List[Path] = []
