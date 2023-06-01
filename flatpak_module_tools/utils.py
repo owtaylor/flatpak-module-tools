@@ -48,9 +48,9 @@ def log_call(args):
     click.echo(' '.join(pipes.quote(str(a)) for a in args), err=True)
 
 
-def check_call(args, cwd=None):
+def check_call(args, cwd=None, stdout=None):
     log_call(args)
-    rv = subprocess.call(args, cwd=cwd)
+    rv = subprocess.call(args, cwd=cwd, stdout=stdout)
     if rv != 0:
         die(f"{args[0]} failed (exit status={rv})")
 

@@ -5,7 +5,7 @@ from typing import List
 import click
 
 from .config import add_config_file, set_profile_name, get_profile
-from .container_builder import ContainerBuilder
+from .container_builder import AssemblyOptions, ContainerBuilder
 from .container_spec import ContainerSpec, ValidationError
 from .console_logging import ConsoleHandler
 from .flatpak_builder import (FLATPAK_METADATA_ANNOTATIONS,
@@ -72,6 +72,75 @@ def build_container(flatpak_metadata, containerspec, install):
         installer = Installer(profile=get_profile())
         installer.set_source_path(tarfile)
         installer.install()
+
+
+@cli.command(name="assemble")
+@click.option('--containerspec', metavar='CONTAINER_YAML', default='./container.yaml',
+              help='Path to container.yaml - defaults to ./container.yaml')
+@click.option('--target', metavar='KOJI_TARGET',
+              help='Koji target to build against')
+@click.option('--nvr', metavar='NVR',
+              help='name-version-release for built container')
+@click.option('--runtime-nvr', metavar='NVR',
+              help='name-version-release for runtime to build againset (apps only)')
+@click.option('--runtime-repo', metavar='REPO_ID', type=int,
+              help='Koji repository ID for runtime packages')
+@click.option('--app-repo', metavar='REPO_ID', type=int,
+              help='Koji repository ID for application packages (apps only)')
+@click.option('--installroot', metavar='DIR', type=Path, default="/contents",
+              help="Location to install packages")
+@click.option('--workdir', metavar='DIR', type=Path, default="/tmp",
+              help="Location to create temporary files")
+@click.option('--resultdir', metavar='DIR', type=Path, default=".",
+              help="Location to write output")
+def assemble(
+    containerspec,
+    target: str | None,
+    nvr: str | None,
+    runtime_nvr: str | None,
+    runtime_repo: int | None,
+    app_repo: int | None,
+    installroot: Path,
+    workdir: Path,
+    resultdir: Path,
+):
+    """Run as root inside a container to create the OCI"""
+
+    container_spec = make_container_spec(containerspec)
+    container_builder = PackageContainerBuilder(
+        profile=get_profile(),
+        container_spec=container_spec,
+        flatpak_metadata=FLATPAK_METADATA_LABELS
+    )
+
+    if target:
+        if nvr or runtime_nvr or runtime_repo or app_repo:
+            die("--target cannot be specified together with "
+                "--nvr, --runtime-nvr, --runtime-repo, or --app-repo")
+
+        options = container_builder.assembly_options_from_target(target)
+    else:
+        if container_spec.flatpak.build_runtime:
+            if not nvr or not runtime_repo:
+                die("--nvr and --runtime-repo must be specified for runtimes")
+            if runtime_nvr or app_repo:
+                die("--nvr and --runtime-repo must not be specified for runtimes")
+
+            options = AssemblyOptions(
+                nvr=nvr, runtime_nvr=None, runtime_repo=runtime_repo, app_repo=None
+            )
+        else:
+            if not nvr or not runtime_nvr or not runtime_repo or not app_repo:
+                die("--nvr, --runtime-nvr, --runtime-repo, and --app-repo "
+                    "must be specified for applications")
+
+            options = AssemblyOptions(
+                nvr=nvr, runtime_nvr=runtime_nvr, runtime_repo=runtime_repo, app_repo=app_repo
+            )
+
+    container_builder.assemble(
+        options, installroot=installroot, workdir=workdir, resultdir=resultdir
+    )
 
 
 @cli.command()
