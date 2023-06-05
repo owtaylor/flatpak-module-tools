@@ -1,2 +1,59 @@
+[build-system]
+requires = ["setuptools", "setuptools_scm[toml]"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flatpak-module-tools"
+description = "Tools for creating and maintaining Flatpaks as Fedora modules"
+authors = [
+    {name = "Owen Taylor", email = "otaylor@redhat.com"},
+]
+license = {text = "MIT AND GPL-3.0-or-later"}
+dynamic = ["version"]
+
+dependencies = [
+    "click",
+    "pyyaml",
+]
+
+[project.urls]
+repository = "https://pagure.io/flatpak-module-tools"
+
+[project.scripts]
+flatpak-module = "flatpak_module_tools.cli:cli"
+flatpak-module-depchase = "flatpak_module_tools.depchase.cli:cli"
+
+[project.optional-dependencies]
+cli = [
+    "jinja2",
+    "koji",
+    "networkx",
+    "PyGObject",
+    "requests-toolbelt",
+    "rpm",
+    "solv"
+]
+
+tests = [
+    "flake8",
+    "PyGObject",
+    "pytest",
+    "pytest-cov"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.setuptools_scm]
+version_scheme = "post-release"
+write_to = "VERSION"
+write_to_template = "{version}"
+
+[tool.pytest.ini_options]
+addopts = "--cov=flatpak_module_tools --cov-report=term-missing --cov-report=html"
+testpaths = [
+    "tests",
+]
+
 [tool.ruff]
 line-length = 100

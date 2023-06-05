@@ -1,4 +1,6 @@
 include LICENSE
+include LICENSE.gplv3
+include VERSION
 include flatpak_module_tools/config.yaml
 include flatpak_module_tools/templates/*.j2
 include flatpak_module_tools/py.typed
