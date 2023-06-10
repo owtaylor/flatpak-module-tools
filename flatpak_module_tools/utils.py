@@ -46,7 +46,7 @@ def header(msg):
 
 def log_call(args):
     click.secho('running: ', fg='blue', bold=True, err=True, nl=False)
-    click.echo(' '.join(pipes.quote(str(a)) for a in args))
+    click.echo(' '.join(pipes.quote(str(a)) for a in args), err=True)
 
 
 def check_call(args, cwd=None):
