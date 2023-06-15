@@ -19,7 +19,7 @@ import hashlib
 import json
 import logging
 import os
-from typing import Any, Callable, Dict, Iterable, List, Sequence
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 import re
 import shlex
 import shutil
@@ -327,7 +327,7 @@ class BaseFlatpakSourceInfo(ABC):
 
 
 class ModuleFlatpakSourceInfo(BaseFlatpakSourceInfo):
-    def __init__(self, spec: FlatpakSpec, modules, base_module, profile: str | None = None):
+    def __init__(self, spec: FlatpakSpec, modules, base_module, profile: Optional[str] = None):
         self.spec = spec
         self.modules = modules
         self.base_module = base_module
@@ -503,12 +503,12 @@ class ModuleFlatpakSourceInfo(BaseFlatpakSourceInfo):
 
 class FlatpakSourceInfo(ModuleFlatpakSourceInfo):
     """Compatibility wrapper around ModuleFlatpakSourceInfo"""
-    def __init__(self, flatpak_yaml: str, modules, base_module, profile: str | None = None):
+    def __init__(self, flatpak_yaml: str, modules, base_module, profile: Optional[str] = None):
         super().__init__(FlatpakSpec("flatpak", flatpak_yaml), modules, base_module, profile)
 
 
 class PackageFlatpakSourceInfo(BaseFlatpakSourceInfo):
-    def __init__(self, spec: FlatpakSpec, runtime_info: RuntimeInfo | None):
+    def __init__(self, spec: FlatpakSpec, runtime_info: Optional[RuntimeInfo]):
         if spec.build_runtime and runtime_info:
             raise RuntimeError("runtime_info can only be set for an application")
         if not spec.build_runtime and not runtime_info:
@@ -541,9 +541,9 @@ class PackageFlatpakSourceInfo(BaseFlatpakSourceInfo):
 class FlatpakBuilder:
     def __init__(
             self, source: BaseFlatpakSourceInfo, workdir, root,
-            parse_manifest: Callable[[Iterable[str]], Sequence[dict]] | None = None,
+            parse_manifest: Optional[Callable[[Iterable[str]], Sequence[dict]]] = None,
             flatpak_metadata: str = FLATPAK_METADATA_ANNOTATIONS,
-            oci_arch: str | None = None
+            oci_arch: Optional[str] = None
     ):
         self.source = source
         self.workdir = workdir

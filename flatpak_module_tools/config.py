@@ -1,5 +1,6 @@
 from functools import cached_property
 import os
+from typing import Optional
 
 import koji
 import pkg_resources
@@ -41,8 +42,8 @@ def get_profile() -> "ProfileConfig":
 
 
 class ProfileConfig:
-    koji_config: str | None
-    koji_profile: str | None
+    koji_config: Optional[str]
+    koji_profile: Optional[str]
 
     config_keys = [
         'base_repo_url',

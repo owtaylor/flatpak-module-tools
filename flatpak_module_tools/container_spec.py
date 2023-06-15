@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Any, List, Literal, overload
+from typing import Any, List, Literal, overload, Optional, Union
 import yaml
 
 
@@ -42,12 +42,12 @@ class BaseSpec:
         ...
 
     @overload
-    def _get_str(self, key: str, default: None) -> str | None:
+    def _get_str(self, key: str, default: None) -> Optional[str]:
         ...
 
     def _get_str(
-            self, key: str, default: Literal[Option.REQUIRED] | str | None = None
-    ) -> str | None:
+            self, key: str, default: Union[Literal[Option.REQUIRED], str, None] = None
+    ) -> Optional[str]:
         def type_convert(val):
             if isinstance(val, (str, int, float)):
                 return str(val)
@@ -65,10 +65,12 @@ class BaseSpec:
         ...
 
     @overload
-    def _get_bool(self, key: str, default: None) -> bool | None:
+    def _get_bool(self, key: str, default: None) -> Optional[bool]:
         ...
 
-    def _get_bool(self, key: str, default: Literal[Option.REQUIRED] | bool | None) -> bool | None:
+    def _get_bool(
+            self, key: str, default: Union[Literal[Option.REQUIRED], bool, None]
+    ) -> Optional[bool]:
         def type_convert(val):
             if isinstance(val, bool):
                 return val
@@ -87,13 +89,13 @@ class BaseSpec:
         ...
 
     @overload
-    def _get_str_list(self, key: str, default: None, allow_scalar=False) -> List[str] | None:
+    def _get_str_list(self, key: str, default: None, allow_scalar=False) -> Optional[List[str]]:
         ...
 
     def _get_str_list(
-            self, key: str, default: Literal[Option.REQUIRED] | List[str] | None,
+            self, key: str, default: Union[Literal[Option.REQUIRED], List[str], None],
             allow_scalar=False
-    ) -> List[str] | None:
+    ) -> Optional[List[str]]:
         def type_convert(val):
             if isinstance(val, List) and all(isinstance(v, (int, float, str)) for v in val):
                 return [

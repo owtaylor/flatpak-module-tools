@@ -6,7 +6,7 @@ import pipes
 import re
 import subprocess
 import sys
-from typing import NoReturn
+from typing import Optional, NoReturn
 
 
 def error(msg):
@@ -155,7 +155,7 @@ def _get_rpm_arch():
     ).strip()
 
 
-def get_arch(oci_arch: str | None = None):
+def get_arch(oci_arch: Optional[str] = None):
     if oci_arch:
         return ARCHES[oci_arch]
     else:
