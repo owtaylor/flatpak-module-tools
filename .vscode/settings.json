@@ -1,0 +1,19 @@
+{
+    "editor.rulers": [
+        100
+    ],
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/*.pyc": true,
+        "htmlcov": true,
+        ".tox": true,
+        ".venv*": true
+    },
+    "python.analysis.typeCheckingMode": "basic",
+    "python.linting.flake8Enabled": true,
+    "python.linting.enabled": true
+    "python.testing.pytestArgs": [
+        "tests"
+    ],
+    "python.testing.pytestEnabled": true,
+}

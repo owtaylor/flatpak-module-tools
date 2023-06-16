@@ -1,0 +1,7 @@
+{
+    "recommendations": [
+        "bungcip.better-toml",
+        "ms-python.flake8",
+        "timonwong.shellcheck"
+    ]
+}
