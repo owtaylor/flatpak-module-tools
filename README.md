@@ -4,58 +4,6 @@ flatpak-module-tools is a set of command line tools (all accessed via a single
 'flatpak-module' executable) for operations related to maintaining Flatpak
 applications and runtimes as Fedora modules.
 
-flatpak-module local-build
-==========================
-The `flatpak-module local-build` builds the module locally, then creates a flatpak of it.
-It is equivalent to running `flatpak-module build-module; flatpak-module build-container --source=local`
-
-Usage:
-    flatpak-module [global options] local-build
-	     [--add-local-build=NAME:STREAM[:VERSION]]
-		 [--modulemd=mymodule.yaml]
-		 [--containerspec=somedir/container.yaml]
-		 [--flatpak-metadata=labels/annotations/both]
-		 [--stream=STREAM]
-	     [--install]
-
-**--add-local-build**
-include a local MBS module build as a source for the build
-
-**--modulemd**
-modulemd file to build. If in a git repository, defaults to <reponame>.yaml
-
-**--containerspec**
-path to container.yaml - defaults to `./container.yaml`
-
-**--flatpak-metadata**
-how flatpak metadata should be stored. Defaults to `both`. Using
-only labels require Flatpak >= 1.6.
-
-**--stream**
-Module stream for the build. If in a git repository, defaults to `<branchname>`
-
-**--install**
-automatically install the resulting Flatpak or runtime for the current user
-
-flatpak-module build-module
-===========================
-A wrapper around `mbs-manager build_module_locally`.
-
-Usage:
-    flatpak-module [global options] build-module
-	     [--add-local-build=NAME:STREAM[:VERSION]]
-		 [--modulemd=mymodule.yaml]
-		 [--stream=STREAM]
-
-**--add-local-build**
-include a local MBS module build  as a source for the build
-
-**--modulemd**
-modulemd file to build. If in a git repository, defaults to `<reponame>.yaml`
-
-**--stream**
-Module stream for the build. If in a git repository, defaults to `<branchname>`
-
 flatpak-module build-container
 ==============================
 Creates a OCI container of an Flatpak application or runtime from a module build.
