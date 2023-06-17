@@ -38,7 +38,8 @@ tests = [
     "flake8",
     "PyGObject",
     "pytest",
-    "pytest-cov"
+    "pytest-cov",
+    "rpm",
 ]
 
 [tool.setuptools.packages.find]
