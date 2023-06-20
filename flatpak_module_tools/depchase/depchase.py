@@ -97,8 +97,8 @@ FullInfo = collections.namedtuple('FullInfo',
                                   ['name', 'rpm', 'srpm', 'repo', 'requires'])
 
 
-def make_pool(release: str, arch: Arch, local_repos: List[str]) -> solv.Pool:
-    return setup_pool(arch, repodata.setup_repos(release, arch, local_repos))
+def make_pool(tag: str, arch: Arch, local_repos: List[str]) -> solv.Pool:
+    return setup_pool(arch, repodata.setup_repos(tag, arch, local_repos))
 
 
 _DEFAULT_HINTS = ("glibc-minimal-langpack",)

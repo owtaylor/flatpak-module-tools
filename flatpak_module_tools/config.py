@@ -72,22 +72,6 @@ class ProfileConfig:
             if getattr(self, k) is None:
                 setattr(self, k, getattr(other, k))
 
-    def get_base_repo_url(self, release, arch=None):
-        if arch is None:
-            arch = get_arch()
-
-        result = getattr(self, "base_repo_url") \
-            .replace("$release", release) \
-            .replace("$basearch", get_arch().rpm)
-
-        if not result.endswith("/"):
-            result += "/"
-
-        return result
-
-    def get_release_name(self, release):
-        return getattr(self, "release_name").replace("$release", release)
-
     def release_from_runtime_version(self, runtime_version: str):
         return re.sub(r'^[^\d]+', '', runtime_version)
 

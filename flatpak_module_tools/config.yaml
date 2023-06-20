@@ -1,8 +1,7 @@
 profiles:
     __default__:
-        koji_config: /etc/koji.conf
-        release_name: f$release
-        rpm_koji_target: f$release-candidate
+        koji_config: null
+        rpm_koji_target: f$release-flatpak-app
         flatpak_koji_target: f$release-flatpak-candidate
     production:
         koji_profile: koji

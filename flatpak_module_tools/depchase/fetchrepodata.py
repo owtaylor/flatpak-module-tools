@@ -12,6 +12,7 @@ from urllib.parse import urljoin
 
 import click
 from xml.etree import ElementTree as ET
+import koji
 import requests
 from requests_toolbelt.downloadutils.tee import tee_to_file
 
@@ -64,13 +65,14 @@ def _define_repo(remote_repo_url: str, local_cache_name: str, arch: Arch):
 
 
 class DistroPaths:
-    def __init__(self, release: str, arch: Arch):
+    def __init__(self, tag: str, arch: Arch):
         profile = get_profile()
 
+        pathinfo = koji.PathInfo(topdir=profile.koji_options['topurl'])
+        baseurl = pathinfo.repo("latest", tag) + "/" + arch.rpm + "/"
+
         self.repo_paths_by_name = {
-            "base": _define_repo(profile.get_base_repo_url(release=release, arch=arch),
-                                 profile.get_release_name(release=release) + "--base",
-                                 arch)
+            tag: _define_repo(baseurl, tag, arch)
         }
 
 
@@ -238,10 +240,10 @@ def _read_packages(repo_paths):
     return package_dicts
 
 
-def download_repo_metadata(release, arch, refresh: Refresh):
+def download_repo_metadata(tag, arch, refresh: Refresh):
     """Downloads the latest repo metadata"""
 
-    paths = _get_distro_paths(release, arch)
+    paths = _get_distro_paths(tag, arch)
     for repo_definition in paths.repo_paths_by_name.values():
         _download_metadata_files(repo_definition, refresh)
 
@@ -252,8 +254,8 @@ class LocalMetadataCache:
     repo_cache_paths: Dict[str, str]
 
 
-def load_cached_repodata(release: str, arch: Arch):
-    paths = _get_distro_paths(release, arch)
+def load_cached_repodata(tag: str, arch: Arch):
+    paths = _get_distro_paths(tag, arch)
 
     # Sanity-check that all the repos we expect exist
     for repo_name, repo_path in paths.repo_paths_by_name.items():
