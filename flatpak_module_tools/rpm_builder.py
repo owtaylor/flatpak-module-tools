@@ -4,13 +4,14 @@ import json
 from pathlib import Path
 import subprocess
 from textwrap import dedent
-from typing import Collection, List
+from typing import Collection, List, Optional
 
 import click
 import koji
 import networkx
 
 from .build_scheduler import MockBuildScheduler
+from .config import ProfileConfig
 from .container_spec import ContainerSpec
 from .console_logging import Status
 from .mock import make_mock_cfg
@@ -92,41 +93,42 @@ def check_for_cycles(build_after, build_after_details):
 
 
 class RpmBuilder:
-    def __init__(self, *, profile, container_spec: ContainerSpec, target: str | None = None):
+    def __init__(self, *, profile: ProfileConfig, container_spec: ContainerSpec, target: str):
         self.profile = profile
         self._koji_session = None
         self.flatpak_spec = container_spec.flatpak
         self.repo_path = Path.cwd() / get_arch().rpm / "rpms"
         self.workdir = Path.cwd() / get_arch().rpm / "work"
 
-        assert self.flatpak_spec.runtime_version
-        release = self.profile.release_from_runtime_version(self.flatpak_spec.runtime_version)
-
-        target = self.profile.get_rpm_koji_target(release)
-        assert isinstance(target, str)
-        self.rpm_koji_target = target
-
-        target = self.profile.get_flatpak_koji_target(release)
-        assert isinstance(target, str)
-        self.flatpak_koji_target = target
+        self.container_target = target
 
     @cached_property
-    def _flatpak_target_info(self):
-        return self.profile.koji_session.getBuildTarget(self.flatpak_koji_target)
+    def _container_target_info(self):
+        return self.profile.koji_session.getBuildTarget(self.container_target)
 
     @cached_property
-    def _rpm_target_info(self):
-        return self.profile.koji_session.getBuildTarget(self.rpm_koji_target)
+    def _container_build_config(self):
+        return self.profile.koji_session.getBuildConfig(
+            self._container_target_info["build_tag_name"]
+        )
+
+    def _get_container_build_config_extra(self, key):
+        build_config = self._container_build_config
+        value: Optional[str] = build_config['extra'].get(key)
+        if value is None:
+            die(f"{build_config['name']} doesn't have {key} set in extra data")
+
+        return value
 
     @cached_property
     def _image_archive(self):
         session = self.profile.koji_session
-        dest_tag = self._flatpak_target_info["dest_tag_name"]
+        runtime_tag = self._get_container_build_config_extra('flatpak.runtime_tag')
         tagged_builds = session.listTagged(
-            dest_tag, package=self.flatpak_spec.runtime_name, latest=True, inherit=True,
+            runtime_tag, package=self.flatpak_spec.runtime_name, latest=True, inherit=True,
         )
         if len(tagged_builds) == 0:
-            die(f"Can't find build for {self.flatpak_spec.runtime_name} in {dest_tag}")
+            die(f"Can't find build for {self.flatpak_spec.runtime_name} in {runtime_tag}")
 
         latest_build = tagged_builds[0]
 
@@ -156,6 +158,15 @@ class RpmBuilder:
 
         return RuntimeInfo(runtime_id=runtime_id, sdk_id=sdk_id, version=runtime_version)
 
+    @property
+    def _release(self):
+        return self.profile.release_from_runtime_version(self.runtime_info.version)
+
+    @cached_property
+    def _rpm_target_info(self):
+        rpm_target = self.profile.get_rpm_koji_target(self._release)
+        return self.profile.koji_session.getBuildTarget(rpm_target)
+
     def _run_depchase(self, cmd: str, args: List[str]):
         packages_file = self.workdir / \
               f"{self.flatpak_spec.runtime_name}-{self.flatpak_spec.runtime_version}.packages"
@@ -163,9 +174,14 @@ class RpmBuilder:
             for pkg in self.runtime_packages:
                 print(pkg, file=f)
 
+        arch = get_arch()
+        rpm_build_tag = self._rpm_target_info["build_tag_name"]
         return subprocess.check_output(
             ["flatpak-module-depchase",
-                "--local-repo=local:x86_64/rpms",
+                f"--profile={self.profile.name}",
+                f"--arch={arch.oci}",
+                f"--tag={rpm_build_tag}",
+                f"--local-repo=local:{arch.rpm}/rpms",
                 cmd,
                 "--preinstalled", packages_file] + args,
             encoding="utf-8"
@@ -233,13 +249,12 @@ class RpmBuilder:
         return to_rebuild
 
     def _get_latest_builds(self, to_build: Collection[str]):
-        session = self.profile.koji_session
-        build_tag = self._rpm_target_info["build_tag_name"]
-
+        session = self.profile.source_koji_session
+        source_tag = self.profile.get_source_koji_tag(self._release)
         with Status("Getting latest builds from koji"):
             return {
                 package: session.listTagged(
-                                build_tag, package=package, inherit=True, latest=True
+                                source_tag, package=package, inherit=True, latest=True
                             )[0]
                 for package in sorted(to_build)
             }
@@ -260,7 +275,7 @@ class RpmBuilder:
         return f"{n}-{v}-{r}"
 
     def get_build_requires(self, build_id):
-        session = self.profile.koji_session
+        session = self.profile.source_koji_session
         latest_src_rpm = session.listRPMs(build_id, arches=["src"])[0]
         result: List[str] = []
 
@@ -278,25 +293,41 @@ class RpmBuilder:
     def get_repos(self, *, for_container: bool):
         repos: List[str] = []
 
+        pathinfo = koji.PathInfo(topdir=self.profile.koji_options['topurl'])
+
+        def baseurl(tag):
+            return pathinfo.repo("latest", tag) + "/$basearch/"
+
         if for_container:
-            flatpak_build_tag = self._flatpak_target_info["build_tag_name"]
+            runtime_package_tag = \
+                self._get_container_build_config_extra("flatpak.runtime_package_tag")
+
             repos.append(dedent(f"""\
-                [{flatpak_build_tag}]
-                name={flatpak_build_tag}
-                baseurl=https://kojipkgs.fedoraproject.org/repos/{flatpak_build_tag}/latest/$basearch/
+                [{runtime_package_tag}]
+                name={runtime_package_tag}
+                baseurl={baseurl(runtime_package_tag)}
                 priority=10
                 enabled=1
                 skip_if_unavailable=False
                 includepkgs={",".join(sorted(self.runtime_packages))}
             """))
 
-        if not for_container:
+            app_package_tag = self._get_container_build_config_extra("flatpak.app_package_tag")
+            repos.append(dedent(f"""\
+                [{app_package_tag}]
+                name={app_package_tag}
+                baseurl={baseurl(app_package_tag)}
+                priority=20
+                enabled=1
+                skip_if_unavailable=False
+            """))
+        else:
             rpm_build_tag = self._rpm_target_info["build_tag_name"]
             repos.append(dedent(f"""\
                 [{rpm_build_tag}]
                 name={rpm_build_tag}
-                baseurl=https://kojipkgs.fedoraproject.org/repos/{rpm_build_tag}/latest/$basearch/
-                priority=10
+                baseurl={baseurl(rpm_build_tag)}
+                priority=20
                 enabled=1
                 skip_if_unavailable=False
             """))
@@ -304,7 +335,7 @@ class RpmBuilder:
         repos.append(dedent(f"""\
             [local]
             name=local
-            priority=20
+            priority=0
             baseurl={self.repo_path}
             enabled=1
             skip_if_unavailable=False
@@ -382,13 +413,9 @@ class RpmBuilder:
         if check_for_cycles(build_after, build_after_details):
             return
 
-        # FIXME: workaround until we have an appropriate build tag with the right @build
-        FLATPAK_RPM_MACROS = "https://kojipkgs.fedoraproject.org//work/tasks/6924/100776924/" + \
-            "flatpak-rpm-macros-39-1.fc39.x86_64.rpm"
-
         mock_cfg = make_mock_cfg(
             arch=get_arch(),
-            chroot_setup_cmd=f"install @build {FLATPAK_RPM_MACROS}",
+            chroot_setup_cmd="install @build",
             releasever=self.profile.release_from_runtime_version(self.runtime_info.version),
             repos=self.get_repos(for_container=False),
             root_cache_enable=False,

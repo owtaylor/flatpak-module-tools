@@ -280,7 +280,7 @@ class MockBuildScheduler(BuildScheduler):
         workdir.mkdir(parents=True, exist_ok=True)
 
         if isinstance(item, MockBuildItemKoji):
-            topurl = self.profile.koji_options["topurl"]
+            topurl = self.profile.source_koji_options["topurl"]
             path_info = koji.PathInfo(topdir=topurl)
             name, version, release = item.nvr.rsplit("-", 2)
 

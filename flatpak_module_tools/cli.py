@@ -1,6 +1,6 @@
 import logging
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import click
 
@@ -16,11 +16,27 @@ from .rpm_builder import RpmBuilder
 from .utils import die, info
 
 
-def make_container_spec(location):
+def make_container_spec(location: str):
     try:
         return ContainerSpec(location)
     except ValidationError as e:
         raise click.ClickException(str(e))
+
+
+def get_target(container_spec: ContainerSpec,
+               target_option: Optional[str]) -> str:
+    if target_option:
+        return target_option
+    else:
+        if container_spec.flatpak.runtime_version is None:
+            die("--target must be specified "
+                "if flatpak:runtime_version is not set in container.yaml")
+        profile = get_profile()
+        release = profile.release_from_runtime_version(
+            container_spec.flatpak.runtime_version
+        )
+
+        return profile.get_flatpak_koji_target(release)
 
 
 @click.group()
@@ -58,15 +74,20 @@ def cli(verbose, config, profile):
               help='How to store Flatpak metadata in the container')
 @click.option('--containerspec', metavar='CONTAINER_YAML', default='./container.yaml',
               help='Path to container.yaml - defaults to ./container.yaml')
+@click.option('--target', metavar='KOJI_TARGET',
+              help='Koji target to build against. Determined from runtime_version if missing.')
 @click.option('--install', is_flag=True,
               help='automatically install Flatpak for the current user')
-def build_container(flatpak_metadata, containerspec, install):
+def build_container(flatpak_metadata, containerspec, target, install):
     """Build a container from local or remote module"""
 
+    container_spec = make_container_spec(containerspec)
+    target = get_target(container_spec, target)
+
     container_builder = ContainerBuilder(profile=get_profile(),
-                                         container_spec=make_container_spec(containerspec),
+                                         container_spec=container_spec,
                                          flatpak_metadata=flatpak_metadata)
-    tarfile = container_builder.build()
+    tarfile = container_builder.build(target)
 
     if install:
         installer = Installer(profile=get_profile())
@@ -78,7 +99,7 @@ def build_container(flatpak_metadata, containerspec, install):
 @click.option('--containerspec', metavar='CONTAINER_YAML', default='./container.yaml',
               help='Path to container.yaml - defaults to ./container.yaml')
 @click.option('--target', metavar='KOJI_TARGET',
-              help='Koji target to build against')
+              help='Koji target to build against. Determined from runtime_version if missing.')
 @click.option('--nvr', metavar='NVR',
               help='name-version-release for built container')
 @click.option('--runtime-nvr', metavar='NVR',
@@ -113,13 +134,11 @@ def assemble(
         flatpak_metadata=FLATPAK_METADATA_LABELS
     )
 
-    if target:
-        if nvr or runtime_nvr or runtime_repo or app_repo:
+    if nvr or runtime_nvr or runtime_repo or app_repo:
+        if target:
             die("--target cannot be specified together with "
                 "--nvr, --runtime-nvr, --runtime-repo, or --app-repo")
 
-        options = container_builder.assembly_options_from_target(target)
-    else:
         if container_spec.flatpak.build_runtime:
             if not nvr or not runtime_repo:
                 die("--nvr and --runtime-repo must be specified for runtimes")
@@ -137,6 +156,9 @@ def assemble(
             options = AssemblyOptions(
                 nvr=nvr, runtime_nvr=runtime_nvr, runtime_repo=runtime_repo, app_repo=app_repo
             )
+    else:
+        target = get_target(container_spec, target)
+        options = container_builder.assembly_options_from_target(target)
 
     container_builder.assemble(
         options, installroot=installroot, workdir=workdir, resultdir=resultdir
@@ -164,11 +186,18 @@ def install(koji, path_or_url):
 @cli.command()
 @click.option('--containerspec', metavar='CONTAINER_YAML', default='./container.yaml',
               help='path to container.yaml - defaults to ./container.yaml')
+@click.option('--target', metavar='KOJI_TARGET',
+              help=('Koji target for Flatpak **container** building. '
+                    'Determined from runtime_version if missing.'))
 @click.option('--all-missing', is_flag=True,
               help='Build all packages needed to build ')
 @click.argument('packages', nargs=-1, metavar="PKGS")
-def build_rpms_local(containerspec, packages: List[str], all_missing: bool):
+def build_rpms_local(
+    containerspec, target: Optional[str],
+    packages: List[str], all_missing: bool
+):
     spec = make_container_spec(containerspec)
+    target = get_target(spec, target)
 
     manual_packages: List[str] = []
     manual_repos: List[Path] = []
@@ -179,7 +208,7 @@ def build_rpms_local(containerspec, packages: List[str], all_missing: bool):
         else:
             manual_packages.append(pkg)
 
-    builder = RpmBuilder(profile=get_profile(), container_spec=spec)
+    builder = RpmBuilder(profile=get_profile(), container_spec=spec, target=target)
     if packages is [] and not all_missing:
         info("Nothing to rebuild, specify packages or --all-missing")
     else:

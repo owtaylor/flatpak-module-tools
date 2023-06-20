@@ -7,8 +7,6 @@ import pkg_resources
 import re
 import yaml
 
-from .utils import get_arch
-
 
 _extra_config_files = []
 
@@ -44,14 +42,20 @@ def get_profile() -> "ProfileConfig":
 class ProfileConfig:
     koji_config: Optional[str]
     koji_profile: Optional[str]
+    rpm_koji_target: str
+    flatpak_koji_target: str
+    source_koji_config: Optional[str]
+    source_koji_profile: Optional[str]
+    source_koji_tag: str
 
     config_keys = [
-        'base_repo_url',
-        'release_name',
         'koji_config',
         'koji_profile',
         'rpm_koji_target',
         'flatpak_koji_target',
+        'source_koji_config',
+        'source_koji_profile',
+        'source_koji_tag',
     ]
 
     def __init__(self, name):
@@ -81,6 +85,9 @@ class ProfileConfig:
     def get_flatpak_koji_target(self, release):
         return getattr(self, "flatpak_koji_target").replace("$release", release)
 
+    def get_source_koji_tag(self, release):
+        return getattr(self, "source_koji_tag").replace("$release", release)
+
     @cached_property
     def koji_options(self):
         assert self.koji_profile is not None
@@ -89,9 +96,27 @@ class ProfileConfig:
         )
 
     @cached_property
-    def koji_session(self):
+    def koji_session(self) -> koji.ClientSession:
         session_opts = koji.grab_session_options(self.koji_options)
         return koji.ClientSession(self.koji_options['server'], session_opts)
+
+    @cached_property
+    def source_koji_options(self):
+        if self.source_koji_config is None and self.source_koji_profile is None:
+            return self.koji_options
+
+        assert self.source_koji_profile
+        return koji.read_config(
+            profile_name=self.source_koji_profile, user_config=self.source_koji_config
+        )
+
+    @cached_property
+    def source_koji_session(self) -> koji.ClientSession:
+        if self.source_koji_config is None and self.source_koji_profile is None:
+            return self.koji_session
+
+        session_opts = koji.grab_session_options(self.source_koji_options)
+        return koji.ClientSession(self.source_koji_options['server'], session_opts)
 
 
 class Config:

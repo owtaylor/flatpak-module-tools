@@ -73,12 +73,20 @@ A config file looks like:
 ``` yaml
 profiles:
     profile_name:
-        base_repo_url: http://kojipkgs.fedoraproject.org/repos/f{platform}/latest/$basearch
-        koji_config: /etc/module-build-service/koji.conf
+		# Koji config file; leave blank to use standard files in /etc and ~/.koji
+        koji_config: null
         koji_profile: koji
-        mbs_config_file: /etc/module-build-service/config.py
-        mbs_config_section: DevConfiguration
-        platform_stream_pattern: '^f(\d+)$'
+		# Different koji instance used for sources when rebuilding RPMs; if both
+		# are unset, koji_config/koji_profile is used.
+		source_koji_config: null
+		source_koji_profile: null
+		# Target used to build Flatpak application RPMs (prefix=/app rebuilds)
+        rpm_koji_target: f$release-flatpak-app
+		# Target used to build Flatpak containers
+        flatpak_koji_target: f$release-flatpak-candidate
+		# Tag used to get source for rebuilding RPMs locally;; refers to
+		# source_koji_config/source_koji_profile if those are set.
+        source_koji_tag: f$release-build
 ```
 
 (normally, it won't be necessary to set all these values.) The profile name `__default__` provides defaults that

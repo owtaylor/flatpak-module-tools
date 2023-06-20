@@ -3,14 +3,8 @@ profiles:
         koji_config: null
         rpm_koji_target: f$release-flatpak-app
         flatpak_koji_target: f$release-flatpak-candidate
+        source_koji_tag: f$release-build
     production:
         koji_profile: koji
-        base_repo_url: http://kojipkgs.fedoraproject.org/repos/f$release-build/latest/$basearch
-        release_name: 'f$release-app'
-    production_runtime:
-        koji_profile: koji
-        base_repo_url: http://kojipkgs.fedoraproject.org/repos/f$release-flatpak-runtime-build/latest/$basearch
-        release_name: 'f$release-flatpak-runtime'
     staging:
         koji_profile: staging
-        base_repo_url: http://kojipkgs.stg.fedoraproject.org/repos/f$release-build/latest/$basearch
