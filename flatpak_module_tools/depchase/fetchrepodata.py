@@ -11,7 +11,7 @@ from typing import Dict
 from urllib.parse import urljoin
 
 import click
-from lxml import etree
+from xml.etree import ElementTree as ET
 import requests
 from requests_toolbelt.downloadutils.tee import tee_to_file
 
@@ -83,7 +83,7 @@ METADATA_SECTIONS = ("filelists", "primary")
 _REPOMD_XML_NAMESPACE = {"rpm": "http://linux.duke.edu/metadata/repo"}
 
 
-def _read_repomd_location(repomd_xml, section):
+def _read_repomd_location(repomd_xml: ET.ElementTree, section):
     location = repomd_xml.find(f"rpm:data[@type='{section}']/rpm:location",
                                _REPOMD_XML_NAMESPACE)
     if location is not None:
@@ -149,7 +149,7 @@ def _download_metadata_files(repo_paths, refresh):
             f.write(response.content)
         info(f"  Cached metadata in {repomd_filename}")
 
-    repomd_xml = etree.parse(repomd_filename, parser=None)
+    repomd_xml = ET.parse(repomd_filename, parser=None)
 
     files_to_fetch = set()
     for section in METADATA_SECTIONS:
@@ -176,7 +176,7 @@ def _read_packages(repo_paths):
     log.debug(f"_read_packages({repo_paths!r})")
     metadata_dir = os.path.join(repo_paths.local_cache_path)
     repomd_fname = os.path.join(metadata_dir, "repodata", "repomd.xml")
-    repomd_xml = etree.parse(repomd_fname, parser=None)
+    repomd_xml = ET.parse(repomd_fname, parser=None)
     repo_relative_primary = _read_repomd_location(repomd_xml, "primary")
     assert repo_relative_primary is not None
     repo_primary_fname = os.path.join(metadata_dir, repo_relative_primary)
@@ -184,10 +184,10 @@ def _read_packages(repo_paths):
     package_dicts = []
 
     with gzip.open(repo_primary_fname, "rb") as primary_xml_gz:
-        primary_xml = etree.fromstring(primary_xml_gz.read(), parser=None)
+        primary_xml = ET.fromstring(primary_xml_gz.read(), parser=None)
 
-        # the default namespace makes accessing things really annoying
-        XMLNS = f"{{{primary_xml.nsmap[None]}}}"
+        # the default namespace makes accessing things annoying
+        XMLNS = "{http://linux.duke.edu/metadata/common}"
 
         for pkg in primary_xml.iter(XMLNS + 'package'):
             pkg_dct = {}
