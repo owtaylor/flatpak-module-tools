@@ -389,7 +389,6 @@ class RpmBuilder:
         mock_cfg = make_mock_cfg(
             arch=get_arch(),
             chroot_setup_cmd=f"install @build {FLATPAK_RPM_MACROS}",
-            includepkgs=(),
             releasever=self.profile.release_from_runtime_version(self.runtime_info.version),
             repos=self.get_repos(for_container=False),
             root_cache_enable=False,

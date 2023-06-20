@@ -9,7 +9,6 @@ def make_mock_cfg(
         *,
         arch: Arch,
         chroot_setup_cmd: str,
-        includepkgs: Iterable[str],
         releasever: str,
         repos: Iterable[str],
         root_cache_enable: bool,
@@ -23,7 +22,6 @@ def make_mock_cfg(
     return template.render(
         arch=arch.rpm,
         chroot_setup_cmd=chroot_setup_cmd,
-        includepkgs=includepkgs,
         releasever=releasever,
         repos=repos,
         root_cache_enable=root_cache_enable,
