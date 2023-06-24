@@ -1,6 +1,4 @@
 from abc import ABC, abstractmethod
-from configparser import RawConfigParser
-from dataclasses import dataclass
 import json
 from pathlib import Path
 import os
@@ -8,20 +6,17 @@ import shlex
 import shutil
 import subprocess
 from textwrap import dedent
-from typing import Any, List, Optional, Sequence, Union
+from typing import List, Optional, Sequence, Union
 
-import koji
-
-from flatpak_module_tools.mock import make_mock_cfg
-from flatpak_module_tools.rpm_utils import create_rpm_manifest
-
-from .container_spec import ContainerSpec
+from .build_context import BuildContext
 from .flatpak_builder import (
     FlatpakBuilder,
     PackageFlatpakSourceInfo, FLATPAK_METADATA_ANNOTATIONS
 )
+from .mock import make_mock_cfg
+from .rpm_utils import create_rpm_manifest
 from .utils import (
-    check_call, die, get_arch, log_call, header, important, info, RuntimeInfo
+    check_call, die, get_arch, log_call, header, important, info
 )
 
 
@@ -142,205 +137,26 @@ class InnerExcutor(BuildExecutor):
             f.write(contents)
 
     def check_call(self, cmd, *, cwd=None):
-        check_call(cmd)
+        check_call(cmd, cwd=cwd)
 
     def popen(self, cmd, *, stdout=None, cwd=None):
         return subprocess.Popen(cmd, stdout=stdout, cwd=cwd)
 
 
-@dataclass
-class AssemblyOptions:
-    nvr: str
-    runtime_nvr: str | None
-    runtime_repo: int
-    app_repo: int | None
-
-
 class ContainerBuilder:
-    def __init__(self, profile, container_spec: ContainerSpec, local_repo=None,
+    def __init__(self, context: BuildContext,
                  flatpak_metadata=FLATPAK_METADATA_ANNOTATIONS):
-        self.profile = profile
-        self.local_repo = None
+        self.context = context
         self.flatpak_metadata = flatpak_metadata
 
-        self.container_spec = container_spec
-
     def _add_labels_to_builder(self, builder, name, version, release):
-        name_label = self.container_spec.flatpak.name or name
-        component_label = self.container_spec.flatpak.component or name
+        name_label = self.context.flatpak_spec.name or name
+        component_label = self.context.flatpak_spec.component or name
 
         builder.add_labels({'name': name_label,
                             'com.redhat.component': component_label,
                             'version': version,
                             'release': release})
-
-    def _get_build_config_extra(self, build_config, key):
-        result = build_config['extra'].get(key)
-        if result is None:
-            die(
-                f"Build tag '{build_config['name']}' doesn't have {key} set"
-            )
-
-        return result
-
-    def _get_repo_id(self, tag):
-        repo_info = self.profile.koji_session.getRepo(tag)
-        return repo_info['id']
-
-    def _runtime_assembly_options_from_build_tag(self, build_tag: str):
-        session = self.profile.koji_session
-        build_config = session.getBuildConfig(build_tag)
-
-        runtime_package_tag = self._get_build_config_extra(
-            build_config, 'flatpak.runtime_package_tag'
-        )
-        runtime_repo = session.getRepo(runtime_package_tag)
-
-        name = self.container_spec.flatpak.component or self.container_spec.flatpak.name
-        version = self.container_spec.flatpak.branch
-        release = 1
-
-        return AssemblyOptions(
-            nvr=f"{name}-{version}-{release}",
-            runtime_nvr=None,
-            runtime_repo=runtime_repo['id'],
-            app_repo=None,
-        )
-
-    def _app_assembly_options_from_build_tag(self, build_tag: str):
-        session = self.profile.koji_session
-        build_config = session.getBuildConfig(build_tag)
-
-        runtime_tag = self._get_build_config_extra(build_config, 'flatpak.runtime_tag')
-        runtime_package_tag = self._get_build_config_extra(
-            build_config, 'flatpak.runtime_package_tag'
-        )
-        app_package_tag = self._get_build_config_extra(build_config, 'flatpak.app_package_tag')
-
-        flatpak_spec = self.container_spec.flatpak
-
-        # Find main package
-
-        main_package = flatpak_spec.packages[0]
-        latest_tagged = session.listTagged(
-            build_tag, package=main_package, latest=True, inherit=True
-        )
-
-        if not latest_tagged:
-            die(f"Can't find build for {main_package} in {build_tag}")
-
-        name = (flatpak_spec.component or
-                flatpak_spec.name or
-                latest_tagged[0]["name"])
-        version = latest_tagged[0]["version"]
-        release = 1
-
-        # Find runtime
-
-        tagged_builds = session.listTagged(
-            runtime_tag, package=flatpak_spec.runtime_name, latest=True, inherit=True,
-        )
-        if len(tagged_builds) == 0:
-            die(
-                f"Can't find build for {flatpak_spec.runtime_name} in {runtime_tag}"
-            )
-
-        runtime_nvr = tagged_builds[0]["nvr"]
-        runtime_version = tagged_builds[0]["version"]
-
-        if flatpak_spec.runtime_version and flatpak_spec.runtime_version != runtime_version:
-            die(
-                f"Runtime '{runtime_nvr}' doesn't match "
-                f"'runtime_version: {flatpak_spec.runtime_version}' in container.yaml"
-            )
-
-        return AssemblyOptions(
-            nvr=f"{name}-{version}-{release}",
-            runtime_nvr=runtime_nvr,
-            runtime_repo=self._get_repo_id(runtime_package_tag),
-            app_repo=self._get_repo_id(app_package_tag)
-        )
-
-    def assembly_options_from_target(self, target: str):
-        session = self.profile.koji_session
-        target_info = session.getBuildTarget(target)
-        build_tag = target_info['build_tag_name']
-
-        if self.container_spec.flatpak.build_runtime:
-            return self._runtime_assembly_options_from_build_tag(build_tag)
-        else:
-            return self._app_assembly_options_from_build_tag(build_tag)
-
-    def _get_runtime_archive(self, runtime_nvr: str):
-        session = self.profile.koji_session
-
-        build = session.getBuild(runtime_nvr)
-        archives = session.listArchives(buildID=build["build_id"])
-        return next(a for a in archives if a["extra"]["image"]["arch"] == get_arch().rpm)
-
-    def _get_runtime_info(self, runtime_archive: dict[str, Any]):
-        labels = runtime_archive["extra"]["docker"]["config"]["config"]["Labels"]
-        cp = RawConfigParser()
-        cp.read_string(labels["org.flatpak.metadata"])
-
-        runtime = cp.get("Runtime", "runtime")
-        assert isinstance(runtime, str)
-        runtime_id, runtime_arch, runtime_version = runtime.split("/")
-
-        sdk = cp.get("Runtime", "sdk")
-        assert isinstance(sdk, str)
-        sdk_id, sdk_arch, sdk_version = sdk.split("/")
-
-        return RuntimeInfo(runtime_id=runtime_id, sdk_id=sdk_id, version=runtime_version)
-
-    def _get_repos(
-            self,
-            options: AssemblyOptions,
-            runtime_archive: dict[str, Any] | None,
-            installroot: Path
-    ):
-        session = self.profile.koji_session
-        topurl = self.profile.koji_options['topurl']
-        pathinfo = koji.PathInfo(topdir=topurl)
-
-        runtime_repo_info = session.repoInfo(options.runtime_repo)
-
-        def baseurl(repo_info):
-            arch = get_arch().rpm
-            return f"{pathinfo.repo(repo_info['id'], repo_info['tag_name'])}/{arch}"
-
-        if self.container_spec.flatpak.build_runtime:
-            return [
-                dedent(f"""\
-                    [{runtime_repo_info['tag_name']}]
-                    name={runtime_repo_info['tag_name']}
-                    baseurl={baseurl(runtime_repo_info)}
-                    priority=10
-                    """)
-            ]
-        else:
-            assert options.app_repo
-            app_rpm_repo_info = session.repoInfo(options.app_repo)
-
-            assert runtime_archive
-            rpms = session.listRPMs(imageID=runtime_archive["id"])
-            runtime_packages = sorted(rpm["name"] for rpm in rpms)
-
-            return [
-                dedent(f"""\
-                    [{runtime_repo_info['tag_name']}]
-                    name={runtime_repo_info['tag_name']}
-                    baseurl={baseurl(runtime_repo_info)}
-                    priority=10
-                    includepkgs={",".join(runtime_packages)}
-                    """),
-                dedent(f"""\
-                    [{app_rpm_repo_info['tag_name']}]
-                    name={app_rpm_repo_info['tag_name']}
-                    baseurl={baseurl(app_rpm_repo_info)}
-                    priority=20
-                    """)
-            ]
 
     def _write_dnf_conf(self, repos):
         dnfdir = self.executor.installroot / "etc/dnf"
@@ -397,7 +213,7 @@ class ContainerBuilder:
         info(f"    wrote {outname_base}.config.json")
 
     def _create_rpm_manifest(self, installroot, outname_base: Path):
-        if self.container_spec.flatpak.build_runtime:
+        if self.context.flatpak_spec.build_runtime:
             restrict_to = None
         else:
             restrict_to = installroot / "app"
@@ -409,27 +225,24 @@ class ContainerBuilder:
 
         info(f"    wrote {outname_base}.rpmlist.json")
 
-    def _run_build(self, executor: BuildExecutor, options: AssemblyOptions, *,
+    def _run_build(self, executor: BuildExecutor, *,
                    installroot: Path, workdir: Path, resultdir: Path):
 
         self.executor = executor
 
-        if self.container_spec.flatpak.build_runtime:
+        if self.context.flatpak_spec.build_runtime:
             runtime_info = None
-            runtime_archive = None
         else:
-            assert options.runtime_nvr
-            runtime_archive = self._get_runtime_archive(options.runtime_nvr)
-            runtime_info = self._get_runtime_info(runtime_archive)
+            runtime_info = self.context.runtime_info
 
-        source = PackageFlatpakSourceInfo(self.container_spec.flatpak, runtime_info)
+        source = PackageFlatpakSourceInfo(self.context.flatpak_spec, runtime_info)
 
         builder = FlatpakBuilder(source, workdir, ".", flatpak_metadata=self.flatpak_metadata)
 
-        name, version, release = options.nvr.rsplit('-', 2)
+        name, version, release = self.context.nvr.rsplit('-', 2)
         self._add_labels_to_builder(builder, name, version, release)
 
-        repos = self._get_repos(options, runtime_archive, installroot)
+        repos = self.context.get_repos(for_container=True)
 
         info('Initializing installation path')
         self.executor.init(repos)
@@ -438,7 +251,7 @@ class ContainerBuilder:
         self._write_dnf_conf(repos)
 
         info('Installing packages')
-        self.executor.install(self.container_spec.flatpak.packages)
+        self.executor.install(self.context.flatpak_spec.packages)
 
         info('Cleaning tree')
         self._cleanup_tree(builder, installroot)
@@ -471,7 +284,7 @@ class ContainerBuilder:
 
         ref_name, oci_dir, oci_tar = builder.build_container(filesystem_tar)
 
-        outname_base = resultdir / f"{options.nvr}.{get_arch().rpm}.oci"
+        outname_base = resultdir / f"{self.context.nvr}.{get_arch().rpm}.oci"
         local_outname = f"{outname_base}.tar.gz"
 
         info('Compressing result')
@@ -488,27 +301,29 @@ class ContainerBuilder:
 
         return local_outname
 
-    def assemble(self, options: AssemblyOptions, *,
+    def assemble(self, *,
                  installroot: Path, workdir: Path, resultdir: Path):
 
-        runtimever = options.nvr.rsplit('-', 2)[1]
+        if self.context.flatpak_spec.build_runtime:
+            runtimever = self.context.nvr.rsplit('-', 2)[1]
+        else:
+            runtimever = self.context.runtime_info.version
+
         executor = InnerExcutor(
             installroot=installroot,
             workdir=workdir,
-            releasever=self.profile.release_from_runtime_version(runtimever),
+            releasever=self.context.release,
             runtimever=runtimever
         )
 
         self._run_build(
-            executor, options, installroot=installroot, workdir=workdir, resultdir=resultdir
+            executor, installroot=installroot, workdir=workdir, resultdir=resultdir
         )
 
-    def build(self, target: str):
+    def build(self):
         header('BUILDING CONTAINER')
-        important(f'container spec: {self.container_spec.path}')
+        important(f'container spec: {self.context.container_spec.path}')
         important('')
-
-        options = self.assembly_options_from_target(target)
 
         arch = get_arch()
         workdir = Path(arch.rpm) / "work/oci"
@@ -525,14 +340,18 @@ class ContainerBuilder:
 
         installroot = Path("/contents")
 
-        runtimever = options.nvr.rsplit('-', 2)[1]
+        if self.context.flatpak_spec.build_runtime:
+            runtimever = self.context.nvr.rsplit('-', 2)[1]
+        else:
+            runtimever = self.context.runtime_info.version
+
         executor = MockExecutor(
             installroot=installroot,
             workdir=workdir,
-            releasever=self.profile.release_from_runtime_version(runtimever),
+            releasever=self.context.release,
             runtimever=runtimever
         )
 
         return self._run_build(
-            executor, options, installroot=installroot, workdir=workdir, resultdir=resultdir
+            executor, installroot=installroot, workdir=workdir, resultdir=resultdir
         )

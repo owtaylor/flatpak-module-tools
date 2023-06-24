@@ -36,6 +36,7 @@ cli = [
 
 tests = [
     "flake8",
+    "koji",
     "PyGObject",
     "pytest",
     "pytest-cov",
@@ -49,6 +50,11 @@ where = ["."]
 version_scheme = "post-release"
 write_to = "VERSION"
 write_to_template = "{version}"
+
+[tool.coverage.report]
+exclude_also = [
+    "@abstractmethod"
+]
 
 [tool.pytest.ini_options]
 addopts = "--cov=flatpak_module_tools --cov-report=term-missing --cov-report=html"

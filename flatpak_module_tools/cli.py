@@ -4,8 +4,9 @@ from typing import List, Optional
 
 import click
 
+from .build_context import AutoBuildContext, ManualBuildContext
 from .config import add_config_file, set_profile_name, get_profile
-from .container_builder import AssemblyOptions, ContainerBuilder
+from .container_builder import ContainerBuilder
 from .container_spec import ContainerSpec, ValidationError
 from .console_logging import ConsoleHandler
 from .flatpak_builder import (FLATPAK_METADATA_ANNOTATIONS,
@@ -84,10 +85,12 @@ def build_container(flatpak_metadata, containerspec, target, install):
     container_spec = make_container_spec(containerspec)
     target = get_target(container_spec, target)
 
-    container_builder = ContainerBuilder(profile=get_profile(),
-                                         container_spec=container_spec,
-                                         flatpak_metadata=flatpak_metadata)
-    tarfile = container_builder.build(target)
+    build_context = AutoBuildContext(
+        profile=get_profile(), container_spec=container_spec, target=target,
+        local_repo_path=Path("x86_64/rpms")
+    )
+    container_builder = ContainerBuilder(build_context, flatpak_metadata=flatpak_metadata)
+    tarfile = container_builder.build()
 
     if install:
         installer = Installer(profile=get_profile())
@@ -128,11 +131,6 @@ def assemble(
     """Run as root inside a container to create the OCI"""
 
     container_spec = make_container_spec(containerspec)
-    container_builder = PackageContainerBuilder(
-        profile=get_profile(),
-        container_spec=container_spec,
-        flatpak_metadata=FLATPAK_METADATA_LABELS
-    )
 
     if nvr or runtime_nvr or runtime_repo or app_repo:
         if target:
@@ -145,23 +143,28 @@ def assemble(
             if runtime_nvr or app_repo:
                 die("--nvr and --runtime-repo must not be specified for runtimes")
 
-            options = AssemblyOptions(
-                nvr=nvr, runtime_nvr=None, runtime_repo=runtime_repo, app_repo=None
-            )
         else:
             if not nvr or not runtime_nvr or not runtime_repo or not app_repo:
                 die("--nvr, --runtime-nvr, --runtime-repo, and --app-repo "
                     "must be specified for applications")
 
-            options = AssemblyOptions(
-                nvr=nvr, runtime_nvr=runtime_nvr, runtime_repo=runtime_repo, app_repo=app_repo
-            )
+        build_context = ManualBuildContext(
+            profile=get_profile(), container_spec=container_spec,
+            nvr=nvr, runtime_nvr=runtime_nvr, runtime_repo=runtime_repo, app_repo=app_repo
+        )
+
     else:
         target = get_target(container_spec, target)
-        options = container_builder.assembly_options_from_target(target)
+        build_context = AutoBuildContext(
+            profile=get_profile(), container_spec=container_spec, target=target
+        )
 
+    container_builder = ContainerBuilder(
+        context=build_context,
+        flatpak_metadata=FLATPAK_METADATA_LABELS
+    )
     container_builder.assemble(
-        options, installroot=installroot, workdir=workdir, resultdir=resultdir
+        installroot=installroot, workdir=workdir, resultdir=resultdir
     )
 
 
@@ -208,7 +211,8 @@ def build_rpms_local(
         else:
             manual_packages.append(pkg)
 
-    builder = RpmBuilder(profile=get_profile(), container_spec=spec, target=target)
+    source = AutoBuildContext(profile=get_profile(), container_spec=spec, target=target)
+    builder = RpmBuilder(source)
     if packages is [] and not all_missing:
         info("Nothing to rebuild, specify packages or --all-missing")
     else:

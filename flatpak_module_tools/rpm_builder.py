@@ -1,21 +1,17 @@
-from configparser import RawConfigParser
-from functools import cached_property
 import json
 from pathlib import Path
 import subprocess
-from textwrap import dedent
-from typing import Collection, List, Optional
+from typing import Collection, List
 
 import click
 import koji
 import networkx
 
 from .build_scheduler import MockBuildScheduler
-from .config import ProfileConfig
-from .container_spec import ContainerSpec
+from .build_context import BuildContext
 from .console_logging import Status
 from .mock import make_mock_cfg
-from .utils import get_arch, die, error, RuntimeInfo
+from .utils import get_arch, error
 
 
 _FLAGS_TO_REL = {
@@ -93,89 +89,22 @@ def check_for_cycles(build_after, build_after_details):
 
 
 class RpmBuilder:
-    def __init__(self, *, profile: ProfileConfig, container_spec: ContainerSpec, target: str):
-        self.profile = profile
-        self._koji_session = None
-        self.flatpak_spec = container_spec.flatpak
+    def __init__(self, context: BuildContext):
+        self.context = context
+        self.profile = context.profile
+        self.flatpak_spec = context.flatpak_spec
         self.repo_path = Path.cwd() / get_arch().rpm / "rpms"
         self.workdir = Path.cwd() / get_arch().rpm / "work"
-
-        self.container_target = target
-
-    @cached_property
-    def _container_target_info(self):
-        return self.profile.koji_session.getBuildTarget(self.container_target)
-
-    @cached_property
-    def _container_build_config(self):
-        return self.profile.koji_session.getBuildConfig(
-            self._container_target_info["build_tag_name"]
-        )
-
-    def _get_container_build_config_extra(self, key):
-        build_config = self._container_build_config
-        value: Optional[str] = build_config['extra'].get(key)
-        if value is None:
-            die(f"{build_config['name']} doesn't have {key} set in extra data")
-
-        return value
-
-    @cached_property
-    def _image_archive(self):
-        session = self.profile.koji_session
-        runtime_tag = self._get_container_build_config_extra('flatpak.runtime_tag')
-        tagged_builds = session.listTagged(
-            runtime_tag, package=self.flatpak_spec.runtime_name, latest=True, inherit=True,
-        )
-        if len(tagged_builds) == 0:
-            die(f"Can't find build for {self.flatpak_spec.runtime_name} in {runtime_tag}")
-
-        latest_build = tagged_builds[0]
-
-        archives = session.listArchives(buildID=latest_build["build_id"])
-        return next(a for a in archives if a["extra"]["image"]["arch"] == "x86_64")
-
-    @cached_property
-    def runtime_packages(self):
-        with Status("Listing runtime packages"):
-            session = self.profile.koji_session
-            rpms = session.listRPMs(imageID=self._image_archive["id"])
-            return sorted(rpm["name"] for rpm in rpms)
-
-    @cached_property
-    def runtime_info(self):
-        labels = self._image_archive["extra"]["docker"]["config"]["config"]["Labels"]
-        cp = RawConfigParser()
-        cp.read_string(labels["org.flatpak.metadata"])
-
-        runtime = cp.get("Runtime", "runtime")
-        assert isinstance(runtime, str)
-        runtime_id, runtime_arch, runtime_version = runtime.split("/")
-
-        sdk = cp.get("Runtime", "sdk")
-        assert isinstance(sdk, str)
-        sdk_id, sdk_arch, sdk_version = sdk.split("/")
-
-        return RuntimeInfo(runtime_id=runtime_id, sdk_id=sdk_id, version=runtime_version)
-
-    @property
-    def _release(self):
-        return self.profile.release_from_runtime_version(self.runtime_info.version)
-
-    @cached_property
-    def _rpm_target_info(self):
-        rpm_target = self.profile.get_rpm_koji_target(self._release)
-        return self.profile.koji_session.getBuildTarget(rpm_target)
 
     def _run_depchase(self, cmd: str, args: List[str]):
         packages_file = self.workdir / \
               f"{self.flatpak_spec.runtime_name}-{self.flatpak_spec.runtime_version}.packages"
         with open(packages_file, "w") as f:
-            for pkg in self.runtime_packages:
+            for pkg in self.context.runtime_packages:
                 print(pkg, file=f)
 
         arch = get_arch()
-        rpm_build_tag = self._rpm_target_info["build_tag_name"]
+        rpm_build_tag = self.context.app_build_repo["tag_name"]
         return subprocess.check_output(
             ["flatpak-module-depchase",
                 f"--profile={self.profile.name}",
@@ -189,7 +118,7 @@ class RpmBuilder:
 
     def _find_missing_packages(self, manual_packages: List[str] = [], confirm=True):
         # Access first to get logging output in the right order
-        self.runtime_packages
+        self.context.runtime_packages
 
         packages = self.flatpak_spec.packages
         with Status(f"Finding dependencies of {', '.join(packages)} not in runtime"):
@@ -250,7 +179,7 @@ class RpmBuilder:
 
     def _get_latest_builds(self, to_build: Collection[str]):
         session = self.profile.source_koji_session
-        source_tag = self.profile.get_source_koji_tag(self._release)
+        source_tag = self.profile.get_source_koji_tag(self.context.release)
         with Status("Getting latest builds from koji"):
             return {
                 package: session.listTagged(
@@ -290,59 +219,6 @@ class RpmBuilder:
 
         return result
 
-    def get_repos(self, *, for_container: bool):
-        repos: List[str] = []
-
-        pathinfo = koji.PathInfo(topdir=self.profile.koji_options['topurl'])
-
-        def baseurl(tag):
-            return pathinfo.repo("latest", tag) + "/$basearch/"
-
-        if for_container:
-            runtime_package_tag = \
-                self._get_container_build_config_extra("flatpak.runtime_package_tag")
-
-            repos.append(dedent(f"""\
-                [{runtime_package_tag}]
-                name={runtime_package_tag}
-                baseurl={baseurl(runtime_package_tag)}
-                priority=10
-                enabled=1
-                skip_if_unavailable=False
-                includepkgs={",".join(sorted(self.runtime_packages))}
-            """))
-
-            app_package_tag = self._get_container_build_config_extra("flatpak.app_package_tag")
-            repos.append(dedent(f"""\
-                [{app_package_tag}]
-                name={app_package_tag}
-                baseurl={baseurl(app_package_tag)}
-                priority=20
-                enabled=1
-                skip_if_unavailable=False
-            """))
-        else:
-            rpm_build_tag = self._rpm_target_info["build_tag_name"]
-            repos.append(dedent(f"""\
-                [{rpm_build_tag}]
-                name={rpm_build_tag}
-                baseurl={baseurl(rpm_build_tag)}
-                priority=20
-                enabled=1
-                skip_if_unavailable=False
-            """))
-
-        repos.append(dedent(f"""\
-            [local]
-            name=local
-            priority=0
-            baseurl={self.repo_path}
-            enabled=1
-            skip_if_unavailable=False
-        """))
-
-        return repos
-
     def check(self):
         pass
 
@@ -352,7 +228,7 @@ class RpmBuilder:
     def build_rpms_local(
             self, manual_packages: List[str], manual_repos: List[Path], all_missing=False
     ):
-        self.runtime_packages
+        self.context.runtime_packages
 
         repo_map = {
             repo.name: repo for repo in manual_repos
@@ -416,10 +292,10 @@ class RpmBuilder:
         mock_cfg = make_mock_cfg(
             arch=get_arch(),
             chroot_setup_cmd="install @build",
-            releasever=self.profile.release_from_runtime_version(self.runtime_info.version),
-            repos=self.get_repos(for_container=False),
+            releasever=self.context.release,
+            repos=self.context.get_repos(for_container=False),
             root_cache_enable=False,
-            runtimever=self.runtime_info.version
+            runtimever=self.context.runtime_info.version
         )
 
         builder = MockBuildScheduler(
