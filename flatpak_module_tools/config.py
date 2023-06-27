@@ -123,30 +123,8 @@ class Config:
     def __init__(self):
         self.profiles = {}
 
-    def _read_config_file(self, config_file):
-        if isinstance(config_file, str):
-            try:
-                with open(config_file) as f:
-                    yml = yaml.safe_load(f)
-            except OSError:
-                return
-        else:
-            yml = yaml.safe_load(config_file)
-
-        for profile, profile_yml in yml['profiles'].items():
-            if profile not in self.profiles:
-                self.profiles[profile] = ProfileConfig(profile)
-            self.profiles[profile].merge(profile_yml)
-
-    def read(self):
+    def _iter_config_files(self):
         config_files = []
-
-        try:
-            config_files += [
-                pkg_resources.resource_stream('flatpak_module_tools', 'config.yaml')
-            ]
-        except Exception:
-            pass
 
         user_config = os.environ.get('XDG_CONFIG_HOME',
                                      os.path.expanduser('~/.config'))
@@ -167,9 +145,32 @@ class Config:
                     continue
                 for f in sorted(files, reverse=True):
                     if f.endswith('yaml'):
-                        self._read_config_file(os.path.join(config_file, f))
+                        yield os.path.join(config_file, f)
             else:
-                self._read_config_file(config_file)
+                yield config_file
+
+    def _read_config_file(self, config_file):
+        if isinstance(config_file, str):
+            try:
+                with open(config_file) as f:
+                    yml = yaml.safe_load(f)
+            except OSError:
+                return
+        else:
+            yml = yaml.safe_load(config_file)
+
+        for profile, profile_yml in yml['profiles'].items():
+            if profile not in self.profiles:
+                self.profiles[profile] = ProfileConfig(profile)
+            self.profiles[profile].merge(profile_yml)
+
+    def read(self):
+        default_config_file = \
+            pkg_resources.resource_stream('flatpak_module_tools', 'config.yaml')
+        self._read_config_file(default_config_file)
+
+        for config_file in self._iter_config_files():
+            self._read_config_file(config_file)
 
         defaults = self.profiles.get('__default__')
         if defaults is not None:
