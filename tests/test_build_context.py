@@ -259,8 +259,7 @@ def test_manual_build_context(app_container_spec, profile: ProfileConfig):
     context = ManualBuildContext(profile=profile, container_spec=app_container_spec,
                                  nvr=APP_NVR, runtime_nvr=RUNTIME_NVR,
                                  runtime_repo=ID.REPO_F39_FLATPAK_RUNTIME_PACKAGES,
-                                 app_repo=ID.REPO_F39_FLATPAK_APP_PACKAGES,
-                                 local_repo_path=None)
+                                 app_repo=ID.REPO_F39_FLATPAK_APP_PACKAGES)
 
     assert context.nvr == APP_NVR
     assert context.runtime_package_repo["id"] == ID.REPO_F39_FLATPAK_RUNTIME_PACKAGES
@@ -304,8 +303,7 @@ def test_manual_build_context(app_container_spec, profile: ProfileConfig):
 
 def test_auto_build_context_app(app_container_spec, profile: ProfileConfig):
     context = AutoBuildContext(profile=profile, container_spec=app_container_spec,
-                               target="f39-flatpak-candidate",
-                               local_repo_path=Path("x86/rpms"))
+                               target="f39-flatpak-candidate")
 
     assert context.nvr == APP_NVR
     assert context.runtime_package_repo["id"] == "latest"
@@ -315,7 +313,7 @@ def test_auto_build_context_app(app_container_spec, profile: ProfileConfig):
 
     assert context.release == "39"
 
-    assert context.get_repos(for_container=True) == [
+    assert context.get_repos(for_container=True, local_repo_path=Path("x86_64/rpms")) == [
         dedent("""\
             [f39-flatpak-runtime-packages]
             name=f39-flatpak-runtime-packages
@@ -337,10 +335,11 @@ def test_auto_build_context_app(app_container_spec, profile: ProfileConfig):
             [local]
             name=local
             priority=0
-            baseurl=x86/rpms
+            baseurl=x86_64/rpms
             enabled=1
             skip_if_unavailable=False
-            """)]
+            """)
+    ]
 
     assert context.get_repos(for_container=False) == [
         dedent("""\
@@ -350,15 +349,8 @@ def test_auto_build_context_app(app_container_spec, profile: ProfileConfig):
             priority=20
             enabled=1
             skip_if_unavailable=False
-            """),
-        dedent("""\
-            [local]
-            name=local
-            priority=0
-            baseurl=x86/rpms
-            enabled=1
-            skip_if_unavailable=False
-            """)]
+            """)
+    ]
 
 
 def test_auto_build_context_runtime(runtime_container_spec, profile: ProfileConfig):

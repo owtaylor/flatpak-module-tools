@@ -16,17 +16,14 @@ from .utils import RuntimeInfo, get_arch
 
 class BuildContext(ABC):
     """Holds information about what a Flatpak will be built against."""
-    def __init__(self, *, profile: ProfileConfig, container_spec: ContainerSpec,
-                 local_repo_path: Optional[Path] = None):
+    def __init__(self, *, profile: ProfileConfig, container_spec: ContainerSpec):
         """
         :param profile: the configuration profile
         :param container_spec: the parsed container.yaml
-        :param local_repo_path - optional path to a DNF repository with application package builds
         """
         self.profile = profile
         self.container_spec = container_spec
         self.flatpak_spec = container_spec.flatpak
-        self.local_repo_path = local_repo_path
 
     @property
     @abstractmethod
@@ -98,12 +95,13 @@ class BuildContext(ABC):
 
         return self.profile.release_from_runtime_version(runtime_version)
 
-    def get_repos(self, *, for_container: bool):
+    def get_repos(self, *, for_container: bool, local_repo_path: Optional[Path] = None):
         """Return a list of DNF repository definitions for this context
 
         :param: for_container: if True, the repositories are for package installation
            when building a container; otherwise they are for build dependencies
            when building RPMs that will eventually be included in a container.
+        :param local_repo_path - optional path to a DNF repository with application package builds
         """
         repos: List[str] = []
 
@@ -139,12 +137,12 @@ class BuildContext(ABC):
                 raise NotImplementedError("Runtime package building is not implemented")
             repos.append(koji_repo(self.app_build_repo, 20))
 
-        if self.local_repo_path:
+        if local_repo_path:
             repos.append(dedent(f"""\
                 [local]
                 name=local
                 priority=0
-                baseurl={self.local_repo_path}
+                baseurl={local_repo_path}
                 enabled=1
                 skip_if_unavailable=False
             """))
@@ -155,16 +153,13 @@ class BuildContext(ABC):
 class AutoBuildContext(BuildContext):
     """BuildContext subclass for determining all the information based on the Koji target."""
 
-    def __init__(self, *, profile: ProfileConfig, container_spec: ContainerSpec, target: str,
-                 local_repo_path: Optional[Path] = None):
+    def __init__(self, *, profile: ProfileConfig, container_spec: ContainerSpec, target: str):
         """
         :param profile: the configuration profile
         :param container_spec: the parsed container.yaml
         :param target: target used to build containers
-        :param local_repo_path: optional path to a DNF repository with application package builds
         """
-        super().__init__(profile=profile, container_spec=container_spec,
-                         local_repo_path=local_repo_path)
+        super().__init__(profile=profile, container_spec=container_spec)
         self.container_target = target
 
     @cached_property
@@ -263,8 +258,7 @@ class ManualBuildContext(BuildContext):
                  nvr: str,
                  runtime_nvr: Optional[str],
                  runtime_repo: int,
-                 app_repo: Optional[int],
-                 local_repo_path: Optional[Path] = None):
+                 app_repo: Optional[int]):
         """
         :param profile: the configuration profile
         :param container_spec: the parsed container.yaml
@@ -274,10 +268,8 @@ class ManualBuildContext(BuildContext):
         :param runtime_repo: repository ID of repository for runtime packages
         :param app_repo: repository ID for repository for application packages
             (only for application container builds)
-        :param local_repo_path - optional path to a DNF repository with application package builds
         """
-        super().__init__(profile=profile, container_spec=container_spec,
-                         local_repo_path=local_repo_path)
+        super().__init__(profile=profile, container_spec=container_spec)
         self._nvr = nvr
         self.runtime_nvr = runtime_nvr
         self.runtime_repo = runtime_repo

@@ -86,8 +86,7 @@ def build_container(flatpak_metadata, containerspec, target, install):
     target = get_target(container_spec, target)
 
     build_context = AutoBuildContext(
-        profile=get_profile(), container_spec=container_spec, target=target,
-        local_repo_path=Path("x86_64/rpms")
+        profile=get_profile(), container_spec=container_spec, target=target
     )
     container_builder = ContainerBuilder(build_context, flatpak_metadata=flatpak_metadata)
     tarfile = container_builder.build()
