@@ -104,13 +104,18 @@ class RpmBuilder:
                 print(pkg, file=f)
 
         arch = get_arch()
+        local_repo_path = Path(arch.rpm) / "rpms"
+        if (local_repo_path / "repodata/repomd.xml").exists():
+            local_repo = [f"--local-repo=local:{local_repo_path}"]
+        else:
+            local_repo = []
+
         rpm_build_tag = self.context.app_build_repo["tag_name"]
         return subprocess.check_output(
             ["flatpak-module-depchase",
                 f"--profile={self.profile.name}",
                 f"--arch={arch.oci}",
-                f"--tag={rpm_build_tag}",
-                f"--local-repo=local:{arch.rpm}/rpms",
+                f"--tag={rpm_build_tag}"] + local_repo + [
                 cmd,
                 "--preinstalled", packages_file] + args,
             encoding="utf-8"
