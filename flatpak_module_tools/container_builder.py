@@ -6,7 +6,7 @@ import shlex
 import shutil
 import subprocess
 from textwrap import dedent
-from typing import Dict, List, Optional, Sequence, Union
+from typing import Dict, Optional, Sequence, Union
 
 import koji
 
@@ -18,7 +18,7 @@ from .flatpak_builder import (
 from .mock import make_mock_cfg
 from .rpm_utils import create_rpm_manifest
 from .utils import (
-    check_call, die, get_arch, log_call, header, important, info
+    atomic_writer, check_call, die, get_arch, log_call, header, important, info
 )
 
 
@@ -92,10 +92,10 @@ class MockExecutor(BuildExecutor):
             chroot_setup_cmd=f"install {' '.join(to_install)}",
             releasever=self.releasever,
             repos=[self._bootstrap_koji_repo],
-            root_cache_enable=False,
+            root_cache_enable=True,
             runtimever=self.runtimever
         )
-        with open(self.mock_cfg_path, "w") as f:
+        with atomic_writer(self.mock_cfg_path) as f:
             f.write(mock_cfg)
 
         check_call(['mock', '-q', '-r', self.mock_cfg_path, '--clean'])
@@ -182,6 +182,16 @@ class ContainerBuilder:
             return Path("/mnt/localrepo")
         else:
             return None
+
+    def _clean_workdir(self, workdir: Path):
+        for child in workdir.iterdir():
+            if child.name == "mock.cfg":
+                # Save this so the timestamp is preserved, and the root cache works
+                pass
+            elif child.is_dir():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
 
     def _write_dnf_conf(self):
         dnfdir = self.executor.installroot / "etc/dnf"
@@ -381,8 +391,8 @@ class ContainerBuilder:
         arch = get_arch()
         workdir = Path(arch.rpm) / "work/oci"
         if os.path.exists(workdir):
-            info(f"Removing old working directory {workdir}")
-            shutil.rmtree(workdir)
+            info(f"Cleaning old working directory {workdir}")
+            self._clean_workdir(workdir)
 
         workdir.mkdir(parents=True, exist_ok=True)
 

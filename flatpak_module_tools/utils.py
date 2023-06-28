@@ -1,11 +1,16 @@
+import codecs
+from contextlib import contextmanager
 from dataclasses import dataclass
 import functools
+import hashlib
 import logging
+import os
+from tempfile import NamedTemporaryFile
 import click
 import pipes
 import subprocess
 import sys
-from typing import Optional, NoReturn
+from typing import IO, Optional, NoReturn, cast
 
 
 def error(msg):
@@ -103,3 +108,46 @@ def get_arch(oci_arch: Optional[str] = None):
 
 def rpm_name_only(rpm_name):
     return rpm_name.rsplit("-", 2)[0]
+
+
+@contextmanager
+def atomic_writer(output_path):
+    output_dir = os.path.dirname(output_path)
+    tmpfile = NamedTemporaryFile(delete=False,
+                                 dir=output_dir,
+                                 prefix=os.path.basename(output_path))
+    success = False
+    try:
+        writer = cast(IO[str], codecs.getwriter("utf-8")(tmpfile))
+        yield writer
+        writer.close()
+        tmpfile.close()
+
+        # We don't overwrite unchanged files, so that the modtime and
+        # httpd-computed ETag stay the same.
+
+        changed = True
+        if os.path.exists(output_path):
+            h1 = hashlib.sha256()
+            with open(output_path, "rb") as f:
+                h1.update(f.read())
+            h2 = hashlib.sha256()
+            with open(tmpfile.name, "rb") as f:
+                h2.update(f.read())
+
+            if h1.digest() == h2.digest():
+                changed = False
+
+        if changed:
+            # Atomically write over result
+            os.chmod(tmpfile.name, 0o644)
+            os.rename(tmpfile.name, output_path)
+            print(f"Wrote {output_path}")
+        else:
+            os.unlink(tmpfile.name)
+
+        success = True
+    finally:
+        if not success:
+            tmpfile.close()
+            os.unlink(tmpfile.name)
