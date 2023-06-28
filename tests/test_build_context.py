@@ -229,6 +229,9 @@ def config():
         config.read()
 
     for profile in config.profiles.values():
+        profile.koji_options = {
+            'topurl': 'https://kojifiles.example.com'
+        }
         profile.koji_session = MockKojiSession()
 
     return config
@@ -274,9 +277,9 @@ def test_manual_build_context(app_container_spec, profile: ProfileConfig):
 
     assert context.runtime_archive["id"] == ID.ARCHIVE_FLATPAK_RUNTIME_X86_64
 
-    frp_baseurl = "https://kojipkgs.fedoraproject.org/repos/" + \
+    frp_baseurl = "https://kojifiles.example.com/repos/" + \
         "f39-flatpak-runtime-packages/ID.REPO_F39_FLATPAK_RUNTIME_PACKAGES/$basearch/"
-    fap_baseurl = "https://kojipkgs.fedoraproject.org/repos/" + \
+    fap_baseurl = "https://kojifiles.example.com/repos/" + \
         "f39-flatpak-app-packages/ID.REPO_F39_FLATPAK_APP_PACKAGES/$basearch/"
     assert context.get_repos(for_container=True) == [
         dedent(f"""\
@@ -317,7 +320,7 @@ def test_auto_build_context_app(app_container_spec, profile: ProfileConfig):
         dedent("""\
             [f39-flatpak-runtime-packages]
             name=f39-flatpak-runtime-packages
-            baseurl=https://kojipkgs.fedoraproject.org/repos/f39-flatpak-runtime-packages/latest/$basearch/
+            baseurl=https://kojifiles.example.com/repos/f39-flatpak-runtime-packages/latest/$basearch/
             priority=10
             enabled=1
             skip_if_unavailable=False
@@ -326,7 +329,7 @@ def test_auto_build_context_app(app_container_spec, profile: ProfileConfig):
         dedent("""\
             [f39-flatpak-app-packages]
             name=f39-flatpak-app-packages
-            baseurl=https://kojipkgs.fedoraproject.org/repos/f39-flatpak-app-packages/latest/$basearch/
+            baseurl=https://kojifiles.example.com/repos/f39-flatpak-app-packages/latest/$basearch/
             priority=20
             enabled=1
             skip_if_unavailable=False
@@ -345,7 +348,7 @@ def test_auto_build_context_app(app_container_spec, profile: ProfileConfig):
         dedent("""\
             [f39-flatpak-app-build]
             name=f39-flatpak-app-build
-            baseurl=https://kojipkgs.fedoraproject.org/repos/f39-flatpak-app-build/latest/$basearch/
+            baseurl=https://kojifiles.example.com/repos/f39-flatpak-app-build/latest/$basearch/
             priority=20
             enabled=1
             skip_if_unavailable=False
@@ -367,7 +370,7 @@ def test_auto_build_context_runtime(runtime_container_spec, profile: ProfileConf
         dedent("""\
             [f39-flatpak-runtime-packages]
             name=f39-flatpak-runtime-packages
-            baseurl=https://kojipkgs.fedoraproject.org/repos/f39-flatpak-runtime-packages/latest/$basearch/
+            baseurl=https://kojifiles.example.com/repos/f39-flatpak-runtime-packages/latest/$basearch/
             priority=10
             enabled=1
             skip_if_unavailable=False
