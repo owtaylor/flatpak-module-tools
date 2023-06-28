@@ -1,8 +1,10 @@
 #!/bin/bash
 
-pyproject-build --no-isolation --outdir .
+set -ex
 
-read -r PROJECT_VERSION < VERSION
+pyproject-build -s --no-isolation --outdir .
+
+read -r PROJECT_VERSION < VERSION || :
 RPM_VERSION=${PROJECT_VERSION/.post/^}
 
 sed -E \

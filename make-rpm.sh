@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -ex
+
 topdir=$(cd "$(dirname $0)" && pwd)
 specfile=$topdir/flatpak-module-tools.spec
 
