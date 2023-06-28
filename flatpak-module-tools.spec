@@ -25,8 +25,10 @@ BuildRequires: ostree
 BuildRequires: python3-click
 BuildRequires: python3-pytest-cov
 BuildRequires: python3-jinja2
+BuildRequires: python3-koji
 BuildRequires: python3-libmodulemd
 BuildRequires: python3-pytest
+BuildRequires: python3-rpm
 BuildRequires: python3-six
 BuildRequires: python3-yaml
 
