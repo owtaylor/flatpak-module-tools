@@ -12,9 +12,11 @@ Source0:	https://releases.pagure.org/flatpak-module-tools/flatpak-module-tools-%
 
 BuildArch:	noarch
 
+BuildRequires: python3-build
 BuildRequires: python3-devel
 BuildRequires: python3-pip
 BuildRequires: python3-setuptools
+BuildRequires: python3-setuptools_scm+toml
 BuildRequires: python3-wheel
 
 # For tests
