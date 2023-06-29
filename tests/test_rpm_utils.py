@@ -47,11 +47,16 @@ def build_rpm(name, spec, path):
     with open(path / f"{name}.spec", "w") as f:
         f.write(spec)
 
+    # We need to define _rpmfilename, since otherwise we'll pick up a value from
+    # the system macros, which could be different (when building in Koji, for example)
     subprocess.check_call([
-        "rpmbuild", "--define", f"_rpmdir {path}", "-bb", specpath
+        "rpmbuild",
+        "--define", f"_rpmdir {path}",
+        "--define", "_rpmfilename %{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}.rpm",
+        "-bb", specpath
     ])
 
-    return path / "noarch" / f"{name}-1-1.noarch.rpm"
+    return path / f"{name}-1-1.noarch.rpm"
 
 
 @pytest.fixture(scope='module')
