@@ -77,7 +77,8 @@ Python3 library for Flatpak handling
 
 
 %check
-%pytest
+# Tests using RPM don't work well inside %%check
+%pytest -k "not test_create_rpm_manifest"
 
 
 %install
