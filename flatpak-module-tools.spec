@@ -73,6 +73,7 @@ Python3 library for Flatpak handling
 
 
 %build
+export SETUPTOOLS_SCM_PRETEND_VERSION=%{project_version}
 %pyproject_wheel
 
 
