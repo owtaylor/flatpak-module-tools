@@ -302,7 +302,7 @@ def resolve_packages(ctx, pkgs, json_output, source, ignore_requires, preinstall
 @click.argument("requires", metavar='REQUIRES', nargs=-1, required=True)
 @click.pass_context
 def resolve_requires(ctx, requires, json_output, source, ignore_requires, preinstalled):
-    """Resolve all packages to be installed list of requirements"""
+    """Resolve all packages to be installed from a list of requirements"""
     pool = CliData.from_context(ctx).make_pool()
     for x in ignore_requires:
         pkg, dep = x.split(':', 1)
@@ -350,7 +350,9 @@ def flatpak_report(ctx, pkgs, runtime_profile, quiet=False):
             print("Calculating deps for", pkg, file=sys.stderr)
 
         transaction = depchase.Transaction(pool)
-        transaction.add_packages(pkgs)
+        if not transaction.add_packages([pkg]):
+            # warning will already have been printed
+            continue
         transaction.set_hints(runtime_packages)
         transaction.solve()
         all_needed_packages = transaction.get_packages()

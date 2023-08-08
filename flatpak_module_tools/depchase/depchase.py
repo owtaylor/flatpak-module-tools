@@ -116,6 +116,7 @@ class Transaction:
         self.hints = _DEFAULT_HINTS
 
     def add_packages(self, pkgnames: Iterable[str]):
+        all_found = True
         for n in pkgnames:
             search_criteria = (solv.Selection.SELECTION_NAME | solv.Selection.SELECTION_DOTARCH)
             if "." in n:
@@ -123,8 +124,11 @@ class Transaction:
             sel = self.pool.select(n, search_criteria)
             if sel.isempty():
                 log.warn(f"Could not find package for {n}")
+                all_found = False
                 continue
             self.jobs += sel.jobs(solv.Job.SOLVER_INSTALL)
+
+        return all_found
 
     def add_provides(self, provides: Iterable[str]):
         for provide in provides:
