@@ -59,7 +59,7 @@ class CliData:
     help='Alternate configuration profile to use'
 )
 @click.option(
-    '-t', '--tag', metavar='KOJI_TAG',
+    '-t', '--tag', metavar='KOJI_TAG', required=True,
     help='Koji build tag to use as package source'
 )
 @click.option('-a', '--arch', help='Architecture')
