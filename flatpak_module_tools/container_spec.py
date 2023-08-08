@@ -2,6 +2,8 @@ from enum import Enum
 from typing import Any, List, Literal, overload, Optional, Union
 import yaml
 
+from flatpak_module_tools.utils import Arch
+
 
 class Option(Enum):
     REQUIRED = 1
@@ -109,7 +111,45 @@ class BaseSpec:
         return self._get(key, type_convert, default)
 
 
+class PlatformsSpec(BaseSpec):
+    def __init__(self, path, platforms_yaml):
+        super().__init__(path, platforms_yaml)
+        self.only = self._get_str_list('only', [], allow_scalar=True)
+        self.not_ = self._get_str_list('not', [], allow_scalar=True)
+
+    def includes_platform(self, platform: str):
+        return (not self.only or platform in self.only) and \
+            (not self.not_ or platform not in self.not_)
+
+
+class PackageSpec(BaseSpec):
+    def __init__(self, path, yaml_object):
+        if isinstance(yaml_object, str):
+            self.name = yaml_object
+            self.platforms = None
+        else:
+            super().__init__(path, yaml_object)
+
+            self.name = self._get_str("name")
+            platforms_yaml = yaml_object.get("platforms")
+            if platforms_yaml:
+                self.platforms = PlatformsSpec(f"{path}/platforms", platforms_yaml)
+            else:
+                self.platforms = None
+
+
 class FlatpakSpec(BaseSpec):
+    def _get_package_list(self, key, default) -> List["PackageSpec"]:
+        def type_convert(val):
+            if isinstance(val, List) and all(isinstance(v, (str, dict)) for v in val):
+                return [
+                    PackageSpec(f"{self.path}/{i}", v) for i, v in enumerate(val)
+                ]
+            else:
+                raise ValidationError(f"{self.path}, {key} must be a list of strings and mappings")
+
+        return self._get(key, type_convert, default)
+
     def __init__(self, path, flatpak_yaml):
         super().__init__(path, flatpak_yaml)
 
@@ -129,7 +169,7 @@ class FlatpakSpec(BaseSpec):
         self.end_of_life_rebase = self._get_str('end-of-life-rebase', None)
         self.finish_args = self._get_str('finish-args', None)
         self.name = self._get_str('name', None)
-        self.packages = self._get_str_list('packages', [])
+        self.packages = self._get_package_list('packages', [])
         self.rename_appdata_file = self._get_str('rename-appdata-file', None)
         self.rename_desktop_file = self._get_str('rename-desktop-file', None)
         self.rename_icon = self._get_str('rename-icon', None)
@@ -139,18 +179,17 @@ class FlatpakSpec(BaseSpec):
         self.sdk = self._get_str('sdk', None)
         self.tags = self._get_str_list('tags', [])
 
+    def get_packages_for_arch(self, arch: Arch):
+        return [
+            package.name for package in self.packages
+            if not package.platforms or package.platforms.includes_platform(arch.rpm)
+        ]
+
 
 class ComposeSpec(BaseSpec):
     def __init__(self, path, compose_yaml):
         super().__init__(path, compose_yaml)
         self.modules = self._get_str_list('modules', [])
-
-
-class PlatformsSpec(BaseSpec):
-    def __init__(self, path, platforms_yaml):
-        super().__init__(path, platforms_yaml)
-        self.only = self._get_str_list('only', [], allow_scalar=True)
-        self.not_ = self._get_str_list('not', [], allow_scalar=True)
 
 
 class ContainerSpec(BaseSpec):

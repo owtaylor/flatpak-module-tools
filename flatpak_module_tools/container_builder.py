@@ -223,7 +223,7 @@ class ContainerBuilder:
 
     def _install_packages(self):
         installroot = self.executor.installroot
-        packages = self.context.flatpak_spec.packages
+        packages = self.context.flatpak_spec.get_packages_for_arch(get_arch())
         package_str = " ".join(shlex.quote(p) for p in packages)
         install_sh = dedent(f"""\
             for     i in /proc /sys /dev /var/cache/dnf ; do

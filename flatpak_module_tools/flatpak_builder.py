@@ -524,7 +524,7 @@ class PackageFlatpakSourceInfo(BaseFlatpakSourceInfo):
         return []
 
     def get_install_packages(self, arch: Arch) -> List[str]:
-        return self.spec.packages
+        return self.spec.get_packages_for_arch(arch)
 
     def get_includepkgs(self, arch: Arch) -> List[str]:
         # We use different includepkgs for different repos instead of a global includepkgs

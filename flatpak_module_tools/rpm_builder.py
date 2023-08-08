@@ -125,7 +125,7 @@ class RpmBuilder:
         # Access first to get logging output in the right order
         self.context.runtime_packages
 
-        packages = self.flatpak_spec.packages
+        packages = self.flatpak_spec.get_packages_for_arch(get_arch())
         with Status(f"Finding dependencies of {', '.join(packages)} not in runtime"):
             output = self._run_depchase(
                 "resolve-packages",
@@ -192,21 +192,6 @@ class RpmBuilder:
                             )[0]
                 for package in sorted(to_build)
             }
-
-    def get_main_package_nvr(self):
-        packages = self.flatpak_spec.packages
-        output = self._run_depchase(
-            "resolve-packages",
-            [
-                "--json",
-            ] + [packages[0]]
-        )
-
-        package_info = [p for p in json.loads(output) if p["name"] == packages[0]][0]
-        nvra = package_info["nvra"]
-        n, v, ra = nvra.rsplit("-", 2)
-        r, a = ra.rsplit(".", 1)
-        return f"{n}-{v}-{r}"
 
     def get_build_requires(self, build_id):
         session = self.profile.source_koji_session

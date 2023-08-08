@@ -168,7 +168,7 @@ class AutoBuildContext(BuildContext):
             name = self.container_spec.flatpak.component or self.container_spec.flatpak.name
             return f"{name}-{self.container_spec.flatpak.branch}-1"
         else:
-            main_package = self.flatpak_spec.packages[0]
+            main_package = self.flatpak_spec.packages[0].name
             app_package_tag = self.app_package_repo["tag_name"]
             latest_tagged = self.profile.koji_session.listTagged(
                 app_package_tag, package=main_package, latest=True, inherit=True
