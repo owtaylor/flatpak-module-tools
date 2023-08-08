@@ -25,6 +25,8 @@ def create_rpm_manifest(root: Path, restrict_to: Optional[Path] = None):
     mi = ts.dbMatch()
     for h in mi:
         if prefix is None or any(d.startswith(prefix) for d in h['dirnames']):
+            if h['sigmd5'] is None:  # imported key rather than a package
+                continue
             item = {
                 'name': h['name'],
                 'version': h['version'],
