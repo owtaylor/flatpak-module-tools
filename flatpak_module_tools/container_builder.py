@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from functools import cached_property
 import json
 from pathlib import Path
 import os
@@ -49,6 +50,11 @@ class BuildExecutor(ABC):
     @abstractmethod
     def popen(self, cmd: Sequence[Union[str, Path]], *,
               stdout=None, cwd: Optional[Path] = None) -> subprocess.Popen:
+        ...
+
+    @property
+    @abstractmethod
+    def absolute_installroot(self) -> Path:
         ...
 
 
@@ -144,6 +150,12 @@ class MockExecutor(BuildExecutor):
         log_call(args)
         return subprocess.Popen(args, stdout=stdout)
 
+    @cached_property
+    def absolute_installroot(self):
+        args = ['mock', '-q', '-r', self.mock_cfg_path, '--print-root-path']
+        root_path = subprocess.check_output(args, universal_newlines=True).strip()
+        return Path(root_path) / self.installroot.relative_to("/")
+
 
 class InnerExcutor(BuildExecutor):
     def init(self):
@@ -159,6 +171,10 @@ class InnerExcutor(BuildExecutor):
 
     def popen(self, cmd, *, stdout=None, cwd=None):
         return subprocess.Popen(cmd, stdout=stdout, cwd=cwd)
+
+    @property
+    def absolute_installroot(self):
+        return self.installroot
 
 
 class ContainerBuilder:
@@ -246,11 +262,12 @@ class ContainerBuilder:
         self.executor.check_call(["/bin/bash", "-ex", "/tmp/install.sh"],
                                  mounts=mounts, enable_network=True)
 
-    def _cleanup_tree(self, builder: FlatpakBuilder, installroot: Path):
+    def _cleanup_tree(self, builder: FlatpakBuilder):
         script = builder.get_cleanup_script()
         if not script:
             return
 
+        installroot = self.executor.installroot
         self.executor.write_file(installroot / "tmp/cleanup.sh", script)
         self.executor.check_call(["chroot", ".", "/bin/sh", "/tmp/cleanup.sh"], cwd=installroot)
 
@@ -274,13 +291,13 @@ class ContainerBuilder:
         shutil.copy(config_path, f"{outname_base}.config.json")
         info(f"    wrote {outname_base}.config.json")
 
-    def _create_rpm_manifest(self, installroot, outname_base: Path):
+    def _create_rpm_manifest(self, outname_base: Path):
         if self.context.flatpak_spec.build_runtime:
             restrict_to = None
         else:
-            restrict_to = installroot / "app"
+            restrict_to = self.executor.absolute_installroot / "app"
 
-        manifest = create_rpm_manifest(installroot, restrict_to)
+        manifest = create_rpm_manifest(self.executor.absolute_installroot, restrict_to)
 
         with open(f"{outname_base}.rpmlist.json", "w") as f:
             json.dump(manifest, f, indent=4)
@@ -289,7 +306,7 @@ class ContainerBuilder:
 
     def _run_build(self, executor: BuildExecutor, *,
                    local_repo_path: Optional[Path] = None,
-                   installroot: Path, workdir: Path, resultdir: Path):
+                   workdir: Path, resultdir: Path):
 
         self.executor = executor
         self.local_repo_path = local_repo_path
@@ -316,7 +333,7 @@ class ContainerBuilder:
         self._install_packages()
 
         info('Cleaning tree')
-        self._cleanup_tree(builder, installroot)
+        self._cleanup_tree(builder)
 
         info('Exporting tree')
         tar_args = [
@@ -329,7 +346,9 @@ class ContainerBuilder:
             "."
         ]
 
-        process = self.executor.popen(tar_args, cwd=installroot, stdout=subprocess.PIPE)
+        process = self.executor.popen(
+            tar_args, cwd=self.executor.installroot, stdout=subprocess.PIPE
+        )
         assert process.stdout is not None
 
         # When mock is using systemd-nspawn, systemd-nspawn dies with EPIPE if the output
@@ -356,7 +375,7 @@ class ContainerBuilder:
         important('Created ' + local_outname)
 
         info('Creating RPM manifest')
-        self._create_rpm_manifest(installroot, outname_base)
+        self._create_rpm_manifest(outname_base)
 
         info('Extracting container manifest and config')
         self._copy_manifest_and_config(oci_dir, outname_base)
@@ -379,9 +398,7 @@ class ContainerBuilder:
             runtimever=runtimever
         )
 
-        self._run_build(
-            executor, installroot=installroot, workdir=workdir, resultdir=resultdir
-        )
+        self._run_build(executor, workdir=workdir, resultdir=resultdir)
 
     def build(self):
         header('BUILDING CONTAINER')
@@ -418,5 +435,5 @@ class ContainerBuilder:
 
         return self._run_build(
             executor, local_repo_path=Path("x86_64/rpms"),
-            installroot=installroot, workdir=workdir, resultdir=resultdir
+            workdir=workdir, resultdir=resultdir
         )
