@@ -34,8 +34,14 @@ class CliData:
         assert isinstance(ctx.obj, CliData)
         return ctx.obj
 
-    def make_pool(self):
+    def download_repo_metadata(self):
         fetchrepodata.download_repo_metadata(self.tag, self.arch, self.refresh)
+
+    def get_metadata_location(self):
+        return fetchrepodata.get_metadata_location(self.tag, self.arch)
+
+    def make_pool(self):
+        self.download_repo_metadata()
         return depchase.make_pool(self.tag, self.arch, self.local_repos)
 
 
@@ -375,3 +381,19 @@ def flatpak_report(ctx, pkgs, runtime_profile, quiet=False):
         'packages': packages,
         'flatpaks': flatpaks
     }, sys.stdout, indent=4)
+
+
+@cli.command
+@click.option(
+    "--print-location", is_flag=True, default=False,
+    help="Output dependencies in JSON format"
+)
+@click.pass_context
+def fetch_metadata(ctx, print_location):
+    """Fetch latest repository metadata"""
+
+    cli_data = CliData.from_context(ctx)
+
+    cli_data.download_repo_metadata()
+    if print_location:
+        print(cli_data.get_metadata_location())

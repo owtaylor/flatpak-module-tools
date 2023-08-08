@@ -248,6 +248,11 @@ def download_repo_metadata(tag, arch, refresh: Refresh):
         _download_metadata_files(repo_definition, refresh)
 
 
+def get_metadata_location(tag, arch):
+    paths = _get_distro_paths(tag, arch)
+    return paths.repo_paths_by_name[tag].local_metadata_path
+
+
 @dataclass
 class LocalMetadataCache:
     cache_dir: str
