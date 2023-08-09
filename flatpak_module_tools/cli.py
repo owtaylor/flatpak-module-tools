@@ -199,6 +199,36 @@ def install(koji, path_or_url):
 @click.option('--all-missing', is_flag=True,
               help='Build all packages needed to build ')
 @click.argument('packages', nargs=-1, metavar="PKGS")
+def build_rpms(
+    containerspec: str, local_runtime: Optional[Path], target: Optional[str],
+    packages: List[str], all_missing: bool
+):
+    spec = make_container_spec(containerspec)
+    target = get_target(spec, target)
+
+    build_context = AutoBuildContext(
+        profile=get_profile(),
+        container_spec=spec, local_runtime=local_runtime, target=target
+    )
+
+    builder = RpmBuilder(build_context)
+    if packages is [] and not all_missing:
+        info("Nothing to rebuild, specify packages or --all-missing")
+    else:
+        builder.build_rpms(packages, all_missing=all_missing)
+
+
+@cli.command()
+@click.option('--containerspec', metavar='CONTAINER_YAML', default='./container.yaml',
+              help='path to container.yaml - defaults to ./container.yaml')
+@click.option('--local-runtime', metavar='RUNTIME_TAR_GZ', type=Path,
+              help="Path to local container build to use as runtime")
+@click.option('--target', metavar='KOJI_TARGET',
+              help=('Koji target for Flatpak **container** building. '
+                    'Determined from runtime_version if missing.'))
+@click.option('--all-missing', is_flag=True,
+              help='Build all packages needed to build ')
+@click.argument('packages', nargs=-1, metavar="PKGS")
 def build_rpms_local(
     containerspec: str, local_runtime: Optional[Path], target: Optional[str],
     packages: List[str], all_missing: bool

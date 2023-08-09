@@ -14,6 +14,7 @@ import shutil
 from typing import Collection, Dict, Iterable, List, Mapping, Set, TextIO
 
 import koji
+from koji_cli.lib import activate_session
 
 from .config import ProfileConfig
 from .console_logging import LiveDisplay, RenderWhen
@@ -37,39 +38,39 @@ class BuildItem():
     state: State = State.WAITING
     status: str = ""
     log_files: List[Path] = field(default_factory=list)
+    task: str | None = None
+    task_children: List[str] = field(default_factory=list)
 
 
 class RepoWaiter:
     def __init__(self, session: koji.ClientSession, tag: str):
         self.session = session
         self.tag = tag
-        self.waiters: Set[asyncio.Future[int]] = set()
         self.wait_task = None
         self.last_repo_event: int = -1
 
     async def do_wait(self):
-        repo_event = self.session.getRepo(self.tag)["create_event"]
-        if repo_event != self.last_repo_event:
-            self.last_repo_event = repo_event
-            for waiter in self.waiters:
-                waiter.set_result(repo_event)
+        while True:
+            repo_event = self.session.getRepo(self.tag)["create_event"]
+            if repo_event != self.last_repo_event:
+                self.wait_task = None
+                self.last_repo_event = repo_event
+                return repo_event
 
-        self.wait_task = None
-
-    async def get_repo_event(self) -> int:
-        if self.last_repo_event >= 0:
-            return self.last_repo_event
-        else:
-            return await self.get_next_repo_event()
+            await asyncio.sleep(20)
 
     async def get_next_repo_event(self) -> int:
-        future = asyncio.get_running_loop().create_future()
-        self.waiters.add(future)
-
         if not self.wait_task:
             self.wait_task = asyncio.create_task(self.do_wait())
 
-        return await future
+        return await self.wait_task
+
+    async def wait_for_event(self, event):
+        if self.last_repo_event < event:
+            while True:
+                next_repo_event = await self.get_next_repo_event()
+                if next_repo_event >= event:
+                    break
 
 
 class BuildSchedulerDisplay(LiveDisplay):
@@ -114,6 +115,10 @@ class BuildSchedulerDisplay(LiveDisplay):
                 if item.state != State.DONE:
                     for log_file in item.log_files:
                         print(f"    {log_file}", file=stream)
+                    if item.task:
+                        print(f"    {item.task}", file=stream)
+                    for task_child in item.task_children:
+                        print(f"        {task_child}", file=stream)
 
 
 class BuildScheduler(ABC):
@@ -124,14 +129,14 @@ class BuildScheduler(ABC):
         parallel_jobs: int = 3
     ):
         self.profile = profile
-        self.builder_after = build_after
+        self.build_after = build_after
         self.parallel_jobs = parallel_jobs
         self.items: Dict[str, BuildItem] = {}
         self.running: Set[asyncio.Task] = set()
         self.slots = [False for i in range(0, self.parallel_jobs)]
 
     @abstractmethod
-    async def build_item(self, item: BuildItem, slot: int):
+    async def build_item(self, item: BuildItem, slot: int, last_batch: bool):
         ...
 
     def add_item(self, item: BuildItem):
@@ -140,7 +145,7 @@ class BuildScheduler(ABC):
     def update_running_items(self):
         for item in self.items.values():
             if item.state == State.WAITING:
-                after = self.builder_after.get(item.name, ())
+                after = self.build_after.get(item.name, ())
                 not_ready = [
                     other.name
                     for other in (self.items.get(n) for n in after)
@@ -162,7 +167,9 @@ class BuildScheduler(ABC):
     def update_item(self, item: BuildItem,
                     state: State | None = None,
                     status: str | None = None,
-                    log_files: List[Path] | None = None):
+                    log_files: List[Path] | None = None,
+                    task: str | None = None,
+                    task_children: List[str] | None = None):
 
         need_update = state == State.DONE and state != item.state
         if state is not None:
@@ -171,6 +178,10 @@ class BuildScheduler(ABC):
             item.status = status
         if log_files is not None:
             item.log_files = log_files
+        if task is not None:
+            item.task = task
+        if task_children is not None:
+            item.task_children = task_children
 
         if need_update:
             self.update_running_items()
@@ -178,6 +189,11 @@ class BuildScheduler(ABC):
             self.display.update_items((item,))
 
     async def run_build_item(self, item):
+        last_batch = True
+        for other, after in self.build_after.items():
+            if item.name in after:
+                last_batch = False
+
         for i, occupied in enumerate(self.slots):
             if not occupied:
                 self.slots[i] = True
@@ -186,7 +202,7 @@ class BuildScheduler(ABC):
         else:
             assert False, "Can't allocate slot"
 
-        await self.build_item(item, slot)
+        await self.build_item(item, slot, last_batch)
 
         if item.state == State.BUILDING:
             item.state = State.FAILED
@@ -272,7 +288,7 @@ class MockBuildScheduler(BuildScheduler):
                     )
                     sys.exit(1)
 
-    async def build_item(self, item, slot):
+    async def build_item(self, item: BuildItem, slot: int, last_batch: bool):
         U = functools.partial(self.update_item, item)
 
         workdir = self.base_workdir / item.name
@@ -383,3 +399,88 @@ class MockBuildScheduler(BuildScheduler):
                 U(State.DONE, status="Built successfully")
             else:
                 U(State.FAILED, status="Build failed")
+
+
+@dataclass(init=False)
+class KojiBuildItem(BuildItem):
+    nvr: str
+
+    def __init__(self, nvr: str):
+        super().__init__(name=rpm_name_only(nvr))
+        self.nvr = nvr
+
+
+class KojiBuildScheduler(BuildScheduler):
+    def __init__(
+        self,
+        *,
+        profile: ProfileConfig,
+        target: str,
+        build_after: Mapping[str, Collection[str]],
+        parallel_jobs: int = 5
+    ):
+        super().__init__(profile, build_after, parallel_jobs=parallel_jobs)
+        self.target = target
+
+    def add_koji_item(self, nvr):
+        self.add_item(KojiBuildItem(nvr))
+
+    def build(self):
+        activate_session(self.profile.koji_session, self.profile.koji_options)
+
+        self.build_tag = self.profile.koji_session.getBuildTarget(self.target)["build_tag_name"]
+        self.repo_waiter = RepoWaiter(self.profile.koji_session, self.build_tag)
+
+        super().build()
+
+    async def build_item(self, item: BuildItem, slot: int, last_batch: bool):
+        assert isinstance(item, KojiBuildItem)
+
+        U = functools.partial(self.update_item, item)
+
+        U(State.BUILDING, status="Getting source URL")
+        assert isinstance(item, KojiBuildItem)
+        build = self.profile.source_koji_session.getBuild(item.nvr)
+        source_url = build["source"]
+
+        U(status="Starting build")
+        session = self.profile.koji_session
+        task_id = session.build(source_url, self.target)
+
+        weburl = self.profile.koji_options['weburl']
+
+        def format_task(task_info):
+            method = task_info["method"]
+            state = koji.TASK_STATES[task_info["state"]]
+            arch = task_info["arch"]
+            return f"{method} ({arch}, {state.lower()}) {weburl}/taskinfo?taskID={task_info['id']}"
+
+        while True:
+            task_info = session.getTaskInfo(task_id)
+            formatted_task = format_task(task_info)
+            state = koji.TASK_STATES[task_info['state']]
+            task_children = session.getTaskChildren(task_id)
+            formatted_task_children = [format_task(task_child) for task_child in task_children]
+
+            if state == "FAILED":
+                U(State.FAILED, status="{weburl}/taskinfo?taskID={task_id} failed")
+                return
+            elif state == "CANCELED":
+                U(State.FAILED, status=" {weburl}/taskinfo?taskID={task_id} was canceled")
+                return
+            elif state == "CLOSED":
+                break
+
+            U(status="",
+              task=formatted_task, task_children=formatted_task_children)
+            await asyncio.sleep(20)
+
+        tag_info = session.listTagged(
+            self.build_tag, inherit=True, latest=True, package=item.name
+        )[0]
+        U(status=f"Waiting for {tag_info['nvr']} to appear in {self.build_tag}")
+
+        assert tag_info["create_event"] is not None
+        await self.repo_waiter.wait_for_event(tag_info["create_event"])
+
+        U(State.DONE, status=f"{tag_info['nvr']} built successfully")

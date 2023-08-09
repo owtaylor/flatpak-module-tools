@@ -7,7 +7,7 @@ import click
 import koji
 import networkx
 
-from .build_scheduler import MockBuildScheduler
+from .build_scheduler import KojiBuildScheduler, MockBuildScheduler
 from .build_context import BuildContext
 from .console_logging import Status
 from .mock import make_mock_cfg
@@ -85,7 +85,8 @@ def check_for_cycles(build_after, build_after_details):
     if len(cycles) > 5:
         print("More than 5 cycles found, ignoring additional cycles")
 
-    return len(cycles) > 0
+    if len(cycles) > 0:
+        raise click.ClickException("Cannot determine build order because of cycles")
 
 
 class RpmBuilder:
@@ -96,32 +97,48 @@ class RpmBuilder:
         self.repo_path = Path.cwd() / get_arch().rpm / "rpms"
         self.workdir = Path.cwd() / get_arch().rpm / "work"
 
-    def _run_depchase(self, cmd: str, args: List[str]):
-        packages_file = self.workdir / \
-              f"{self.flatpak_spec.runtime_name}-{self.flatpak_spec.runtime_version}.packages"
-        with open(packages_file, "w") as f:
-            for pkg in self.context.runtime_packages:
-                print(pkg, file=f)
+    def _run_depchase(self, cmd: str, args: List[str], *,
+                      include_localrepo: bool,
+                      include_packages: bool,
+                      refresh: str = "missing"):
+        if include_packages:
+            packages_file = self.workdir / \
+                f"{self.flatpak_spec.runtime_name}-{self.flatpak_spec.runtime_version}.packages"
+            with open(packages_file, "w") as f:
+                for pkg in self.context.runtime_packages:
+                    print(pkg, file=f)
+            packages = ["--preinstalled", packages_file]
+        else:
+            packages = []
 
         arch = get_arch()
-        local_repo_path = Path(arch.rpm) / "rpms"
-        if (local_repo_path / "repodata/repomd.xml").exists():
-            local_repo = [f"--local-repo=local:{local_repo_path}"]
-        else:
-            local_repo = []
+
+        local_repo = []
+        if include_localrepo:
+            local_repo_path = Path(arch.rpm) / "rpms"
+            if (local_repo_path / "repodata/repomd.xml").exists():
+                local_repo = [f"--local-repo=local:{local_repo_path}"]
 
         rpm_build_tag = self.context.app_build_repo["tag_name"]
         return subprocess.check_output(
             ["flatpak-module-depchase",
                 f"--profile={self.profile.name}",
                 f"--arch={arch.oci}",
-                f"--tag={rpm_build_tag}"] + local_repo + [
-                cmd,
-                "--preinstalled", packages_file] + args,
+                f"--tag={rpm_build_tag}",
+                f"--refresh={refresh}"] + local_repo + [cmd] + packages + args,
             encoding="utf-8"
         )
 
-    def _find_missing_packages(self, manual_packages: List[str] = [], confirm=True):
+    def _refresh_metadata(self, include_localrepo: bool = True):
+        self._run_depchase(
+            "fetch-metadata", [],
+            include_localrepo=include_localrepo,
+            include_packages=False,
+            refresh="always"
+        )
+
+    def _find_missing_packages(self, manual_packages: List[str] = [], *,
+                               confirm: bool = True, include_localrepo: bool):
         # Access first to get logging output in the right order
         self.context.runtime_packages
 
@@ -132,7 +149,9 @@ class RpmBuilder:
                 [
                     "--json",
                     "--source",
-                ] + packages
+                ] + packages,
+                include_localrepo=include_localrepo,
+                include_packages=True,
             )
             data = json.loads(output)
 
@@ -209,36 +228,10 @@ class RpmBuilder:
 
         return result
 
-    def check(self):
-        pass
-
-    def build_rpms(self):
-        pass
-
-    def build_rpms_local(
-            self, manual_packages: List[str], manual_repos: List[Path], all_missing=False
-    ):
-        self.context.runtime_packages
-
-        repo_map = {
-            repo.name: repo for repo in manual_repos
-        }
-        all_manual_packages = list(manual_packages)
-        all_manual_packages.extend(repo_map.keys())
-
-        if all_missing:
-            to_build = self._find_missing_packages(all_manual_packages)
-        else:
-            to_build = set(manual_packages)
-
-        if not to_build:
-            return
-
-        latest_builds = self._get_latest_builds(to_build)
-
+    def _compute_build_order(self, latest_builds, *, include_localrepo: bool):
         with Status("Getting build requirements from koji"):
             build_requires_map = {}
-            for package in to_build:
+            for package in latest_builds:
                 build_requires_map[package] = \
                     self.get_build_requires(latest_builds[package]["id"])
 
@@ -248,36 +241,103 @@ class RpmBuilder:
         with Status("") as status:
             EXPANDING_MESSAGE = "Expanding build requirements to determine build order"
 
-            for package in to_build:
+            for package in latest_builds:
                 status.message = f"{EXPANDING_MESSAGE}: {package}"
                 build_requires = build_requires_map[package]
                 if not build_requires:
                     build_after[package] = set()
+                    build_after_details[package] = {}
+                    continue
 
                 output = self._run_depchase(
                     "resolve-requires",
                     [
                         "--source",
                         "--json",
-                    ] + build_requires)
+                    ] + build_requires,
+                    include_localrepo=include_localrepo,
+                    include_packages=True)
 
                 resolved_build_requires = json.loads(output)
                 after = {
                     required_name for required_name in resolved_build_requires
-                    if required_name != package and required_name in to_build
+                    if required_name != package and required_name in latest_builds
                 }
                 build_after[package] = after
 
                 build_after_details[package] = {
                     required_name:
                         details for required_name, details in resolved_build_requires.items()
-                    if required_name != package and required_name in to_build
+                    if required_name != package and required_name in latest_builds
                 }
 
             status.message = EXPANDING_MESSAGE
 
-        if check_for_cycles(build_after, build_after_details):
+        check_for_cycles(build_after, build_after_details)
+
+        return build_after
+
+    def check(self):
+        pass
+
+    def build_rpms(
+            self, manual_packages: List[str], all_missing=False
+    ):
+        self._refresh_metadata(include_localrepo=False)
+
+        # FIXME - probably should use a temporary workdir in this case
+        self.workdir.mkdir(parents=True, exist_ok=True)
+
+        if all_missing:
+            to_build = self._find_missing_packages(manual_packages, include_localrepo=False)
+        else:
+            to_build = set(manual_packages)
+
+        if not to_build:
             return
+
+        latest_builds = self._get_latest_builds(to_build)
+        build_after = self._compute_build_order(latest_builds, include_localrepo=False)
+
+        target = self.profile.get_rpm_koji_target(self.context.release)
+        builder = KojiBuildScheduler(
+            profile=self.profile,
+            target=target,
+            build_after=build_after
+        )
+
+        for package_name, package in latest_builds.items():
+            builder.add_koji_item(package["nvr"])
+
+        builder.build()
+
+    def build_rpms_local(
+            self, manual_packages: List[str], manual_repos: List[Path], all_missing=False
+    ):
+        self.repo_path.mkdir(parents=True, exist_ok=True)
+        self.workdir.mkdir(parents=True, exist_ok=True)
+
+        self._refresh_metadata()
+
+        self.context.runtime_packages
+
+        repo_map = {
+            repo.name: repo for repo in manual_repos
+        }
+        all_manual_packages = list(manual_packages)
+        all_manual_packages.extend(repo_map.keys())
+
+        if all_missing:
+            to_build = self._find_missing_packages(all_manual_packages, include_localrepo=True)
+        else:
+            to_build = set(manual_packages)
+
+        if not to_build:
+            return
+
+        latest_builds = self._get_latest_builds(to_build)
+
+        build_after = self._compute_build_order(latest_builds, include_localrepo=True)
 
         mock_cfg = make_mock_cfg(
             arch=get_arch(),
