@@ -1,4 +1,7 @@
+from dataclasses import dataclass
+from functools import cached_property, total_ordering
 from pathlib import Path
+import re
 from typing import Optional
 
 import rpm
@@ -44,3 +47,51 @@ def create_rpm_manifest(root: Path, restrict_to: Optional[Path] = None):
 
     matched.sort(key=lambda i: (i['name'], i['arch']))
     return matched
+
+
+STRIP_DISTTAG_RE = re.compile(r"(.*?).fc\d+(?:app)?$")
+
+
+@total_ordering
+@dataclass
+class VersionInfo:
+    epoch: str | None
+    version: str
+    release: str
+
+    @cached_property
+    def stripped_release(self):
+        m = STRIP_DISTTAG_RE.match(self.release)
+        return m.group(1) if m else self.release
+
+    def __init__(self, epoch: str | int | None, version: str, release: str):
+        if isinstance(epoch, int):
+            self.epoch = str(epoch)
+        else:
+            self.epoch = epoch
+        self.version = version
+        self.release = release
+
+    @staticmethod
+    def from_dict(d):
+        return VersionInfo(epoch=d["epoch"],
+                           version=d["version"],
+                           release=d["release"])
+
+    def _to_tuple(self):
+        return (self.epoch, self.version, self.stripped_release)
+
+    def __eq__(self, other):
+        return self._to_tuple() == other._to_tuple()
+
+    def __ne__(self, other):
+        return self._to_tuple() != other._to_tuple()
+
+    def __lt__(self, other):
+        return rpm.labelCompare(self._to_tuple(), other._to_tuple()) < 0  # type: ignore
+
+    def __repr__(self):
+        if self.epoch is not None:
+            return f"{self.epoch}:{self.version}-{self.release}"
+        else:
+            return f"{self.version}-{self.release}"

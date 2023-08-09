@@ -4,7 +4,7 @@ from unittest.mock import ANY
 
 import pytest
 
-from flatpak_module_tools.rpm_utils import create_rpm_manifest
+from flatpak_module_tools.rpm_utils import VersionInfo, create_rpm_manifest
 
 
 TEMPLATE_SPEC = """
@@ -162,3 +162,24 @@ def test_create_rpm_manifest(rpmroot: Path):
 
     rpmlist = create_rpm_manifest(rpmroot, restrict_to=rpmroot / "app")
     assert [i['name'] for i in rpmlist] == ['testrpm', 'testrpm-epoch']
+
+
+def test_version_info():
+    v1 = VersionInfo(None, "1.2", "3.fc28")
+    v2 = VersionInfo(None, "1.2", "3.fc29")
+    v3 = VersionInfo(None, "1.3", "3")
+
+    assert v1 == v2
+    assert v2 != v3
+    assert v2 < v3
+
+    assert repr(VersionInfo(None, "1.2", "3.fc28")) == "1.2-3.fc28"
+    assert repr(VersionInfo(1, "1.2", "3.fc28")) == "1:1.2-3.fc28"
+
+    assert VersionInfo("1", "1.2", "3") == VersionInfo(1, "1.2", "3")
+
+    assert VersionInfo.from_dict({
+        "epoch": 1,
+        "version": "1.2",
+        "release": "3"
+    }) == VersionInfo(1, "1.2", "3")
