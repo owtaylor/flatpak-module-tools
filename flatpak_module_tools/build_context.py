@@ -4,13 +4,13 @@ from functools import cached_property
 import json
 from pathlib import Path
 from textwrap import dedent
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from click import ClickException
 
 import koji
 
 from .config import ProfileConfig
-from .container_spec import ContainerSpec
+from .container_spec import ContainerSpec, Option
 from .console_logging import Status
 from .utils import RuntimeInfo, get_arch
 
@@ -48,7 +48,14 @@ class BuildContext(ABC):
     @property
     @abstractmethod
     def app_package_repo(self) -> Dict:
-        """Dictionary with repository tag_name and id for app container package installation."""
+        """Dictionary with repository information for container package installation.
+
+        Fields of the dictionary include:
+
+          id: int: repository ID
+          tag_name: str: name of the tag the repository was created from
+          dist: bool: whether repository is a dist rpeo
+        """
         ...
 
     @property
@@ -143,7 +150,10 @@ class BuildContext(ABC):
         pathinfo = koji.PathInfo(topdir=self.profile.koji_options['topurl'])
 
         def baseurl(repo: Dict):
-            return pathinfo.repo(repo["id"], repo["tag_name"]) + "/$basearch/"
+            if repo["dist"]:
+                return pathinfo.distrepo(repo["id"], repo["tag_name"], None) + "/$basearch/"
+            else:
+                return pathinfo.repo(repo["id"], repo["tag_name"]) + "/$basearch/"
 
         def koji_repo(repo: Dict, priority: int, includepkgs: Optional[List[str]] = None):
             result = dedent(f"""\
@@ -235,11 +245,14 @@ class AutoBuildContext(BuildContext):
             self._container_target_info["build_tag_name"]
         )
 
-    def _get_container_build_config_extra(self, key):
+    def _get_container_build_config_extra(self, key, default: Any = Option.REQUIRED):
         build_config = self._container_build_config
         value: Optional[str] = build_config['extra'].get(key)
         if value is None:
-            raise ClickException(f"{build_config['name']} doesn't have {key} set in extra data")
+            if default == Option.REQUIRED:
+                raise ClickException(f"{build_config['name']} doesn't have {key} set in extra data")
+            else:
+                return default
 
         return value
 
@@ -265,6 +278,9 @@ class AutoBuildContext(BuildContext):
         return {
             'id': "latest",
             'tag_name': self._get_container_build_config_extra("flatpak.runtime_package_tag"),
+            'dist': self._get_container_build_config_extra(
+                "flatpak.runtime_package_dist_repo", False
+            )
         }
 
     @property
@@ -272,6 +288,9 @@ class AutoBuildContext(BuildContext):
         return {
             'id': "latest",
             'tag_name': self._get_container_build_config_extra("flatpak.app_package_tag"),
+            'dist': self._get_container_build_config_extra(
+                "flatpak.app_package_dist_repo", False
+            )
         }
 
     @cached_property
@@ -283,7 +302,8 @@ class AutoBuildContext(BuildContext):
     def app_build_repo(self):
         return {
             'id': "latest",
-            'tag_name': self._rpm_target_info["build_tag_name"]
+            'tag_name': self._rpm_target_info["build_tag_name"],
+            'dist': False,
         }
 
 
