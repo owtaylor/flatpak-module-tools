@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from configparser import RawConfigParser
 from functools import cached_property
+import json
 from pathlib import Path
 from textwrap import dedent
 from typing import Dict, List, Optional
@@ -16,7 +17,8 @@ from .utils import RuntimeInfo, get_arch
 
 class BuildContext(ABC):
     """Holds information about what a Flatpak will be built against."""
-    def __init__(self, *, profile: ProfileConfig, container_spec: ContainerSpec):
+    def __init__(self, *, profile: ProfileConfig, container_spec: ContainerSpec,
+                 local_runtime: Optional[Path] = None):
         """
         :param profile: the configuration profile
         :param container_spec: the parsed container.yaml
@@ -24,6 +26,7 @@ class BuildContext(ABC):
         self.profile = profile
         self.container_spec = container_spec
         self.flatpak_spec = container_spec.flatpak
+        self.local_runtime = local_runtime
 
     @property
     @abstractmethod
@@ -60,18 +63,50 @@ class BuildContext(ABC):
         """Dictionary with repository tag_name and id for runtime container package installation."""
         ...
 
+    def local_runtime_aux_file(self, suffix: str):
+        assert self.local_runtime
+
+        if not self.local_runtime.exists():
+            raise ClickException(f"{self.local_runtime}: does not exist")
+
+        if not self.local_runtime.name.endswith(".tar.gz"):
+            raise ClickException(f"{self.local_runtime}: does not end with .tar.gz")
+
+        base = self.local_runtime.name[0:-7]
+        result = self.local_runtime.with_name(base + suffix)
+
+        if not result.exists():
+            raise ClickException(
+                f"{self.local_runtime}: auxiliary file {result.name} is missing"
+            )
+
+        return result
+
     @cached_property
     def runtime_packages(self):
         """List of names of packages included in the runtime"""
-        with Status("Listing runtime packages"):
-            session = self.profile.koji_session
-            rpms = session.listRPMs(imageID=self.runtime_archive["id"])
-            return sorted(rpm["name"] for rpm in rpms)
+
+        if self.local_runtime:
+            with open(self.local_runtime_aux_file(".rpmlist.json"), "r") as f:
+                rpms = json.load(f)
+        else:
+            with Status("Listing runtime packages"):
+                session = self.profile.koji_session
+                rpms = session.listRPMs(imageID=self.runtime_archive["id"])
+
+        return sorted(rpm["name"] for rpm in rpms)
 
     @cached_property
     def runtime_info(self):
         """RuntimeInfo object with information about the runtime we are building against"""
-        labels = self.runtime_archive["extra"]["docker"]["config"]["config"]["Labels"]
+
+        if self.local_runtime:
+            with open(self.local_runtime_aux_file(".config.json"), "r") as f:
+                config_json = json.load(f)
+        else:
+            config_json = self.runtime_archive["extra"]["docker"]["config"]
+
+        labels = config_json["config"]["Labels"]
         cp = RawConfigParser()
         cp.read_string(labels["org.flatpak.metadata"])
 
@@ -153,13 +188,18 @@ class BuildContext(ABC):
 class AutoBuildContext(BuildContext):
     """BuildContext subclass for determining all the information based on the Koji target."""
 
-    def __init__(self, *, profile: ProfileConfig, container_spec: ContainerSpec, target: str):
+    def __init__(self, *, profile: ProfileConfig, container_spec: ContainerSpec, target: str,
+                 local_runtime: Optional[Path] = None):
         """
         :param profile: the configuration profile
         :param container_spec: the parsed container.yaml
         :param target: target used to build containers
+        :param local_runtime_build: path to local build of runtime
         """
-        super().__init__(profile=profile, container_spec=container_spec)
+        super().__init__(
+            profile=profile,
+            container_spec=container_spec,
+            local_runtime=local_runtime)
         self.container_target = target
 
     @cached_property
