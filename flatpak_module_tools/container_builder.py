@@ -433,7 +433,11 @@ class ContainerBuilder:
             runtimever=runtimever
         )
 
+        local_repo_path = Path(arch.rpm) / "rpms"
+        if not (local_repo_path / "repomd/repomd.xml").exists():
+            local_repo_path = None
+
         return self._run_build(
-            executor, local_repo_path=Path("x86_64/rpms"),
+            executor, local_repo_path=local_repo_path,
             workdir=workdir, resultdir=resultdir
         )
