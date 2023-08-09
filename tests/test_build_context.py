@@ -54,7 +54,7 @@ flatpak:
 
 
 RUNTIME_NVR = "flatpak-runtime-f39-1"
-APP_NVR = "eog-44.2-1"
+APP_NVR = "eog-flatpak-44.2-1"
 
 
 class ID(int, Enum):
@@ -121,6 +121,7 @@ TAGS = [{
     "repo": {
         "id": ID.REPO_F39_FLATPAK_APP_PACKAGES,
         "tag_name": "f39-flatpak-app-packages",
+        "dist": False,
     },
     "tagged": [{
         "name": "eog",
@@ -149,6 +150,7 @@ TAGS = [{
     "repo": {
         "id": ID.REPO_F39_FLATPAK_RUNTIME_PACKAGES,
         "tag_name": "f39-flatpak-runtime-packages",
+        "dist": False,
     },
 }, {
     "taginfo": {
@@ -264,7 +266,6 @@ def test_manual_build_context(app_container_spec, profile: ProfileConfig):
                                  runtime_repo=ID.REPO_F39_FLATPAK_RUNTIME_PACKAGES,
                                  app_repo=ID.REPO_F39_FLATPAK_APP_PACKAGES)
 
-    assert context.nvr == APP_NVR
     assert context.runtime_package_repo["id"] == ID.REPO_F39_FLATPAK_RUNTIME_PACKAGES
     assert context.runtime_package_repo["tag_name"] == "f39-flatpak-runtime-packages"
     assert context.app_package_repo["id"] == ID.REPO_F39_FLATPAK_APP_PACKAGES
@@ -309,6 +310,7 @@ def test_auto_build_context_app(app_container_spec, profile: ProfileConfig):
                                target="f39-flatpak-candidate")
 
     assert context.nvr == APP_NVR
+
     assert context.runtime_package_repo["id"] == "latest"
     assert context.runtime_package_repo["tag_name"] == "f39-flatpak-runtime-packages"
     assert context.app_package_repo["id"] == "latest"

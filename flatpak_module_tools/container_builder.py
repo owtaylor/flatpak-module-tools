@@ -184,9 +184,8 @@ class ContainerBuilder:
         self.flatpak_metadata = flatpak_metadata
 
     def _add_labels_to_builder(self, builder, name, version, release):
-        name_label = self.context.flatpak_spec.name or name
-        component_label = self.context.flatpak_spec.component or name
-
+        component_label = name
+        name_label = self.context.container_spec.flatpak.get_name_label(component_label)
         builder.add_labels({'name': name_label,
                             'com.redhat.component': component_label,
                             'version': version,

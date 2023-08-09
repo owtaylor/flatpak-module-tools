@@ -185,6 +185,26 @@ class FlatpakSpec(BaseSpec):
             if not package.platforms or package.platforms.includes_platform(arch.rpm)
         ]
 
+    def get_component_label(self, fallback_name: str):
+        # Return the com.redhat.component label - which is the "name" of the
+        # NVR
+        if self.component:
+            return self.component
+        else:
+            return (self.name or fallback_name) + "-flatpak"
+
+    def get_name_label(self, fallback_component: str):
+        # Return the name label - this is used for which container repository
+        # to push to. This basically reverses get_component() and is useful
+        # when we want to go from NVR to name label.
+        if self.name:
+            return self.name
+        else:
+            if fallback_component.endswith("-flatpak"):
+                return fallback_component[:-8]
+            else:
+                return fallback_component
+
 
 class ComposeSpec(BaseSpec):
     def __init__(self, path, compose_yaml):

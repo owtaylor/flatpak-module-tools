@@ -227,9 +227,7 @@ class AutoBuildContext(BuildContext):
             if not latest_tagged:
                 raise ClickException(f"Can't find build for {main_package} in {app_package_tag}")
 
-            name = (self.flatpak_spec.component or
-                    self.flatpak_spec.name or
-                    latest_tagged[0]["name"])
+            name = self.flatpak_spec.get_component_label(latest_tagged[0]["name"])
             version = latest_tagged[0]["version"]
             release = 1
 
