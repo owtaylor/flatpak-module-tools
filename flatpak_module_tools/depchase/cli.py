@@ -35,10 +35,14 @@ class CliData:
         return ctx.obj
 
     def download_repo_metadata(self):
-        fetchrepodata.download_repo_metadata(self.tag, self.arch, self.refresh)
+        if self.tag != "NONE":
+            fetchrepodata.download_repo_metadata(self.tag, self.arch, self.refresh)
 
     def get_metadata_location(self):
-        return fetchrepodata.get_metadata_location(self.tag, self.arch)
+        if self.tag != "NONE":
+            return fetchrepodata.get_metadata_location(self.tag, self.arch)
+        else:
+            return ""
 
     def make_pool(self):
         self.download_repo_metadata()
@@ -60,7 +64,7 @@ class CliData:
 )
 @click.option(
     '-t', '--tag', metavar='KOJI_TAG', required=True,
-    help='Koji build tag to use as package source'
+    help='Koji build tag to use as package source. NONE for local repositories only'
 )
 @click.option('-a', '--arch', help='Architecture')
 @click.option(

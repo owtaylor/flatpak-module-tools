@@ -7,7 +7,7 @@ from typing import List
 
 import solv
 
-from .fetchrepodata import load_cached_repodata
+from .fetchrepodata import load_cached_repodata, CACHEDIR
 from ..utils import die
 
 
@@ -272,14 +272,16 @@ def load_stub(repodata):
 
 
 def setup_repos(tag, arch, local_repos):
-    cached_repodata = load_cached_repodata(tag, arch)
-
     repos: List[Repo] = []
-    for reponame, cache_path in cached_repodata.repo_cache_paths.items():
-        repos.append(Repo(reponame, cache_path, cached_repodata.cache_dir))
+
+    if tag != "NONE":
+        cached_repodata = load_cached_repodata(tag, arch)
+
+        for reponame, cache_path in cached_repodata.repo_cache_paths.items():
+            repos.append(Repo(reponame, cache_path, cached_repodata.cache_dir))
 
     for localrepo in local_repos:
         name, path = localrepo.split(":", 1)
-        repos.append(Repo(name, os.path.abspath(path), cached_repodata.cache_dir))
+        repos.append(Repo(name, os.path.abspath(path), CACHEDIR))
 
     return repos
