@@ -79,9 +79,12 @@ def cli(verbose, config, profile):
               help="Path to local container build to use as runtime")
 @click.option('--target', metavar='KOJI_TARGET',
               help='Koji target to build against. Determined from runtime_version if missing.')
+@click.option('--allow-outdated', is_flag=True,
+              help="Continue even if included packages will have an old version")
 @click.option('--install', is_flag=True,
               help='automatically install Flatpak for the current user')
-def build_container(flatpak_metadata, containerspec, local_runtime, target, install):
+def build_container(flatpak_metadata, containerspec, local_runtime, target,
+                    install: bool, allow_outdated: bool):
     """Build a container from local or remote module"""
 
     container_spec = make_container_spec(containerspec)
@@ -91,6 +94,11 @@ def build_container(flatpak_metadata, containerspec, local_runtime, target, inst
         profile=get_profile(),
         container_spec=container_spec, local_runtime=local_runtime, target=target
     )
+
+    if not container_spec.flatpak.build_runtime:
+        rpm_builder = RpmBuilder(build_context)
+        rpm_builder.check(include_localrepo=True, allow_outdated=allow_outdated)
+
     container_builder = ContainerBuilder(build_context, flatpak_metadata=flatpak_metadata)
     tarfile = container_builder.build()
 
@@ -196,12 +204,14 @@ def install(koji, path_or_url):
 @click.option('--target', metavar='KOJI_TARGET',
               help=('Koji target for Flatpak **container** building. '
                     'Determined from runtime_version if missing.'))
-@click.option('--all-missing', is_flag=True,
-              help='Build all packages needed to build ')
+@click.option('--auto', is_flag=True,
+              help='Build all packages needed to build container')
+@click.option('--allow-outdated', is_flag=True,
+              help="Don't rebuild packages that are present but have an old version")
 @click.argument('packages', nargs=-1, metavar="PKGS")
 def build_rpms(
     containerspec: str, local_runtime: Optional[Path], target: Optional[str],
-    packages: List[str], all_missing: bool
+    packages: List[str], auto: bool, allow_outdated
 ):
     spec = make_container_spec(containerspec)
     target = get_target(spec, target)
@@ -212,10 +222,10 @@ def build_rpms(
     )
 
     builder = RpmBuilder(build_context)
-    if packages is [] and not all_missing:
-        info("Nothing to rebuild, specify packages or --all-missing")
+    if packages is [] and not auto:
+        info("Nothing to rebuild, specify packages or --auto")
     else:
-        builder.build_rpms(packages, all_missing=all_missing)
+        builder.build_rpms(packages, auto=auto, allow_outdated=allow_outdated)
 
 
 @cli.command()
@@ -226,12 +236,14 @@ def build_rpms(
 @click.option('--target', metavar='KOJI_TARGET',
               help=('Koji target for Flatpak **container** building. '
                     'Determined from runtime_version if missing.'))
-@click.option('--all-missing', is_flag=True,
-              help='Build all packages needed to build ')
+@click.option('--auto', is_flag=True,
+              help='Build all packages needed to build container')
+@click.option('--allow-outdated', is_flag=True,
+              help="Don't rebuild packages that are present but have an old version")
 @click.argument('packages', nargs=-1, metavar="PKGS")
 def build_rpms_local(
     containerspec: str, local_runtime: Optional[Path], target: Optional[str],
-    packages: List[str], all_missing: bool
+    packages: List[str], auto: bool, allow_outdated: bool
 ):
     spec = make_container_spec(containerspec)
     target = get_target(spec, target)
@@ -251,7 +263,9 @@ def build_rpms_local(
     )
 
     builder = RpmBuilder(build_context)
-    if packages is [] and not all_missing:
+    if packages is [] and not auto:
         info("Nothing to rebuild, specify packages or --all-missing")
     else:
-        builder.build_rpms_local(manual_packages, manual_repos, all_missing=all_missing)
+        builder.build_rpms_local(
+            manual_packages, manual_repos, auto=auto, allow_outdated=allow_outdated
+        )

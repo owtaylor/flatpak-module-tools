@@ -1,7 +1,8 @@
 import json
 from pathlib import Path
 import subprocess
-from typing import Collection, List
+import time
+from typing import Collection, List, Tuple
 
 import click
 import koji
@@ -11,6 +12,7 @@ from .build_scheduler import KojiBuildScheduler, MockBuildScheduler
 from .build_context import BuildContext
 from .console_logging import Status
 from .mock import make_mock_cfg
+from .rpm_utils import VersionInfo
 from .utils import get_arch, error
 
 
@@ -99,6 +101,7 @@ class RpmBuilder:
 
     def _run_depchase(self, cmd: str, args: List[str], *,
                       include_localrepo: bool,
+                      include_tag: bool,
                       include_packages: bool,
                       refresh: str = "missing"):
         if include_packages:
@@ -119,7 +122,7 @@ class RpmBuilder:
             if (local_repo_path / "repodata/repomd.xml").exists():
                 local_repo = [f"--local-repo=local:{local_repo_path}"]
 
-        rpm_build_tag = self.context.app_build_repo["tag_name"]
+        rpm_build_tag = self.context.app_build_repo["tag_name"] if include_tag else "NONE"
         return subprocess.check_output(
             ["flatpak-module-depchase",
                 f"--profile={self.profile.name}",
@@ -133,15 +136,12 @@ class RpmBuilder:
         self._run_depchase(
             "fetch-metadata", [],
             include_localrepo=include_localrepo,
+            include_tag=True,
             include_packages=False,
             refresh="always"
         )
 
-    def _find_missing_packages(self, manual_packages: List[str] = [], *,
-                               confirm: bool = True, include_localrepo: bool):
-        # Access first to get logging output in the right order
-        self.context.runtime_packages
-
+    def _resolve_packages(self, include_localrepo: bool):
         packages = self.flatpak_spec.get_packages_for_arch(get_arch())
         with Status(f"Finding dependencies of {', '.join(packages)} not in runtime"):
             output = self._run_depchase(
@@ -151,55 +151,105 @@ class RpmBuilder:
                     "--source",
                 ] + packages,
                 include_localrepo=include_localrepo,
+                include_tag=True,
                 include_packages=True,
             )
-            data = json.loads(output)
+            return json.loads(output)
 
-        print("Needed for installation:")
+    def _check_packages(self,
+                        manual_packages: Collection,
+                        *,
+                        include_localrepo: bool, allow_outdated: bool):
+        data = self._resolve_packages(include_localrepo=include_localrepo)
 
-        to_rebuild = set(manual_packages)
-        for source_rpm, binary_rpm_details in data.items():
-            all_rebuilt = True
-            for details in binary_rpm_details:
-                release_arch = details["nvra"].rsplit("-", 2)[2]
-                release = release_arch.rsplit(".", 1)[0]
-                if details["repo"] == "local":
-                    repo = " (local)"
-                else:
-                    repo = ""
-                if not release.endswith("app"):
-                    all_rebuilt = False
-                    click.secho(f"    {details['nvra']}{repo}", bold=True)
-                else:
-                    click.secho(f"    {details['nvra']}{repo}")
-            if not all_rebuilt:
-                to_rebuild.add(source_rpm)
+        source_session = self.profile.source_koji_session
+        session = self.profile.koji_session
 
-        print("To rebuild:", ", ".join(sorted(to_rebuild)))
+        source_tag = self.context.profile.get_source_koji_tag(release=self.context.release)
 
-        if not to_rebuild:
-            return set()
+        rpm_target = self.profile.get_rpm_koji_target(self.context.release)
+        rpm_dest_tag = session.getBuildTarget(rpm_target)["dest_tag_name"]
 
-        while confirm:
-            choice = click.prompt("Proceed?", type=click.Choice(["y", "n", "?"]))
-            if choice == "y":
-                break
-            if choice == "n":
-                return set()
+        if include_localrepo:
+            all_localrepo_package_versions = self.get_localrepo_package_versions()
+            localrepo_package_versions = {
+                k: v for k, v in all_localrepo_package_versions.items() if k in data
+            }
+        else:
+            localrepo_package_versions = {}
+
+        need_rebuild = set(manual_packages)
+
+        with Status("Checking package versions"):
+            display_table: List[Tuple[bool, str, str, str, str, str]]
+            if localrepo_package_versions:
+                display_table = [(True, "", source_tag, rpm_dest_tag, "local", "")]
             else:
-                for source_rpm in sorted(to_rebuild):
-                    print(source_rpm)
-                    if source_rpm in manual_packages:
-                        print("    <specified manually>")
-                    else:
-                        for details in data[source_rpm]:
-                            print(f"    {details['name']}")
-                            if "explanation" in details:
-                                print_explanation(details["explanation"], "        ")
-                            else:
-                                print("        <from container.yaml>")
+                display_table = [(True, "", source_tag, rpm_dest_tag, "", "")]
+            wait_for_event = -1
+            for package in data.keys():
+                source_tag_infos = source_session.listTagged(
+                    source_tag, latest=True, inherit=True, package=package
+                )
+                source_version_info = VersionInfo.from_dict(source_tag_infos[0])
 
-        return to_rebuild
+                ok = False
+
+                package_tag_infos = session.listTagged(
+                    rpm_dest_tag, latest=True, inherit=False, package=package
+                )
+                if package_tag_infos:
+                    package_version_info = VersionInfo.from_dict(package_tag_infos[0])
+                    if allow_outdated or package_version_info >= source_version_info:
+                        ok = True
+
+                        create_event = package_tag_infos[0]["create_event"]
+                        if create_event and create_event > wait_for_event:
+                            wait_for_event = create_event
+                else:
+                    package_version_info = None
+                    ok = False
+
+                local_version_info = localrepo_package_versions.get(package)
+                if local_version_info:
+                    if allow_outdated or local_version_info >= source_version_info:
+                        ok = True
+
+                display_table.append((
+                    ok,
+                    package,
+                    str(source_version_info),
+                    str(package_version_info) if package_version_info else "",
+                    str(local_version_info) if local_version_info else "",
+                    "(forced)" if package in manual_packages else "",
+                ))
+
+                if not ok:
+                    need_rebuild.add(package)
+
+        widths = (
+            0,
+            max(len(row[1]) for row in display_table),
+            max(len(row[2]) for row in display_table),
+            max(len(row[3]) for row in display_table),
+            max(len(row[4]) for row in display_table),
+            max(len(row[5]) for row in display_table),
+        )
+
+        def pad(str, width):
+            return str + " " * (width - len(str))
+
+        for i, row in enumerate(display_table):
+            fg = "red" if not row[0] else None
+            click.echo(
+                click.style(pad(row[1], widths[1]), bold=True) +
+                " " + click.style(pad(row[2], widths[2]), fg=fg, bold=i == 0) +
+                " " + click.style(pad(row[3], widths[3]), fg=fg, bold=i == 0) +
+                " " + click.style(pad(row[4], widths[4]), fg=fg, bold=i == 0) +
+                " " + click.style(pad(row[5], widths[5]), fg=fg, bold=i == 0)
+            )
+
+        return need_rebuild, wait_for_event
 
     def _get_latest_builds(self, to_build: Collection[str]):
         session = self.profile.source_koji_session
@@ -256,6 +306,7 @@ class RpmBuilder:
                         "--json",
                     ] + build_requires,
                     include_localrepo=include_localrepo,
+                    include_tag=True,
                     include_packages=True)
 
                 resolved_build_requires = json.loads(output)
@@ -277,23 +328,78 @@ class RpmBuilder:
 
         return build_after
 
-    def check(self):
-        pass
+    def get_localrepo_package_versions(self):
+        rpm_list_json = self._run_depchase(
+            "list-rpms", [],
+            include_localrepo=True,
+            include_tag=False,
+            include_packages=False,
+        )
+        package_versions = {}
+        for r in json.loads(rpm_list_json):
+            package_versions[r["package_name"]] = VersionInfo.from_dict(r)
+
+        return package_versions
+
+    def check(self, *, include_localrepo: bool, allow_outdated: bool):
+        self._refresh_metadata(include_localrepo=include_localrepo)
+
+        need_rebuild, wait_for_event = self._check_packages(
+            [],
+            include_localrepo=include_localrepo, allow_outdated=allow_outdated
+        )
+
+        if need_rebuild:
+            if allow_outdated:
+                raise click.ClickException("Missing packages, not building")
+            else:
+                raise click.ClickException("Outdated or missing packages, not building")
+
+        package_tag = self.context.app_package_repo["tag_name"]
+        package_dist_repo = self.context.app_package_repo["dist"]
+
+        if wait_for_event >= 0:
+            with Status("Waiting for repository with necessary packages"):
+                session = self.profile.koji_session
+                while True:
+                    repo_info = session.getRepo(package_tag, dist=package_dist_repo)
+                    if repo_info["create_event"] >= wait_for_event:
+                        break
+                    time.sleep(20)
+
+    def _prompt_for_rebuild(self, to_rebuild: Collection[str]):
+        print("To rebuild:", ", ".join(sorted(to_rebuild)))
+        if not to_rebuild:
+            return False
+
+        while True:
+            choice = click.prompt("Proceed?", type=click.Choice(["y", "n", "?"]))
+            if choice == "y":
+                return True
+            if choice == "n":
+                return False
 
     def build_rpms(
-            self, manual_packages: List[str], all_missing=False
+            self, manual_packages: List[str], *,
+            auto: bool,
+            allow_outdated: bool
     ):
         self._refresh_metadata(include_localrepo=False)
 
         # FIXME - probably should use a temporary workdir in this case
         self.workdir.mkdir(parents=True, exist_ok=True)
 
-        if all_missing:
-            to_build = self._find_missing_packages(manual_packages, include_localrepo=False)
+        if auto:
+            to_build, _ = self._check_packages(
+                manual_packages, include_localrepo=False, allow_outdated=allow_outdated
+            )
         else:
             to_build = set(manual_packages)
 
         if not to_build:
+            return
+
+        if auto and not self._prompt_for_rebuild(to_build):
             return
 
         latest_builds = self._get_latest_builds(to_build)
@@ -312,7 +418,8 @@ class RpmBuilder:
         builder.build()
 
     def build_rpms_local(
-            self, manual_packages: List[str], manual_repos: List[Path], all_missing=False
+            self, manual_packages: List[str], manual_repos: List[Path], *,
+            auto: bool, allow_outdated: bool
     ):
         self.repo_path.mkdir(parents=True, exist_ok=True)
         self.workdir.mkdir(parents=True, exist_ok=True)
@@ -327,12 +434,17 @@ class RpmBuilder:
         all_manual_packages = list(manual_packages)
         all_manual_packages.extend(repo_map.keys())
 
-        if all_missing:
-            to_build = self._find_missing_packages(all_manual_packages, include_localrepo=True)
+        if auto:
+            to_build, _ = self._check_packages(
+                all_manual_packages, include_localrepo=True, allow_outdated=allow_outdated
+            )
         else:
             to_build = set(manual_packages)
 
         if not to_build:
+            return
+
+        if auto and not self._prompt_for_rebuild(to_build):
             return
 
         latest_builds = self._get_latest_builds(to_build)
