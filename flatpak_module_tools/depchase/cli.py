@@ -403,3 +403,40 @@ def fetch_metadata(ctx, print_location):
     cli_data.download_repo_metadata()
     if print_location:
         print(cli_data.get_metadata_location())
+
+
+@cli.command
+@click.pass_context
+def list_rpms(ctx):
+    """Fetch latest repository metadata"""
+
+    cli_data = CliData.from_context(ctx)
+
+    cli_data.download_repo_metadata()
+
+    pool = cli_data.make_pool()
+    result = []
+
+    for s in pool.solvables:
+        if s.arch == "src":
+            package_name = s.name
+        else:
+            package_name = rpm_name_only(s.lookup_sourcepkg())
+        evr = s.evr
+        colon = evr.find(":")
+        if colon >= 0:
+            e = evr[:colon]
+            v, r = evr[colon + 1:].split("-")
+        else:
+            e = None
+            v, r = evr.split("-")
+        result.append({
+            "name": s.name,
+            "package_name": package_name,
+            "epoch": e,
+            "version": v,
+            "release": r,
+            "arch": s.arch
+        })
+
+    json.dump(result, sys.stdout, indent=4)
