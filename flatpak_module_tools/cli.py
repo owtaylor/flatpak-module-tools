@@ -66,7 +66,7 @@ def cli(verbose, config, profile):
         logging.getLogger("flatpak_module_tools").setLevel(level=logging.INFO)
 
 
-@cli.command(name="build-container")
+@cli.command
 @click.option('--flatpak-metadata',
               type=click.Choice([FLATPAK_METADATA_LABELS,
                                  FLATPAK_METADATA_ANNOTATIONS,
@@ -83,9 +83,9 @@ def cli(verbose, config, profile):
               help="Continue even if included packages will have an old version")
 @click.option('--install', is_flag=True,
               help='automatically install Flatpak for the current user')
-def build_container(flatpak_metadata, containerspec, local_runtime, target,
-                    install: bool, allow_outdated: bool):
-    """Build a container from local or remote module"""
+def build_container_local(flatpak_metadata, containerspec, local_runtime, target,
+                          install: bool, allow_outdated: bool):
+    """Build a container from local and remote RPMs"""
 
     container_spec = make_container_spec(containerspec)
     target = get_target(container_spec, target)
@@ -213,6 +213,8 @@ def build_rpms(
     containerspec: str, local_runtime: Optional[Path], target: Optional[str],
     packages: List[str], auto: bool, allow_outdated
 ):
+    """Rebuild rpms needed for the container in Koji"""
+
     spec = make_container_spec(containerspec)
     target = get_target(spec, target)
 
@@ -245,6 +247,8 @@ def build_rpms_local(
     containerspec: str, local_runtime: Optional[Path], target: Optional[str],
     packages: List[str], auto: bool, allow_outdated: bool
 ):
+    """Rebuild rpms needed for the container locally"""
+
     spec = make_container_spec(containerspec)
     target = get_target(spec, target)
 
