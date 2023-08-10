@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from functools import cached_property, total_ordering
 from pathlib import Path
 import re
-from typing import Optional
+from typing import Optional, Union
 
 import rpm
 
@@ -55,7 +55,7 @@ STRIP_DISTTAG_RE = re.compile(r"(.*?).fc\d+(?:app)?$")
 @total_ordering
 @dataclass
 class VersionInfo:
-    epoch: str | None
+    epoch: Optional[str]
     version: str
     release: str
 
@@ -64,7 +64,7 @@ class VersionInfo:
         m = STRIP_DISTTAG_RE.match(self.release)
         return m.group(1) if m else self.release
 
-    def __init__(self, epoch: str | int | None, version: str, release: str):
+    def __init__(self, epoch: Union[str, int, None], version: str, release: str):
         if isinstance(epoch, int):
             self.epoch = str(epoch)
         else:
