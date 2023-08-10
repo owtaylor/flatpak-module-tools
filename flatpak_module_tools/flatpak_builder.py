@@ -246,7 +246,7 @@ class FileTreeProcessor:
         cp.optionxform = str  # type: ignore
 
         with open(desktop) as f:
-            cp.readfp(f)
+            cp.read_file(f)
 
         desktop_keys = cp.options('Desktop Entry')
 
