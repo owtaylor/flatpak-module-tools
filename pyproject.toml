@@ -31,6 +31,7 @@ cli = [
     "PyGObject",
     "requests-toolbelt",
     "rpm",
+    "setuptools",
     "solv"
 ]
 
@@ -41,6 +42,7 @@ tests = [
     "pytest",
     "pytest-cov",
     "rpm",
+    "setuptools",
 ]
 
 [tool.setuptools.packages.find]
