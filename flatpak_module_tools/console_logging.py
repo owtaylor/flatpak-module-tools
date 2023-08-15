@@ -15,7 +15,9 @@ import click
 NL_DELIMITER = re.compile('(\n)')
 # Matches *common* ANSI control sequences
 # https://en.wikipedia.org/wiki/ANSI_escape_code#CSI_sequences
-CSI_SEQUENCE = re.compile('\033[0-9;]*[A-Za-z]')
+CSI_SEQUENCE = re.compile(r'\033[0-9;]*[A-Za-z]')
+# https://en.wikipedia.org/wiki/ANSI_escape_code#OSC
+OSC_SEQUENCE = re.compile(r'\033[^\033]*\033\\')
 
 
 class EraseableStream(object):
@@ -40,6 +42,7 @@ class EraseableStream(object):
 
         # Strip control sequences
         plain = CSI_SEQUENCE.sub('', string)
+        plain = OSC_SEQUENCE.sub('', plain)
 
         for piece in NL_DELIMITER.split(plain):
             if piece == '\n':
