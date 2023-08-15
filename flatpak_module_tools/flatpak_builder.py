@@ -872,8 +872,16 @@ class FlatpakBuilder:
         def try_bwrap(exec_name):
             # return: True - works; False - doesn't work; None - not found
             try:
-                return subprocess.call([exec_name, '--bind', '/', '/', 'true'],
-                                       stdout=devnull, stderr=devnull) == 0
+                # In some build environments, bwrap could, e.g., work without --unshare-net
+                # but not with it. So simulate how flatpak-validate-icon uses bwrap.
+                return subprocess.call([
+                    exec_name,
+                    '--unshare-ipc',
+                    '--unshare-net',
+                    '--unshare-pid',
+                    '--bind', '/', '/',
+                    'true'
+                ], stdout=devnull, stderr=devnull) == 0
             except OSError as e:
                 if e.errno == errno.ENOENT:
                     return None
