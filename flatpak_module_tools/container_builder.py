@@ -236,9 +236,9 @@ class ContainerBuilder:
         )
         self.executor.write_file(dnfdir / "dnf.conf", dnf_conf)
 
-    def _install_packages(self):
+    def _install_packages(self, builder: FlatpakBuilder):
         installroot = self.executor.installroot
-        packages = self.context.flatpak_spec.get_packages_for_arch(get_arch())
+        packages = builder.get_install_packages()
         package_str = " ".join(shlex.quote(p) for p in packages)
         install_sh = dedent(f"""\
             for     i in /proc /sys /dev /var/cache/dnf ; do
@@ -329,7 +329,7 @@ class ContainerBuilder:
         self._write_dnf_conf()
 
         info('Installing packages')
-        self._install_packages()
+        self._install_packages(builder)
 
         info('Cleaning tree')
         self._cleanup_tree(builder)

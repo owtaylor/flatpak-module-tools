@@ -410,16 +410,7 @@ class ModuleFlatpakSourceInfo(BaseFlatpakSourceInfo):
                       if m.mmd.props.module_name != 'platform')
 
     def get_install_packages(self, arch: Arch) -> List[str]:
-        packages = self.base_module.get_profile_packages(self.profile, arch)
-        if not self.runtime:
-            # The flatpak-runtime-config package is needed when building an application
-            # Flatpak because it includes file triggers for files in /app. (Including just
-            # this package avoids having to install the entire runtime package set; if
-            # we need to make this configurable it could be a separate profile of
-            # the runtime.)
-            packages.append('flatpak-runtime-config')
-
-        return packages
+        return self.base_module.get_profile_packages(self.profile, arch)
 
     def get_includepkgs(self, arch: Arch) -> List[str]:
         # For a runtime, we want to make sure that the set of RPMs that is installed
@@ -574,7 +565,16 @@ class FlatpakBuilder:
         return self.source.get_enable_modules()
 
     def get_install_packages(self):
-        return self.source.get_install_packages(self.arch)
+        packages = self.source.get_install_packages(self.arch)
+        if not self.source.runtime:
+            # The flatpak-runtime-config package is needed when building an application
+            # Flatpak because it includes file triggers for files in /app. (Including just
+            # this package avoids having to install the entire runtime package set; if
+            # we need to make this configurable it could be a separate profile of
+            # the runtime.)
+            packages.append('flatpak-runtime-config')
+
+        return packages
 
     def get_includepkgs(self):
         return self.source.get_includepkgs(self.arch)
