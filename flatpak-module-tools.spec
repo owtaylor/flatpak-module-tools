@@ -40,8 +40,10 @@ Requires: python3-click
 Requires: python3-koji
 Requires: python3-networkx
 Requires: python3-requests
+Requires: python3-requests-toolbelt
 # for pkg_resources
 Requires: python3-setuptools
+Requires: python3-solv
 
 %description
 flatpak-module-tools is a set of command line tools (all accessed via a single
