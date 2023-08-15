@@ -7,4 +7,4 @@ profiles:
     production:
         koji_profile: koji
     staging:
-        koji_profile: staging
+        koji_profile: stg
