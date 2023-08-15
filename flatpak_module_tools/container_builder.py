@@ -433,7 +433,7 @@ class ContainerBuilder:
         )
 
         local_repo_path = Path(arch.rpm) / "rpms"
-        if not (local_repo_path / "repomd/repomd.xml").exists():
+        if not (local_repo_path / "repodata/repomd.xml").exists():
             local_repo_path = None
 
         return self._run_build(
