@@ -120,11 +120,13 @@ class MockExecutor(BuildExecutor):
                    cwd=None,
                    mounts: Optional[Dict[Path, Path]] = None,
                    enable_network: bool = False):
-        assert len(cmd) > 1  # avoid accidental shell interpretation
+        # mock --chroot logs the result, which we don't want here,
+        # so we use --shell instead.
 
-        args = ['mock', '-q', '-r', self.mock_cfg_path, '--chroot']
+        args = ['mock', '-q', '-r', self.mock_cfg_path, '--shell']
         if cwd:
             args += ['--cwd', cwd]
+
         if enable_network:
             args.append("--enable-network")
         if mounts:
@@ -133,9 +135,8 @@ class MockExecutor(BuildExecutor):
                     "--plugin-option",
                     f"bind_mount:dirs=[('{outer_path}', '{inner_path}')]"
                 )
-        args.append('--')
-        args += cmd
 
+        args.append(" ".join(shlex.quote(str(c)) for c in cmd))
         check_call(args)
 
     def popen(self, cmd, *, stdout=None, cwd=None):
