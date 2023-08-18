@@ -9,10 +9,21 @@ from click import ClickException
 
 import koji
 
+from flatpak_module_tools.package_locator import PackageLocator
+
 from .config import ProfileConfig
 from .container_spec import ContainerSpec, Option
 from .console_logging import Status
 from .utils import Arch, RuntimeInfo
+
+
+def _baseurl(profile: ProfileConfig, repo: Dict):
+    pathinfo = koji.PathInfo(topdir=profile.koji_options['topurl'])
+
+    if repo["dist"]:
+        return pathinfo.distrepo(repo["id"], repo["tag_name"], None) + "/$basearch/"
+    else:
+        return pathinfo.repo(repo["id"], repo["tag_name"]) + "/$basearch/"
 
 
 class BuildContext(ABC):
@@ -149,19 +160,11 @@ class BuildContext(ABC):
         """
         repos: List[str] = []
 
-        pathinfo = koji.PathInfo(topdir=self.profile.koji_options['topurl'])
-
-        def baseurl(repo: Dict):
-            if repo["dist"]:
-                return pathinfo.distrepo(repo["id"], repo["tag_name"], None) + "/$basearch/"
-            else:
-                return pathinfo.repo(repo["id"], repo["tag_name"]) + "/$basearch/"
-
         def koji_repo(repo: Dict, priority: int, includepkgs: Optional[List[str]] = None):
             result = dedent(f"""\
                 [{repo["tag_name"]}]
                 name={repo["tag_name"]}
-                baseurl={baseurl(repo)}
+                baseurl={_baseurl(self.profile, repo)}
                 priority={priority}
                 enabled=1
                 skip_if_unavailable=False
@@ -222,16 +225,16 @@ class AutoBuildContext(BuildContext):
             return f"{name}-{self.container_spec.flatpak.branch}-1"
         else:
             main_package = self.flatpak_spec.packages[0].name
-            app_package_tag = self.app_package_repo["tag_name"]
-            latest_tagged = self.profile.koji_session.listTagged(
-                app_package_tag, package=main_package, latest=True, inherit=True
-            )
+            repo = self.app_package_repo
+            locator = PackageLocator()
+            locator.add_repo(_baseurl(self.profile, repo))
+            version_info = locator.find_latest_version(main_package, arch=self.arch)
 
-            if not latest_tagged:
-                raise ClickException(f"Can't find build for {main_package} in {app_package_tag}")
+            if not version_info:
+                raise ClickException(f"Can't find build for {main_package} in {repo['tag_name']}")
 
-            name = self.flatpak_spec.get_component_label(latest_tagged[0]["name"])
-            version = latest_tagged[0]["version"]
+            name = self.flatpak_spec.get_component_label(version_info.name)
+            version = version_info.version
             release = 1
 
             return f"{name}-{version}-{release}"

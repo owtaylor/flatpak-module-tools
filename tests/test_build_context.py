@@ -9,6 +9,7 @@ import pytest
 from flatpak_module_tools.build_context import AutoBuildContext, ManualBuildContext
 from flatpak_module_tools.config import Config, ProfileConfig
 from flatpak_module_tools.container_spec import ContainerSpec
+from flatpak_module_tools.package_locator import VersionInfo
 from flatpak_module_tools.utils import Arch
 
 
@@ -56,6 +57,9 @@ flatpak:
 
 RUNTIME_NVR = "flatpak-runtime-f39-1"
 APP_NVR = "eog-flatpak-44.2-1"
+APP_VERSION_INFO = VersionInfo(
+    epoch="0", name="eog", version="44.2", release="1", arch="ppc64le", priority=1
+)
 
 
 class ID(int, Enum):
@@ -311,7 +315,9 @@ def test_auto_build_context_app(app_container_spec, profile: ProfileConfig):
     context = AutoBuildContext(profile=profile, container_spec=app_container_spec,
                                target="f39-flatpak-candidate", arch=Arch.PPC64LE)
 
-    assert context.nvr == APP_NVR
+    with patch("flatpak_module_tools.package_locator.PackageLocator.find_latest_version",
+               return_value=APP_VERSION_INFO):
+        assert context.nvr == APP_NVR
 
     assert context.runtime_package_repo["id"] == "latest"
     assert context.runtime_package_repo["tag_name"] == "f39-flatpak-runtime-packages"
@@ -408,17 +414,11 @@ def test_auto_build_context_bad_target(app_container_spec, profile: ProfileConfi
 def test_auto_build_context_no_app_package(app_container_spec, profile: ProfileConfig):
     context = AutoBuildContext(profile=profile, container_spec=app_container_spec,
                                target="f39-flatpak-candidate", arch=Arch.PPC64LE)
-    with patch.object(MockKojiSession, "getBuildConfig", return_value={
-        "name": "f39-flatpak-container-build",
-        "extra": {
-            "flatpak.runtime_tag": "f39-flatpak-updates-candidate",
-            "flatpak.app_package_tag": "f39-flatpak-updates-candidate",  # Intentionally broken
-            "flatpak.runtime_package_tag": "f39-flatpak-runtime-packages",
-        }
-    }):
+    with patch("flatpak_module_tools.package_locator.PackageLocator.find_latest_version",
+               return_value=None):
         with pytest.raises(
             ClickException,
-            match=r"Can't find build for eog in f39-flatpak-updates-candidate"
+            match=r"Can't find build for eog in f39-flatpak-app-packages"
         ):
             context.nvr
 
