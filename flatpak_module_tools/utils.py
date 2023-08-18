@@ -67,26 +67,6 @@ class RuntimeInfo:
     version: str
 
 
-class Arch:
-    def __init__(self, oci, flatpak, rpm):
-        self.oci = oci
-        self.flatpak = flatpak
-        self.rpm = rpm
-
-
-ARCHES = {
-    arch.oci: arch for arch in [
-        Arch(oci="amd64", flatpak="x86_64", rpm="x86_64"),
-        Arch(oci="arm64", flatpak="aarch64", rpm="aarch64"),
-        Arch(oci="s390x", flatpak="s390x", rpm="s390x"),
-        Arch(oci="ppc64le", flatpak="ppc64le", rpm="ppc64le"),
-        # This is used in tests to test the case where the Flatpak and RPM names are
-        # different - this does not happen naturally at the moment as far as I know.
-        Arch(oci="testarch", flatpak="testarch", rpm="testarch_rpm"),
-    ]
-}
-
-
 @functools.lru_cache(maxsize=None)
 def _get_rpm_arch():
     return subprocess.check_output(
@@ -94,16 +74,53 @@ def _get_rpm_arch():
     ).strip()
 
 
-def get_arch(oci_arch: Optional[str] = None):
-    if oci_arch:
-        return ARCHES[oci_arch]
-    else:
-        rpm_arch = _get_rpm_arch()
-        for arch in ARCHES.values():
-            if arch.rpm == rpm_arch:
-                return arch
+class Arch:
+    name: str
+    oci: str
+    flatpak: str
+    rpm: str
 
-        raise RuntimeError(f"Unknown RPM arch '{format(rpm_arch)}'")
+    AARCH64: "Arch"
+    X86_64: "Arch"
+    PPC64LE: "Arch"
+    S390X: "Arch"
+    TESTARCH: "Arch"
+
+    def __new__(cls, *,
+                oci: Optional[str] = None,
+                flatpak: Optional[str] = None,
+                rpm: Optional[str] = None):
+
+        if flatpak is None and oci is None and rpm is None:
+            rpm = _get_rpm_arch()
+
+        for v in cls.__dict__.values():
+            if isinstance(v, Arch) and (v.oci == oci or v.flatpak == flatpak or v.rpm == rpm):
+                return v
+        else:
+            raise KeyError(f"Can't find Arch(flatpak={flatpak}, oci={oci}, rpm={rpm})")
+
+    @classmethod
+    def _add(cls, name: str, flatpak: str, oci: str, rpm: str):
+        obj = object.__new__(cls)
+        obj.name = name
+        obj.oci = oci
+        obj.flatpak = flatpak
+        obj.rpm = rpm
+        setattr(cls, name, obj)
+
+    def __repr__(self):
+        return f"Arch.{self.name}"
+
+
+Arch._add("AARCH64", "aarch64", "arm64", "aarch64")
+Arch._add("X86_64", "x86_64",  "amd64", "x86_64")
+Arch._add("PPC64LE", "ppc64le", "ppc64le", "ppc64le")
+Arch._add("S390X", "s390x", "s390x",   "s390x")
+
+# This is used in tests to test the case where the Flatpak and RPM names are
+# different - this does not happen naturally at the moment as far as I know.
+Arch._add("TESTARCH", "testarch_flatpak", "testarch_oci", "testarch_rpm")
 
 
 def rpm_name_only(rpm_name):

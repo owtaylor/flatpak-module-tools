@@ -29,7 +29,7 @@ from textwrap import dedent
 from xml.etree import ElementTree
 
 from .container_spec import FlatpakSpec
-from .utils import Arch, RuntimeInfo, get_arch
+from .utils import Arch, RuntimeInfo
 
 
 FLATPAK_METADATA_LABELS = "labels"
@@ -547,7 +547,7 @@ class FlatpakBuilder:
             raise ValueError(f"Bad flatpak_metadata value {flatpak_metadata}")
         self.flatpak_metadata = flatpak_metadata
 
-        self.arch = get_arch(oci_arch)
+        self.arch = Arch(oci=oci_arch)
 
         self.log = logging.getLogger(__name__)
 

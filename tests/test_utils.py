@@ -1,8 +1,29 @@
 import os
+from unittest.mock import patch
 
 import pytest
 
-from flatpak_module_tools.utils import atomic_writer
+from flatpak_module_tools.utils import Arch, atomic_writer, _get_rpm_arch
+
+
+def test_arch():
+    assert Arch(flatpak="testarch_flatpak") is Arch.TESTARCH
+    assert Arch(oci="testarch_oci") is Arch.TESTARCH
+    assert Arch(rpm="testarch_rpm") is Arch.TESTARCH
+
+    assert Arch.TESTARCH.flatpak == "testarch_flatpak"
+    assert Arch.TESTARCH.oci == "testarch_oci"
+    assert Arch.TESTARCH.rpm == "testarch_rpm"
+
+    _get_rpm_arch.cache_clear()
+    with patch("subprocess.check_output", return_value="testarch_rpm"):
+        assert Arch() == Arch(rpm="testarch_rpm")
+
+    _get_rpm_arch.cache_clear()
+    with pytest.raises(KeyError, match=r"Can't find Arch\(flatpak=X, oci=None, rpm=None\)"):
+        Arch(flatpak="X")
+
+    assert str(Arch.TESTARCH) == "Arch.TESTARCH"
 
 
 def test_atomic_writer_basic(tmp_path):

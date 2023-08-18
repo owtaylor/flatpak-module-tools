@@ -10,10 +10,12 @@ import pytest
 import yaml
 
 from flatpak_module_tools.flatpak_builder import (
-    FlatpakBuilder, FlatpakSourceInfo, FLATPAK_METADATA_BOTH, get_arch, ModuleInfo
+    FlatpakBuilder, FlatpakSourceInfo, FLATPAK_METADATA_BOTH, ModuleInfo
 )
 
 import gi
+
+from flatpak_module_tools.utils import Arch
 gi.require_version('Modulemd', '2.0')
 from gi.repository import Modulemd  # type: ignore  # noqa: E402
 
@@ -153,16 +155,12 @@ flatpak:
 """
 
 
-# We repeat the test with and without overriding the architectures
-@pytest.fixture(params=(None, "arm64", "testarch"))
-def oci_arch_override(request):
+# We repeat the test with different architectures
+#   aarch64: tests that Flatpak translates aarch64 => arm64
+#   testarch: test flatpak arch being different from rpm arch
+@pytest.fixture(params=(Arch.AARCH64, Arch.PPC64LE))
+def arch(request) -> Arch:
     return request.param
-
-
-# This is the Arch object corresponding to oci_arch_override
-@pytest.fixture
-def arch(oci_arch_override):
-    return get_arch(oci_arch_override)
 
 
 # We need to substitute on the arch a lot, so define another fixture to do that
@@ -301,7 +299,12 @@ def check_exported_oci(oci_outdir, arch, R, runtime=False):
     with open(descriptor_to_path(manifest["config"])) as f:
         config = json.load(f)
 
-    assert config['architecture'] == arch.oci
+    if arch.oci == "testarch_oci":
+        # Flatpak doesn't know to turn testarch_flatpak => testarch_oci, and
+        # just uses the passed in architecture
+        assert config['architecture'] == "testarch_flatpak"
+    else:
+        assert config['architecture'] == arch.oci
 
     labels = config["config"]["Labels"]
 
@@ -342,14 +345,14 @@ def check_exported_oci(oci_outdir, arch, R, runtime=False):
     assert tar.getmember("files/bin/hello") is not None
 
 
-def test_app_basic(testapp_source, tmpdir, oci_arch_override, arch, R):
+def test_app_basic(testapp_source, tmpdir, arch, R):
     workdir = str(tmpdir / "work")
     os.mkdir(workdir)
 
     builder = FlatpakBuilder(testapp_source, workdir, "root",
                              parse_manifest=parse_manifest,
                              flatpak_metadata=FLATPAK_METADATA_BOTH,
-                             oci_arch=oci_arch_override)
+                             oci_arch=arch.oci)
 
     assert set(builder.get_install_packages()) == set([
         "testapp", "testapp-fancymath", "flatpak-runtime-config"
@@ -398,14 +401,14 @@ def test_app_basic(testapp_source, tmpdir, oci_arch_override, arch, R):
     check_exported_oci(oci_outdir, arch, R, runtime=False)
 
 
-def test_runtime_basic(runtime_source, tmpdir, oci_arch_override, arch, R):
+def test_runtime_basic(runtime_source, tmpdir, arch, R):
     workdir = str(tmpdir / "work")
     os.mkdir(workdir)
 
     builder = FlatpakBuilder(runtime_source, workdir, "root",
                              parse_manifest=parse_manifest,
                              flatpak_metadata=FLATPAK_METADATA_BOTH,
-                             oci_arch=oci_arch_override)
+                             oci_arch=arch.oci)
 
     assert set(builder.get_install_packages()) == set([
         "glibc", "flatpak-runtime-config", "libfoo"
@@ -438,7 +441,7 @@ def test_runtime_basic(runtime_source, tmpdir, oci_arch_override, arch, R):
     check_exported_oci(oci_outdir, arch, R, runtime=True)
 
 
-def test_export_long_filenames(testapp_source, tmpdir):
+def test_export_long_filenames(testapp_source, tmpdir, arch):
     """
     Test for a bug where if the exported filesytem is in PAX format, then
     names/linknames that go from > 100 characters < 100 characters were
@@ -481,7 +484,7 @@ def test_export_long_filenames(testapp_source, tmpdir):
     workdir = str(tmpdir / "work")
     os.mkdir(workdir)
 
-    builder = FlatpakBuilder(testapp_source, workdir, "verylongrootname")
+    builder = FlatpakBuilder(testapp_source, workdir, "verylongrootname", oci_arch=arch.oci)
 
     with open(tmpdir / "export.tar", "rb") as f:
         outfile, manifest_file = (builder._export_from_stream(f, close_stream=False))

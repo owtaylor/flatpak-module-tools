@@ -13,7 +13,7 @@ from .build_context import BuildContext
 from .console_logging import Status
 from .mock import make_mock_cfg
 from .rpm_utils import VersionInfo
-from .utils import get_arch, error
+from .utils import Arch, error
 
 
 _FLAGS_TO_REL = {
@@ -93,11 +93,12 @@ def check_for_cycles(build_after, build_after_details):
 
 class RpmBuilder:
     def __init__(self, context: BuildContext):
+        self.arch = Arch()
         self.context = context
         self.profile = context.profile
         self.flatpak_spec = context.flatpak_spec
-        self.repo_path = Path.cwd() / get_arch().rpm / "rpms"
-        self.workdir = Path.cwd() / get_arch().rpm / "work"
+        self.repo_path = Path.cwd() / self.arch.rpm / "rpms"
+        self.workdir = Path.cwd() / self.arch.rpm / "work"
 
     def _run_depchase(self, cmd: str, args: List[str], *,
                       include_localrepo: bool,
@@ -114,11 +115,9 @@ class RpmBuilder:
         else:
             packages = []
 
-        arch = get_arch()
-
         local_repo = []
         if include_localrepo:
-            local_repo_path = Path(arch.rpm) / "rpms"
+            local_repo_path = Path(self.arch.rpm) / "rpms"
             if (local_repo_path / "repodata/repomd.xml").exists():
                 local_repo = [f"--local-repo=local:{local_repo_path}"]
 
@@ -126,7 +125,7 @@ class RpmBuilder:
         return subprocess.check_output(
             ["flatpak-module-depchase",
                 f"--profile={self.profile.name}",
-                f"--arch={arch.oci}",
+                f"--arch={self.arch.oci}",
                 f"--tag={rpm_build_tag}",
                 f"--refresh={refresh}"] + local_repo + [cmd] + packages + args,
             encoding="utf-8"
@@ -142,7 +141,7 @@ class RpmBuilder:
         )
 
     def _resolve_packages(self, include_localrepo: bool):
-        packages = self.flatpak_spec.get_packages_for_arch(get_arch())
+        packages = self.flatpak_spec.get_packages_for_arch(self.arch)
         with Status(f"Finding dependencies of {', '.join(packages)} not in runtime"):
             output = self._run_depchase(
                 "resolve-packages",
@@ -471,7 +470,7 @@ class RpmBuilder:
         build_after = self._compute_build_order(latest_builds, include_localrepo=True)
 
         mock_cfg = make_mock_cfg(
-            arch=get_arch(),
+            arch=self.arch,
             chroot_setup_cmd="install @build",
             releasever=self.context.release,
             repos=self.context.get_repos(for_container=False),

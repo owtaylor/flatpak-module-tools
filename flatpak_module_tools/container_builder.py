@@ -19,7 +19,7 @@ from .flatpak_builder import (
 from .mock import make_mock_cfg
 from .rpm_utils import create_rpm_manifest
 from .utils import (
-    atomic_writer, check_call, die, get_arch, log_call, header, important, info
+    atomic_writer, check_call, die, log_call, header, important, info
 )
 
 
@@ -94,7 +94,7 @@ class MockExecutor(BuildExecutor):
             'tar',
         ]
         mock_cfg = make_mock_cfg(
-            arch=get_arch(),
+            arch=self.context.arch,
             chroot_setup_cmd=f"install {' '.join(to_install)}",
             releasever=self.releasever,
             repos=[self._bootstrap_koji_repo],
@@ -365,7 +365,7 @@ class ContainerBuilder:
 
         ref_name, oci_dir, oci_tar = builder.build_container(filesystem_tar)
 
-        outname_base = resultdir / f"{self.context.nvr}.{get_arch().rpm}.oci"
+        outname_base = resultdir / f"{self.context.nvr}.{self.context.arch.rpm}.oci"
         local_outname = f"{outname_base}.tar.gz"
 
         info('Compressing result')
@@ -405,15 +405,16 @@ class ContainerBuilder:
         important(f'container spec: {self.context.container_spec.path}')
         important('')
 
-        arch = get_arch()
-        workdir = Path(arch.rpm) / "work/oci"
+        archdir = Path(self.context.arch.rpm)
+
+        workdir = archdir / "work/oci"
         if os.path.exists(workdir):
             info(f"Cleaning old working directory {workdir}")
             self._clean_workdir(workdir)
 
         workdir.mkdir(parents=True, exist_ok=True)
 
-        resultdir = Path(arch.rpm) / "result"
+        resultdir = archdir / "result"
         resultdir.mkdir(parents=True, exist_ok=True)
 
         info(f"Writing results to {resultdir}")
@@ -433,7 +434,7 @@ class ContainerBuilder:
             runtimever=runtimever
         )
 
-        local_repo_path = Path(arch.rpm) / "rpms"
+        local_repo_path = archdir / "rpms"
         if not (local_repo_path / "repodata/repomd.xml").exists():
             local_repo_path = None
 

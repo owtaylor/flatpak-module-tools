@@ -8,7 +8,7 @@ from typing import DefaultDict, Dict, List, Tuple
 import click
 
 from ..config import add_config_file, set_profile_name, get_profile
-from ..utils import Arch, die, get_arch, rpm_name_only
+from ..utils import Arch, die, rpm_name_only
 from . import depchase, fetchrepodata
 
 
@@ -88,7 +88,7 @@ def cli(ctx, verbose, config, profile, tag, arch, refresh, local_repo):
 
     refresh = fetchrepodata.Refresh[refresh.upper()]
     ctx.obj = CliData(
-        arch=get_arch(arch), tag=tag, refresh=refresh, local_repos=local_repo
+        arch=Arch(oci=arch), tag=tag, refresh=refresh, local_repos=local_repo
     )
 
     if verbose:

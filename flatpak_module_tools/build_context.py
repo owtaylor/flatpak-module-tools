@@ -12,18 +12,20 @@ import koji
 from .config import ProfileConfig
 from .container_spec import ContainerSpec, Option
 from .console_logging import Status
-from .utils import RuntimeInfo, get_arch
+from .utils import Arch, RuntimeInfo
 
 
 class BuildContext(ABC):
     """Holds information about what a Flatpak will be built against."""
-    def __init__(self, *, profile: ProfileConfig, container_spec: ContainerSpec,
+    def __init__(self, *, profile: ProfileConfig, arch: Optional[Arch],
+                 container_spec: ContainerSpec,
                  local_runtime: Optional[Path] = None):
         """
         :param profile: the configuration profile
         :param container_spec: the parsed container.yaml
         """
         self.profile = profile
+        self.arch = arch or Arch()
         self.container_spec = container_spec
         self.flatpak_spec = container_spec.flatpak
         self.local_runtime = local_runtime
@@ -199,7 +201,7 @@ class AutoBuildContext(BuildContext):
     """BuildContext subclass for determining all the information based on the Koji target."""
 
     def __init__(self, *, profile: ProfileConfig, container_spec: ContainerSpec, target: str,
-                 local_runtime: Optional[Path] = None):
+                 local_runtime: Optional[Path] = None, arch: Optional[Arch] = None):
         """
         :param profile: the configuration profile
         :param container_spec: the parsed container.yaml
@@ -208,6 +210,7 @@ class AutoBuildContext(BuildContext):
         """
         super().__init__(
             profile=profile,
+            arch=arch,
             container_spec=container_spec,
             local_runtime=local_runtime)
         self.container_target = target
@@ -269,7 +272,7 @@ class AutoBuildContext(BuildContext):
         latest_build = tagged_builds[0]
 
         archives = session.listArchives(buildID=latest_build["build_id"])
-        return next(a for a in archives if a["extra"]["image"]["arch"] == get_arch().rpm)
+        return next(a for a in archives if a["extra"]["image"]["arch"] == self.arch.rpm)
 
     @property
     def runtime_package_repo(self):
@@ -316,7 +319,8 @@ class ManualBuildContext(BuildContext):
                  nvr: str,
                  runtime_nvr: Optional[str],
                  runtime_repo: int,
-                 app_repo: Optional[int]):
+                 app_repo: Optional[int],
+                 arch: Optional[Arch] = None):
         """
         :param profile: the configuration profile
         :param container_spec: the parsed container.yaml
@@ -327,7 +331,7 @@ class ManualBuildContext(BuildContext):
         :param app_repo: repository ID for repository for application packages
             (only for application container builds)
         """
-        super().__init__(profile=profile, container_spec=container_spec)
+        super().__init__(profile=profile, arch=arch, container_spec=container_spec)
         self._nvr = nvr
         self.runtime_nvr = runtime_nvr
         self.runtime_repo = runtime_repo
@@ -344,7 +348,7 @@ class ManualBuildContext(BuildContext):
         session = self.profile.koji_session
 
         archives = session.listArchives(buildID=build["build_id"])
-        return next(a for a in archives if a["extra"]["image"]["arch"] == get_arch().rpm)
+        return next(a for a in archives if a["extra"]["image"]["arch"] == self.arch.rpm)
 
     @cached_property
     def runtime_package_repo(self):
