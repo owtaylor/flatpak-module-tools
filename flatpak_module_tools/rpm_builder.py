@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 import subprocess
 import time
-from typing import Collection, List, Tuple
+from typing import Any, Collection, Dict, List, Tuple
 
 import click
 import koji
@@ -160,7 +160,7 @@ class RpmBuilder:
                         manual_packages: Collection,
                         *,
                         include_localrepo: bool, allow_outdated: bool):
-        data = self._resolve_packages(include_localrepo=include_localrepo)
+        details = self._resolve_packages(include_localrepo=include_localrepo)
 
         source_session = self.profile.source_koji_session
         session = self.profile.koji_session
@@ -173,7 +173,7 @@ class RpmBuilder:
         if include_localrepo:
             all_localrepo_package_versions = self.get_localrepo_package_versions()
             localrepo_package_versions = {
-                k: v for k, v in all_localrepo_package_versions.items() if k in data
+                k: v for k, v in all_localrepo_package_versions.items() if k in details
             }
         else:
             localrepo_package_versions = {}
@@ -187,7 +187,7 @@ class RpmBuilder:
             else:
                 display_table = [(True, "", source_tag, rpm_dest_tag, "", "")]
             wait_for_event = -1
-            for package in data.keys():
+            for package in details.keys():
                 source_tag_infos = source_session.listTagged(
                     source_tag, latest=True, inherit=True, package=package
                 )
@@ -249,7 +249,7 @@ class RpmBuilder:
                 " " + click.style(pad(row[5], widths[5]), fg=fg, bold=i == 0)
             )
 
-        return need_rebuild, wait_for_event
+        return need_rebuild, details, wait_for_event
 
     def _get_latest_builds(self, to_build: Collection[str]):
         session = self.profile.source_koji_session
@@ -344,7 +344,7 @@ class RpmBuilder:
     def check(self, *, include_localrepo: bool, allow_outdated: bool):
         self._refresh_metadata(include_localrepo=include_localrepo)
 
-        need_rebuild, wait_for_event = self._check_packages(
+        need_rebuild, _, wait_for_event = self._check_packages(
             [],
             include_localrepo=include_localrepo, allow_outdated=allow_outdated
         )
@@ -367,7 +367,8 @@ class RpmBuilder:
                         break
                     time.sleep(20)
 
-    def _prompt_for_rebuild(self, to_rebuild: Collection[str]):
+    def _prompt_for_rebuild(self, manual_packages: Collection[str],
+                            to_rebuild: Collection[str], details: Dict[str, Any]):
         print("To rebuild:", ", ".join(sorted(to_rebuild)))
         if not to_rebuild:
             return False
@@ -378,6 +379,37 @@ class RpmBuilder:
                 return True
             if choice == "n":
                 return False
+            else:
+                for source_rpm in sorted(to_rebuild):
+                    print(source_rpm)
+                    if source_rpm in manual_packages:
+                        print("    <specified manually>")
+                    else:
+                        for package_info in details[source_rpm]:
+                            print(f"    {package_info['name']}")
+                            if "explanation" in package_info:
+                                print_explanation(package_info["explanation"], "        ")
+                            else:
+                                print("        <from container.yaml>")
+
+    def _get_rebuild_packages(self,
+                              manual_packages: Collection,
+                              *,
+                              auto: bool, include_localrepo: bool, allow_outdated: bool):
+        if auto:
+            to_build, details, _ = self._check_packages(
+                manual_packages, include_localrepo=include_localrepo, allow_outdated=allow_outdated
+            )
+
+            if not to_build:
+                return set()
+
+            if self._prompt_for_rebuild(manual_packages, to_build, details):
+                return to_build
+            else:
+                return set()
+        else:
+            return manual_packages
 
     def build_rpms(
             self, manual_packages: List[str], *,
@@ -389,17 +421,10 @@ class RpmBuilder:
         # FIXME - probably should use a temporary workdir in this case
         self.workdir.mkdir(parents=True, exist_ok=True)
 
-        if auto:
-            to_build, _ = self._check_packages(
-                manual_packages, include_localrepo=False, allow_outdated=allow_outdated
-            )
-        else:
-            to_build = set(manual_packages)
-
+        to_build = self._get_rebuild_packages(
+            manual_packages, auto=auto, include_localrepo=False, allow_outdated=allow_outdated
+        )
         if not to_build:
-            return
-
-        if auto and not self._prompt_for_rebuild(to_build):
             return
 
         latest_builds = self._get_latest_builds(to_build)
@@ -434,17 +459,11 @@ class RpmBuilder:
         all_manual_packages = list(manual_packages)
         all_manual_packages.extend(repo_map.keys())
 
-        if auto:
-            to_build, _ = self._check_packages(
-                all_manual_packages, include_localrepo=True, allow_outdated=allow_outdated
-            )
-        else:
-            to_build = set(manual_packages)
+        to_build = self._get_rebuild_packages(
+            all_manual_packages, auto=auto, include_localrepo=False, allow_outdated=allow_outdated
+        )
 
         if not to_build:
-            return
-
-        if auto and not self._prompt_for_rebuild(to_build):
             return
 
         latest_builds = self._get_latest_builds(to_build)
