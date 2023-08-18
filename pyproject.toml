@@ -41,6 +41,7 @@ tests = [
     "PyGObject",
     "pytest",
     "pytest-cov",
+    "responses",
     "rpm",
     "setuptools",
 ]
