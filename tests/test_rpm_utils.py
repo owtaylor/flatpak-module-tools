@@ -4,42 +4,9 @@ from unittest.mock import ANY
 
 import pytest
 
-from flatpak_module_tools.rpm_utils import VersionInfo, create_rpm_manifest
+from flatpak_module_tools.rpm_utils import StrippedVersionInfo, VersionInfo, create_rpm_manifest
 
-
-TEMPLATE_SPEC = """
-Name:           {name}
-Version:        1
-Release:        1
-Summary:        Tools for maintaining Flatpak applications and runtimes as Fedora modules
-{epoch}
-
-License:        MIT
-
-BuildArch:      noarch
-
-%description
-Very small RPM
-
-%prep
-
-%build
-
-%install
-mkdir -p %{{buildroot}}{prefix}/share/doc/{name}
-echo "HELLO" > %{{buildroot}}{prefix}/share/doc/{name}/HELLO
-
-%files
-{prefix}/share/doc/{name}
-
-%changelog
-* Fri Jun 16 2023 Owen Taylor <otaylor@redhat.com - 1-1
-- Created
-"""
-
-TESTRPM_SPEC = TEMPLATE_SPEC.format(name="testrpm", epoch="", prefix="/app")
-TESTRPM_EPOCH_SPEC = TEMPLATE_SPEC.format(name="testrpm-epoch", epoch="Epoch: 1", prefix="/app")
-TESTRPM_USR_SPEC = TEMPLATE_SPEC.format(name="testrpm-usr", epoch="", prefix="/usr")
+from .build_rpm import build_rpm
 
 
 FEDORA_GPG_KEY_RAWHIDE_X86_64 = """\
@@ -75,35 +42,21 @@ X55M9nDtzUSayJuEcfFP2c9KQCE=
 """
 
 
-def build_rpm(name, spec, path):
-    specpath = path / f"{name}.spec"
-    with open(path / f"{name}.spec", "w") as f:
-        f.write(spec)
-
-    # We need to define _rpmfilename, since otherwise we'll pick up a value from
-    # the system macros, which could be different (when building in Koji, for example)
-    subprocess.check_call([
-        "rpmbuild",
-        "--define", f"_rpmdir {path}",
-        "--define", "_rpmfilename %{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}.rpm",
-        "-bb", specpath
-    ])
-
-    return path / f"{name}-1-1.noarch.rpm"
-
-
 @pytest.fixture(scope='module')
 def rpmroot(tmp_path_factory):
     parent = tmp_path_factory.mktemp('rpmroot')
 
-    with open(parent / "testrpm.spec", "w") as f:
-        f.write(TESTRPM_SPEC)
-
     root = parent / "root"
 
-    testrpm = build_rpm("testrpm", TESTRPM_SPEC, parent)
-    testrpm_epoch = build_rpm("testrpm-epoch", TESTRPM_EPOCH_SPEC, parent)
-    testrpm_usr = build_rpm("testrpm-usr", TESTRPM_USR_SPEC, parent)
+    testrpm = build_rpm(
+        parent, name="testrpm", version="1", release="1", prefix="/app"
+    )
+    testrpm_epoch = build_rpm(
+        parent, name="testrpm-epoch", version="1", release="1", prefix="/app", epoch="1"
+    )
+    testrpm_usr = build_rpm(
+        parent, name="testrpm-usr", version="1", release="1", prefix="/usr"
+    )
 
     subprocess.check_call([
         "rpm", "--root", root, "-Uvh", testrpm, testrpm_epoch, testrpm_usr
