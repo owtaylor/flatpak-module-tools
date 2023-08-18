@@ -169,8 +169,8 @@ def test_version_info():
     v2 = VersionInfo(None, "1.2", "3.fc29")
     v3 = VersionInfo(None, "1.3", "3")
 
-    assert v1 == v2
-    assert v2 != v3
+    assert v1 < v2
+    assert v1 != v2
     assert v2 < v3
 
     assert repr(VersionInfo(None, "1.2", "3.fc28")) == "1.2-3.fc28"
@@ -182,4 +182,13 @@ def test_version_info():
         "epoch": 1,
         "version": "1.2",
         "release": "3"
-    }) == VersionInfo(1, "1.2", "3")
+    }) == StrippedVersionInfo(1, "1.2", "3")
+
+
+def test_stripped_version_info():
+    v1 = StrippedVersionInfo(None, "1.2", "3.fc28")
+    v2 = StrippedVersionInfo(None, "1.2", "3.fc29")
+    v3 = StrippedVersionInfo(None, "1.2", "4")
+
+    assert v1 == v2
+    assert v2 < v3

@@ -12,7 +12,7 @@ from .build_scheduler import KojiBuildScheduler, MockBuildScheduler
 from .build_context import BuildContext
 from .console_logging import Status
 from .mock import make_mock_cfg
-from .rpm_utils import VersionInfo
+from .rpm_utils import StrippedVersionInfo
 from .utils import Arch, error
 
 
@@ -190,7 +190,7 @@ class RpmBuilder:
                 source_tag_infos = source_session.listTagged(
                     source_tag, latest=True, inherit=True, package=package
                 )
-                source_version_info = VersionInfo.from_dict(source_tag_infos[0])
+                source_version_info = StrippedVersionInfo.from_dict(source_tag_infos[0])
 
                 ok = False
 
@@ -198,7 +198,7 @@ class RpmBuilder:
                     rpm_dest_tag, latest=True, inherit=False, package=package
                 )
                 if package_tag_infos:
-                    package_version_info = VersionInfo.from_dict(package_tag_infos[0])
+                    package_version_info = StrippedVersionInfo.from_dict(package_tag_infos[0])
                     if allow_outdated or package_version_info >= source_version_info:
                         ok = True
 
@@ -336,7 +336,7 @@ class RpmBuilder:
         )
         package_versions = {}
         for r in json.loads(rpm_list_json):
-            package_versions[r["package_name"]] = VersionInfo.from_dict(r)
+            package_versions[r["package_name"]] = StrippedVersionInfo.from_dict(r)
 
         return package_versions
 

@@ -49,20 +49,12 @@ def create_rpm_manifest(root: Path, restrict_to: Optional[Path] = None):
     return matched
 
 
-STRIP_DISTTAG_RE = re.compile(r"(.*?).fc\d+(?:app)?$")
-
-
 @total_ordering
 @dataclass
 class VersionInfo:
     epoch: Optional[str]
     version: str
     release: str
-
-    @cached_property
-    def stripped_release(self):
-        m = STRIP_DISTTAG_RE.match(self.release)
-        return m.group(1) if m else self.release
 
     def __init__(self, epoch: Union[str, int, None], version: str, release: str):
         if isinstance(epoch, int):
@@ -79,7 +71,7 @@ class VersionInfo:
                            release=d["release"])
 
     def _to_tuple(self):
-        return (self.epoch, self.version, self.stripped_release)
+        return (self.epoch, self.version, self.release)
 
     def __eq__(self, other):
         return self._to_tuple() == other._to_tuple()
@@ -95,3 +87,16 @@ class VersionInfo:
             return f"{self.epoch}:{self.version}-{self.release}"
         else:
             return f"{self.version}-{self.release}"
+
+
+STRIP_DISTTAG_RE = re.compile(r"(.*?).fc\d+(?:app)?$")
+
+
+class StrippedVersionInfo(VersionInfo):
+    @cached_property
+    def stripped_release(self):
+        m = STRIP_DISTTAG_RE.match(self.release)
+        return m.group(1) if m else self.release
+
+    def _to_tuple(self):
+        return (self.epoch, self.version, self.stripped_release)
