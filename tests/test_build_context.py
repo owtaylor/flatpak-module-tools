@@ -9,6 +9,7 @@ import pytest
 from flatpak_module_tools.build_context import AutoBuildContext, ManualBuildContext
 from flatpak_module_tools.config import Config, ProfileConfig
 from flatpak_module_tools.container_spec import ContainerSpec
+from flatpak_module_tools.utils import Arch
 
 
 APP_CONTAINER_YAML = """\
@@ -58,7 +59,7 @@ APP_NVR = "eog-flatpak-44.2-1"
 
 
 class ID(int, Enum):
-    ARCHIVE_FLATPAK_RUNTIME_X86_64 = auto()
+    ARCHIVE_FLATPAK_RUNTIME_PPC64LE = auto()
     BUILD_FLATPAK_RUNTIME = auto()
     REPO_F39_FLATPAK_APP_PACKAGES = auto()
     REPO_F39_FLATPAK_RUNTIME_PACKAGES = auto()
@@ -81,7 +82,7 @@ BUILDS = [{
     "build_id": ID.BUILD_FLATPAK_RUNTIME,
     "nvr": "flatpak-runtime-f39-1",
     "_archives": [{
-        "id": ID.ARCHIVE_FLATPAK_RUNTIME_X86_64,
+        "id": ID.ARCHIVE_FLATPAK_RUNTIME_PPC64LE,
         "extra": {
             "docker": {
                 "config": {
@@ -93,7 +94,7 @@ BUILDS = [{
                 }
             },
             "image": {
-                "arch": "x86_64"
+                "arch": "ppc64le"
             }
         },
         "_rpms": [{
@@ -264,7 +265,8 @@ def test_manual_build_context(app_container_spec, profile: ProfileConfig):
     context = ManualBuildContext(profile=profile, container_spec=app_container_spec,
                                  nvr=APP_NVR, runtime_nvr=RUNTIME_NVR,
                                  runtime_repo=ID.REPO_F39_FLATPAK_RUNTIME_PACKAGES,
-                                 app_repo=ID.REPO_F39_FLATPAK_APP_PACKAGES)
+                                 app_repo=ID.REPO_F39_FLATPAK_APP_PACKAGES,
+                                 arch=Arch.PPC64LE)
 
     assert context.runtime_package_repo["id"] == ID.REPO_F39_FLATPAK_RUNTIME_PACKAGES
     assert context.runtime_package_repo["tag_name"] == "f39-flatpak-runtime-packages"
@@ -276,7 +278,7 @@ def test_manual_build_context(app_container_spec, profile: ProfileConfig):
     with pytest.raises(NotImplementedError):
         context.app_build_repo
 
-    assert context.runtime_archive["id"] == ID.ARCHIVE_FLATPAK_RUNTIME_X86_64
+    assert context.runtime_archive["id"] == ID.ARCHIVE_FLATPAK_RUNTIME_PPC64LE
 
     frp_baseurl = "https://kojifiles.example.com/repos/" + \
         "f39-flatpak-runtime-packages/ID.REPO_F39_FLATPAK_RUNTIME_PACKAGES/$basearch/"
@@ -307,7 +309,7 @@ def test_manual_build_context(app_container_spec, profile: ProfileConfig):
 
 def test_auto_build_context_app(app_container_spec, profile: ProfileConfig):
     context = AutoBuildContext(profile=profile, container_spec=app_container_spec,
-                               target="f39-flatpak-candidate")
+                               target="f39-flatpak-candidate", arch=Arch.PPC64LE)
 
     assert context.nvr == APP_NVR
 
@@ -318,7 +320,7 @@ def test_auto_build_context_app(app_container_spec, profile: ProfileConfig):
 
     assert context.release == "39"
 
-    assert context.get_repos(for_container=True, local_repo_path=Path("x86_64/rpms")) == [
+    assert context.get_repos(for_container=True, local_repo_path=Path("ppc64le/rpms")) == [
         dedent("""\
             [f39-flatpak-runtime-packages]
             name=f39-flatpak-runtime-packages
@@ -340,7 +342,7 @@ def test_auto_build_context_app(app_container_spec, profile: ProfileConfig):
             [local]
             name=local
             priority=0
-            baseurl=x86_64/rpms
+            baseurl=ppc64le/rpms
             enabled=1
             skip_if_unavailable=False
             """)
@@ -360,7 +362,7 @@ def test_auto_build_context_app(app_container_spec, profile: ProfileConfig):
 
 def test_auto_build_context_runtime(runtime_container_spec, profile: ProfileConfig):
     context = AutoBuildContext(profile=profile, container_spec=runtime_container_spec,
-                               target="f39-flatpak-candidate")
+                               target="f39-flatpak-candidate", arch=Arch.PPC64LE)
 
     assert context.nvr == RUNTIME_NVR
     assert context.runtime_package_repo["id"] == "latest"
@@ -385,7 +387,7 @@ def test_auto_build_context_runtime(runtime_container_spec, profile: ProfileConf
 
 def test_auto_build_context_bad_target(app_container_spec, profile: ProfileConfig):
     context = AutoBuildContext(profile=profile, container_spec=app_container_spec,
-                               target="f39-flatpak-candidate")
+                               target="f39-flatpak-candidate", arch=Arch.PPC64LE)
     with patch.object(MockKojiSession, "getBuildConfig", return_value={
         "name": "f39-flatpak-container-build",
         "extra": {
@@ -405,7 +407,7 @@ def test_auto_build_context_bad_target(app_container_spec, profile: ProfileConfi
 
 def test_auto_build_context_no_app_package(app_container_spec, profile: ProfileConfig):
     context = AutoBuildContext(profile=profile, container_spec=app_container_spec,
-                               target="f39-flatpak-candidate")
+                               target="f39-flatpak-candidate", arch=Arch.PPC64LE)
     with patch.object(MockKojiSession, "getBuildConfig", return_value={
         "name": "f39-flatpak-container-build",
         "extra": {
@@ -423,7 +425,7 @@ def test_auto_build_context_no_app_package(app_container_spec, profile: ProfileC
 
 def test_auto_build_context_no_runtime(app_container_spec, profile: ProfileConfig):
     context = AutoBuildContext(profile=profile, container_spec=app_container_spec,
-                               target="f39-flatpak-candidate")
+                               target="f39-flatpak-candidate", arch=Arch.PPC64LE)
     with patch.object(MockKojiSession, "getBuildConfig", return_value={
         "name": "f39-flatpak-container-build",
         "extra": {
