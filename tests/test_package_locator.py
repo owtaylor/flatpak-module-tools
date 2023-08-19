@@ -1,5 +1,6 @@
 from io import BufferedReader, BytesIO, RawIOBase
 import gzip
+import subprocess
 
 import responses
 import pytest
@@ -7,6 +8,7 @@ import pytest
 from flatpak_module_tools.package_locator import PackageLocator, ExtendedVersionInfo
 from flatpak_module_tools.utils import Arch
 
+from .build_rpm import build_rpm
 
 BASIC_REPO = """\
 [basic]
@@ -171,6 +173,20 @@ def test_package_locator():
         locator = PackageLocator()
         locator.add_remote_repofile("https://repos.example.com/basic-no-baseurl.repo")
         locator.find_latest_version("glib2", arch=Arch.PPC64LE)
+
+
+@responses.activate
+def test_package_locator_local(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    build_rpm(repo, name="glib2", version="2.3.4", release="1.fc38")
+    subprocess.check_call(["createrepo_c", repo])
+
+    locator = PackageLocator()
+    locator.add_repo(repo)
+    ver = locator.find_latest_version("glib2", arch=Arch.PPC64LE)
+
+    assert ver and ver.version == "2.3.4"
 
 
 def test_extended_version_info():

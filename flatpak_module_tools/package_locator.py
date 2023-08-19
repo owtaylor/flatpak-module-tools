@@ -21,6 +21,7 @@ from configparser import RawConfigParser
 from functools import total_ordering
 import gzip
 import logging
+from pathlib import Path
 from typing import List, Optional, Union
 import xml.etree.ElementTree as ET
 
@@ -69,7 +70,7 @@ class ExtendedVersionInfo(VersionInfo):
 @dataclass(frozen=True)
 class RepoInfo:
     """Represents the parts of a yum/dnf repository definition we support"""
-    baseurl: str
+    baseurl: Union[str, Path]
     proxy: Optional[str] = None
     priority: int = 99
 
@@ -111,15 +112,8 @@ def _extract_repo_info(session: requests.Session, repourl: str):
         )
 
 
-def _get_primary_metadata_url(session: requests.Session,
-                              repo_info: RepoInfo,
-                              baseurl: str):
-    """Finds location of primary metadata xml.gz from repodata.xml"""
-    repomd_url = baseurl + "repodata/repomd.xml"
-    response = session.get(repomd_url, proxies=repo_info.get_proxies())
-    response.raise_for_status()
-
-    root = ET.fromstring(response.text)
+def _extract_primary_location(repomd_xml: str):
+    root = ET.fromstring(repomd_xml)
 
     ns = {
         'repo': 'http://linux.duke.edu/metadata/repo',
@@ -128,7 +122,27 @@ def _get_primary_metadata_url(session: requests.Session,
     if primary_location is None:
         raise RuntimeError("Cannot find <data type='primary'/> in repomd.xml")
 
-    return baseurl + primary_location.attrib['href']
+    return primary_location.attrib['href']
+
+
+def _get_primary_metadata_url(session: requests.Session,
+                              repo_info: RepoInfo,
+                              baseurl: str):
+    """Finds location of primary metadata xml.gz from repodata.xml"""
+    repomd_url = baseurl + "repodata/repomd.xml"
+    response = session.get(repomd_url, proxies=repo_info.get_proxies())
+    response.raise_for_status()
+
+    return baseurl + _extract_primary_location(response.text)
+
+
+def _get_primary_metadata_path(session: requests.Session,
+                               baseurl: Path):
+    """Finds location of primary metadata xml.gz from repodata.xml"""
+    with open(baseurl / "repodata/repomd.xml", "r") as f:
+        repomd_xml = f.read()
+
+    return baseurl / _extract_primary_location(repomd_xml)
 
 
 class PackageLocator:
@@ -139,7 +153,7 @@ class PackageLocator:
         self.session = session
         self.repos: List[RepoInfo] = []
 
-    def add_repo(self, baseurl: str, *,
+    def add_repo(self, baseurl: Union[str, Path], *,
                  proxy: Optional[str] = None,
                  priority: int = 99,
                  includepkgs: Optional[str] = None,
@@ -154,21 +168,30 @@ class PackageLocator:
                                      package: str,
                                      arch: Arch):
         """Parses the primary metadata .xml.gz for the repository to look for a package"""
-        baseurl = repo_info.baseurl.replace("$basearch", arch.rpm)
-        if not baseurl.endswith("/"):
-            baseurl += "/"
 
-        logger.info("Looking for %s in %s", package, baseurl)
+        baseurl = repo_info.baseurl
+        if isinstance(baseurl, str) and (baseurl.startswith("http:") or
+                                         baseurl.startswith("https:")):
+            baseurl = baseurl.replace("$basearch", arch.rpm)
+            if not baseurl.endswith("/"):
+                baseurl += "/"
 
-        primary_url = _get_primary_metadata_url(self.session, repo_info, baseurl)
-        primary_response = requests.get(primary_url, stream=True, proxies=repo_info.get_proxies())
-        primary_response.raise_for_status()
+            logger.info("Looking for %s in %s", package, baseurl)
+            primary_url = _get_primary_metadata_url(self.session, repo_info, baseurl)
+            primary_response = requests.get(
+                primary_url, stream=True, proxies=repo_info.get_proxies())
+            primary_response.raise_for_status()
+
+            decompressed = gzip.GzipFile(fileobj=primary_response.raw, mode="r")
+        else:
+            logger.info("Looking for %s in %s", package, baseurl)
+            primary_path = _get_primary_metadata_path(self.session, Path(baseurl))
+            decompressed = gzip.GzipFile(filename=primary_path, mode="r")
 
         ns = {
             'common': 'http://linux.duke.edu/metadata/common',
         }
 
-        decompressed = gzip.GzipFile(fileobj=primary_response.raw, mode="r")
         for event, element in ET.iterparse(decompressed):
             if event == "end" and element.tag == "{http://linux.duke.edu/metadata/common}package":
                 name = element.find("common:name", ns).text
