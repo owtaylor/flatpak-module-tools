@@ -4,34 +4,8 @@ import gzip
 import responses
 import pytest
 
-from flatpak_module_tools.package_locator import (
-    compile_nevr_globlist, PackageLocator, ExtendedVersionInfo
-)
+from flatpak_module_tools.package_locator import PackageLocator, ExtendedVersionInfo
 from flatpak_module_tools.utils import Arch
-
-
-SUBJECT = ExtendedVersionInfo(
-    epoch="0", version="1.2.3", release="1.fc38",
-    priority=99, name="foo", arch="ppc64le"
-)
-
-@pytest.mark.parametrize(
-    "globlist, result",
-    [
-        ("foo.ppc64le", True),
-        ("*o.ppc64le", True),
-        ("x.ppc64le", False),
-        ("*-0:*-*.fc38", True),
-        ("*-1:*-*.fc38", False),
-        ("*-0:1.2.[34]-*.fc38", True),
-        ("*-0:1.2.[56]-*.fc38", False),
-        ("f*4le", True),
-        ("g*4,f*4le", True),
-    ]
-)
-def test_compile_nevr_globlist(globlist: str, result: bool):
-    matches = compile_nevr_globlist(globlist)
-    assert matches(SUBJECT) is result
 
 
 BASIC_REPO = """\
@@ -45,17 +19,6 @@ type=rpm
 name=Fedora $releasever - $basearch
 baseurl=https://repos.example.com/basic-debuginfo/$basearch/
 enabled=0
-type=rpm
-"""
-
-
-BASIC_FILTERED_REPO = """\
-[basic]
-name=Fedora $releasever - $basearch
-baseurl=https://repos.example.com/basic/$basearch
-enabled=1
-includepkgs=*-2.3.[45]-*
-excludepkgs=*-2.3.5-*
 type=rpm
 """
 
@@ -152,10 +115,6 @@ def test_package_locator():
         body=BASIC_REPO
     )
     responses.add(
-        responses.GET, "https://repos.example.com/basic-filtered.repo",
-        body=BASIC_FILTERED_REPO
-    )
-    responses.add(
         responses.GET, "https://repos.example.com/basic-no-baseurl.repo",
         body=BASIC_NO_BASEURL_REPO
     )
@@ -181,12 +140,6 @@ def test_package_locator():
     # basic operation - no version found
     ver = locator.find_latest_version("glib4", arch=Arch.PPC64LE)
     assert ver is None
-
-    # test combination of excludepkgs and includepkgs, only a lower version remains
-    locator = PackageLocator()
-    locator.add_remote_repofile("https://repos.example.com/basic-filtered.repo")
-    ver = locator.find_latest_version("glib2", arch=Arch.PPC64LE)
-    assert ver and ver.version == "2.3.4"
 
     # Use baseurl input rather than a repo URL
     locator = PackageLocator()
@@ -221,24 +174,18 @@ def test_package_locator():
 
 
 def test_extended_version_info():
-    vi1 = ExtendedVersionInfo(
-        priority=10, name="glib2", epoch=None, version="1.2.3", release="1", arch="ppc64le"
-    )
-    vi2 = ExtendedVersionInfo(
-        priority=20, name="glib2", epoch=None, version="1.2.3", release="1", arch="ppc64le"
-    )
+    vi1 = ExtendedVersionInfo(priority=10, epoch=None, version="1.2.3", release="1")
+    vi2 = ExtendedVersionInfo(priority=20, epoch=None, version="1.2.3", release="1")
 
     assert vi1 > vi2
     assert vi1 != vi2
     assert not vi1 == vi2
 
-    vi3 = ExtendedVersionInfo(
-        priority=10, name="glib2", epoch=None, version="1.2.3", release="1", arch="ppc64le"
-    )
-    vi4 = ExtendedVersionInfo(
-        priority=10, name="glib2", epoch=None, version="1.2.3", release="2", arch="ppc64le"
-    )
+    vi3 = ExtendedVersionInfo(priority=10, epoch=None, version="1.2.3", release="1")
+    vi4 = ExtendedVersionInfo(priority=10, epoch=None, version="1.2.3", release="2")
 
     assert vi3 < vi4
     assert vi3 != vi4
     assert not vi3 == vi4
+
+    assert repr(vi1) == "1.2.3-1, priority=10"

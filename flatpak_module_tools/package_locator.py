@@ -7,23 +7,21 @@
 #
 # Not supported in parsing repository URLs
 #
+#  includepkgs and excludepkgs
 #  mirrorlist
 #  metalink
 #  subsituting $releasever
 #
-# mirrorlist and metalink support wouldn't be that hard, but $releasever
-# substitution is impossible, since that would depend on the DNF configuration
-# inside the container. excludepkgs/includepkgs are supported despite being
-# tricky.
+# For includepkgs and excludepkgs, see version history. (Removed only for simplicity.)
+# mirrorlist and metalink support wouldn't be that hard. $releasever would
+# require it being known and passed in.
 
 from dataclasses import dataclass
 from configparser import RawConfigParser
-import fnmatch
-from functools import cached_property, total_ordering
+from functools import total_ordering
 import gzip
 import logging
-import re
-from typing import Callable, List, Optional, Union
+from typing import List, Optional, Union
 import xml.etree.ElementTree as ET
 
 import requests
@@ -37,19 +35,16 @@ logger = logging.getLogger(__name__)
 @total_ordering
 class ExtendedVersionInfo(VersionInfo):
     """Represents a particular binary package version"""
-    name: str
-    arch: str
     priority: int
 
-    def __init__(self, *, name: str,
+    def __init__(self, *,
                  epoch: Union[str, int, None], version: str, release: str,
-                 arch: str, priority: int):
+                 priority: int):
         super().__init__(epoch, version, release)
-        self.name = name
-        self.arch = arch
         self.priority = priority
 
     def __lt__(self, other):
+        print(self.priority, other.priority, self.priority > other.priority)
         return (
             self.priority > other.priority or
             (self.priority == other.priority and super().__lt__(other))
@@ -67,74 +62,8 @@ class ExtendedVersionInfo(VersionInfo):
             super().__ne__(other)
         )
 
-
-# We need to handle includepkgs= in repository definitions in case someone
-# does something like includepkgs=*-*-*.fc38app to make the repository only
-# include packages with the .fc38app dist tag.
-#
-# NEVRA means "NAME-EPOCH:VERSION-RELEASE.ARCH", but matcher is more complicated
-# than just matching a glob against that string.
-#
-# The DNF algorithm is that for each of a number of forms (N-E:V-R.A, N-V-R, ...)
-# if the glob matches that form, match component-wise against the elements
-# in the form. And then *also* match the entire glob against the NEVRA string.
-
-@dataclass
-class NevraForm:
-    if_glob_matches: str
-    version_info_subset: Callable[[ExtendedVersionInfo], str]
-
-    def get_matchers(self, glob: str):
-        m = re.match(self.if_glob_matches + r'$', glob)
-        if m:
-            # $ is just a character that is unlikely to be in an a NEVRA
-            pattern = "$".join(m.groups())
-            re_pattern = re.compile(fnmatch.translate(pattern))
-
-            def matcher(evi: ExtendedVersionInfo):
-                return re_pattern.match(self.version_info_subset(evi)) is not None
-            yield matcher
-
-
-# Patterns for the different parts of a NEVRA
-N, E, V, R, A = r'([^:]+)', r'([^:-]+)', r'([^:-]+)', r'([^:-]+)', r'([^:.-]+)'
-
-
-NEVRA_FORMS = [
-    NevraForm(fr'{N}-{E}:{V}-{R}\.{A}',
-              lambda vi: f"{vi.name}${vi.epoch}${vi.version}${vi.release}${vi.arch}"),
-    NevraForm(fr'{N}-{V}-{R}\.{A}',
-              lambda vi: f"{vi.name}${vi.version}${vi.release}${vi.arch}"),
-    NevraForm(fr'{N}\.{A}',
-              lambda vi: f"{vi.name}${vi.arch}"),
-    NevraForm(fr'{N}',
-              lambda vi: f"{vi.name}"),
-    NevraForm(fr'{N}-{E}:{V}-{R}',
-              lambda vi: f"{vi.name}${vi.epoch}${vi.version}${vi.release}"),
-    NevraForm(fr'{N}-{V}-{R}',
-              lambda vi: f"{vi.name}${vi.version}${vi.release}"),
-    NevraForm(fr'{N}-{E}:{V}',
-              lambda vi: f"{vi.name}${vi.epoch}${vi.version}"),
-    NevraForm(fr'{N}-{E}',
-              lambda vi: f"{vi.name}${vi.version}"),
-    NevraForm(r'(.*)',
-              lambda vi: f"{vi.name}-{vi.epoch}:{vi.version}-{vi.release}.{vi.arch}"),
-]
-
-
-def compile_nevr_globlist(globlist):
-    """Turns a comma separated list of globs into a decision function"""
-    matchers = [
-        matcher
-        for glob in re.split(r' *, *', globlist.strip())
-        for form in NEVRA_FORMS
-        for matcher in form.get_matchers(glob)
-    ]
-
-    def matches(vi: ExtendedVersionInfo):
-        return any(m(vi) for m in matchers)
-
-    return matches
+    def __repr__(self):
+        return super().__repr__() + f", priority={self.priority}"
 
 
 @dataclass(frozen=True)
@@ -143,23 +72,6 @@ class RepoInfo:
     baseurl: str
     proxy: Optional[str] = None
     priority: int = 99
-
-    includepkgs: Optional[str] = None
-    excludepkgs: Optional[str] = None
-
-    @cached_property
-    def includepkgs_fn(self) -> Callable[[ExtendedVersionInfo], bool]:
-        if self.includepkgs:
-            return compile_nevr_globlist(self.includepkgs)
-        else:
-            return lambda evi: True
-
-    @cached_property
-    def excludepkgs_fn(self) -> Callable[[ExtendedVersionInfo], bool]:
-        if self.excludepkgs:
-            return compile_nevr_globlist(self.excludepkgs)
-        else:
-            return lambda evi: False
 
     def get_proxies(self):
         if self.proxy:
@@ -183,8 +95,6 @@ def _extract_repo_info(session: requests.Session, repourl: str):
         baseurl = cp.get(section, "baseurl", fallback=None)
         enabled = cp.getboolean(section, "enabled", fallback=True)
         priority = cp.getint(section, "priority", fallback=99)
-        includepkgs = cp.get(section, "includepkgs", fallback=None)
-        excludepkgs = cp.get(section, "excludepkgs", fallback=None)
 
         if not enabled:
             continue
@@ -197,7 +107,7 @@ def _extract_repo_info(session: requests.Session, repourl: str):
             raise RuntimeError(f"{repourl}: Repository [{section}] has no baseurl set")
 
         yield RepoInfo(
-            baseurl=baseurl, priority=priority, includepkgs=includepkgs, excludepkgs=excludepkgs
+            baseurl=baseurl, priority=priority
         )
 
 
@@ -234,8 +144,7 @@ class PackageLocator:
                  priority: int = 99,
                  includepkgs: Optional[str] = None,
                  excludepkgs: Optional[str] = None):
-        self.repos.append(RepoInfo(baseurl=baseurl, proxy=proxy, priority=priority,
-                                   includepkgs=includepkgs, excludepkgs=excludepkgs))
+        self.repos.append(RepoInfo(baseurl=baseurl, proxy=proxy, priority=priority))
 
     def add_remote_repofile(self, url):
         self.repos.extend(_extract_repo_info(self.session, url))
@@ -264,23 +173,13 @@ class PackageLocator:
             if event == "end" and element.tag == "{http://linux.duke.edu/metadata/common}package":
                 name = element.find("common:name", ns).text
                 if name == package:
-                    package_arch = element.find("common:arch", ns).text
                     version_element = element.find("common:version", ns)
                     extended_version = ExtendedVersionInfo(
-                        name=name,
                         epoch=version_element.attrib["epoch"],
                         version=version_element.attrib["ver"],
                         release=version_element.attrib["rel"],
-                        arch=package_arch,
                         priority=repo_info.priority,
                     )
-
-                    if not repo_info.includepkgs_fn(extended_version):
-                        logger.info("Ignoring %s because not in includepkgs", extended_version)
-                        continue
-                    if repo_info.excludepkgs_fn(extended_version):
-                        logger.info("Ignoring %s because in excludepkgs", extended_version)
-                        continue
 
                     logger.info("Found %s", extended_version)
                     yield extended_version
