@@ -284,6 +284,7 @@ class MockBuildScheduler(BuildScheduler):
     async def createrepo(self):
         async with self.repo_lock:
             logpath = self.base_workdir / "createrepo.log"
+            self.base_workdir.mkdir(parents=True, exist_ok=True)
             with open(logpath, "wb") as logfile:
                 proc = await asyncio.create_subprocess_exec(
                     "createrepo_c",
