@@ -311,7 +311,9 @@ def test_manual_build_context(app_container_spec, profile: ProfileConfig):
 
 def test_auto_build_context_app(app_container_spec, profile: ProfileConfig):
     context = AutoBuildContext(profile=profile, container_spec=app_container_spec,
-                               target="f39-flatpak-candidate", arch=Arch.PPC64LE)
+                               target="f39-flatpak-candidate",
+                               local_repo=Path("ppc64le/rpms"),
+                               arch=Arch.PPC64LE)
 
     with patch("flatpak_module_tools.package_locator.PackageLocator.find_latest_version",
                return_value=APP_VERSION_INFO):
@@ -324,7 +326,7 @@ def test_auto_build_context_app(app_container_spec, profile: ProfileConfig):
 
     assert context.release == "39"
 
-    assert context.get_repos(for_container=True, local_repo_path=Path("ppc64le/rpms")) == [
+    assert context.get_repos(for_container=True) == [
         dedent("""\
             [f39-flatpak-runtime-packages]
             name=f39-flatpak-runtime-packages
@@ -358,6 +360,14 @@ def test_auto_build_context_app(app_container_spec, profile: ProfileConfig):
             name=f39-flatpak-app-build
             baseurl=https://kojifiles.example.com/repos/f39-flatpak-app-build/latest/$basearch/
             priority=20
+            enabled=1
+            skip_if_unavailable=False
+            """),
+        dedent("""\
+            [local]
+            name=local
+            priority=20
+            baseurl=ppc64le/rpms
             enabled=1
             skip_if_unavailable=False
             """)

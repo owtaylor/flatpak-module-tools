@@ -30,6 +30,7 @@ class BuildContext(ABC):
     """Holds information about what a Flatpak will be built against."""
     def __init__(self, *, profile: ProfileConfig, arch: Optional[Arch],
                  container_spec: ContainerSpec,
+                 local_repo: Optional[Path] = None,
                  local_runtime: Optional[Path] = None):
         """
         :param profile: the configuration profile
@@ -39,6 +40,7 @@ class BuildContext(ABC):
         self.arch = arch or Arch()
         self.container_spec = container_spec
         self.flatpak_spec = container_spec.flatpak
+        self.local_repo = local_repo
         self.local_runtime = local_runtime
 
     @property
@@ -156,9 +158,14 @@ class BuildContext(ABC):
         :param: for_container: if True, the repositories are for package installation
            when building a container; otherwise they are for build dependencies
            when building RPMs that will eventually be included in a container.
-        :param local_repo_path - optional path to a DNF repository with application package builds
+-        :param local_repo_path - optional path to a DNF repository with application package builds;
+           this path is the path that DNF will use, which could be different than the
+           local_repo_path passed to BuildContext()
         """
         repos: List[str] = []
+
+        if local_repo_path is None:
+            local_repo_path = self.local_repo
 
         def koji_repo(repo: Dict, priority: int, includepkgs: Optional[List[str]] = None):
             result = dedent(f"""\
@@ -204,7 +211,8 @@ class AutoBuildContext(BuildContext):
     """BuildContext subclass for determining all the information based on the Koji target."""
 
     def __init__(self, *, profile: ProfileConfig, container_spec: ContainerSpec, target: str,
-                 local_runtime: Optional[Path] = None, arch: Optional[Arch] = None):
+                 local_repo: Optional[Path] = None, local_runtime: Optional[Path] = None,
+                 arch: Optional[Arch] = None):
         """
         :param profile: the configuration profile
         :param container_spec: the parsed container.yaml
@@ -215,6 +223,7 @@ class AutoBuildContext(BuildContext):
             profile=profile,
             arch=arch,
             container_spec=container_spec,
+            local_repo=local_repo,
             local_runtime=local_runtime)
         self.container_target = target
 
@@ -228,6 +237,8 @@ class AutoBuildContext(BuildContext):
             repo = self.app_package_repo
             locator = PackageLocator()
             locator.add_repo(_baseurl(self.profile, repo))
+            if self.local_repo:
+                locator.add_repo(self.local_repo)
             version_info = locator.find_latest_version(main_package, arch=self.arch)
 
             if not version_info:

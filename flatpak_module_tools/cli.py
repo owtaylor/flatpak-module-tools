@@ -14,7 +14,7 @@ from .flatpak_builder import (FLATPAK_METADATA_ANNOTATIONS,
                               FLATPAK_METADATA_LABELS)
 from .installer import Installer
 from .rpm_builder import RpmBuilder
-from .utils import die, info
+from .utils import Arch, die, info
 
 
 def make_container_spec(location: str):
@@ -75,6 +75,8 @@ def cli(verbose, config, profile):
               help='How to store Flatpak metadata in the container')
 @click.option('--containerspec', metavar='CONTAINER_YAML', default='./container.yaml',
               help='Path to container.yaml - defaults to ./container.yaml')
+@click.option('--local-repo', metavar='REPO_PATH', type=Path,
+              help="Path to repository location for local builds - defaults to ./<arch>/rpms")
 @click.option('--local-runtime', metavar='RUNTIME_TAR_GZ', type=Path,
               help="Path to local container build to use as runtime")
 @click.option('--target', metavar='KOJI_TARGET',
@@ -83,16 +85,20 @@ def cli(verbose, config, profile):
               help="Continue even if included packages will have an old version")
 @click.option('--install', is_flag=True,
               help='automatically install Flatpak for the current user')
-def build_container_local(flatpak_metadata, containerspec, local_runtime, target,
+def build_container_local(flatpak_metadata, containerspec, local_repo, local_runtime, target,
                           install: bool, allow_outdated: bool):
     """Build a container from local and remote RPMs"""
 
     container_spec = make_container_spec(containerspec)
     target = get_target(container_spec, target)
 
+    if local_repo is None:
+        local_repo = Path(Arch().rpm) / "rpms"
+
     build_context = AutoBuildContext(
         profile=get_profile(),
-        container_spec=container_spec, local_runtime=local_runtime, target=target
+        container_spec=container_spec, local_repo=local_repo,
+        local_runtime=local_runtime, target=target
     )
 
     if not container_spec.flatpak.build_runtime:
@@ -233,6 +239,9 @@ def build_rpms(
 @cli.command()
 @click.option('--containerspec', metavar='CONTAINER_YAML', default='./container.yaml',
               help='path to container.yaml - defaults to ./container.yaml')
+@click.option('--local-repo', metavar='REPO_PATH', type=Path,
+              help="Path to repository location for dependencies and results - "
+              "defaults to ./<arch>/rpms")
 @click.option('--local-runtime', metavar='RUNTIME_TAR_GZ', type=Path,
               help="Path to local container build to use as runtime")
 @click.option('--target', metavar='KOJI_TARGET',
@@ -244,7 +253,8 @@ def build_rpms(
               help="Don't rebuild packages that are present but have an old version")
 @click.argument('packages', nargs=-1, metavar="PKGS")
 def build_rpms_local(
-    containerspec: str, local_runtime: Optional[Path], target: Optional[str],
+    containerspec: str, local_repo: Optional[Path],
+    local_runtime: Optional[Path], target: Optional[str],
     packages: List[str], auto: bool, allow_outdated: bool
 ):
     """Rebuild rpms needed for the container locally"""
@@ -261,9 +271,12 @@ def build_rpms_local(
         else:
             manual_packages.append(pkg)
 
+    if local_repo is None:
+        local_repo = Path(Arch().rpm) / "rpms"
+
     build_context = AutoBuildContext(
         profile=get_profile(),
-        container_spec=spec, local_runtime=local_runtime, target=target
+        container_spec=spec, local_repo=local_repo, local_runtime=local_runtime, target=target,
     )
 
     builder = RpmBuilder(build_context)

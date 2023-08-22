@@ -269,6 +269,12 @@ class MockBuildScheduler(BuildScheduler):
         self.add_item(MockBuildItemRepo(path))
 
     def build(self):
+        # The repo will be referenced in the mock config, since it
+        # is a build-requirements source as well as a destination,
+        # so we need to make sure it valid before we start building
+        if not (self.repo_path / "repodata/repomd.xml").exists():
+            asyncio.run(self.createrepo())
+
         self.base_workdir.mkdir(parents=True, exist_ok=True)
         with open(self.mock_cfg_path, "w") as f:
             f.write(self.mock_cfg)
@@ -341,6 +347,7 @@ class MockBuildScheduler(BuildScheduler):
             "--resultdir", workdir,
             "--rebuild",
             "--uniqueext", str(slot),
+            "--no-cleanup-after",
             location
         ]
 

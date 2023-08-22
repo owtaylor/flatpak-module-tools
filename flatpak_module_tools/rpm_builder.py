@@ -97,7 +97,6 @@ class RpmBuilder:
         self.context = context
         self.profile = context.profile
         self.flatpak_spec = context.flatpak_spec
-        self.repo_path = Path.cwd() / self.arch.rpm / "rpms"
         self.workdir = Path.cwd() / self.arch.rpm / "work"
 
     def _run_depchase(self, cmd: str, args: List[str], *,
@@ -116,10 +115,9 @@ class RpmBuilder:
             packages = []
 
         local_repo = []
-        if include_localrepo:
-            local_repo_path = Path(self.arch.rpm) / "rpms"
-            if (local_repo_path / "repodata/repomd.xml").exists():
-                local_repo = [f"--local-repo=local:{local_repo_path}"]
+        if include_localrepo and self.context.local_repo:
+            if (self.context.local_repo / "repodata/repomd.xml").exists():
+                local_repo = [f"--local-repo=local:{self.context.local_repo}"]
 
         rpm_build_tag = self.context.app_build_repo["tag_name"] if include_tag else "NONE"
         return subprocess.check_output(
@@ -445,7 +443,9 @@ class RpmBuilder:
             self, manual_packages: List[str], manual_repos: List[Path], *,
             auto: bool, allow_outdated: bool
     ):
-        self.repo_path.mkdir(parents=True, exist_ok=True)
+        if self.context.local_repo is None:
+            raise RuntimeError("context.local_repo must be set for build_rpms_local")
+        self.context.local_repo.mkdir(parents=True, exist_ok=True)
         self.workdir.mkdir(parents=True, exist_ok=True)
 
         self._refresh_metadata()
@@ -459,7 +459,7 @@ class RpmBuilder:
         all_manual_packages.extend(repo_map.keys())
 
         to_build = self._get_rebuild_packages(
-            all_manual_packages, auto=auto, include_localrepo=False, allow_outdated=allow_outdated
+            all_manual_packages, auto=auto, include_localrepo=True, allow_outdated=allow_outdated
         )
 
         if not to_build:
@@ -481,7 +481,7 @@ class RpmBuilder:
         builder = MockBuildScheduler(
             mock_cfg=mock_cfg,
             profile=self.profile,
-            repo_path=self.repo_path,
+            repo_path=self.context.local_repo,
             build_after=build_after
         )
         for package_name, package in latest_builds.items():
