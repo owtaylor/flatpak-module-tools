@@ -347,7 +347,7 @@ def test_auto_build_context_app(app_container_spec, profile: ProfileConfig):
         dedent("""\
             [local]
             name=local
-            priority=0
+            priority=20
             baseurl=ppc64le/rpms
             enabled=1
             skip_if_unavailable=False

@@ -191,7 +191,7 @@ class BuildContext(ABC):
             repos.append(dedent(f"""\
                 [local]
                 name=local
-                priority=0
+                priority=20
                 baseurl={local_repo_path}
                 enabled=1
                 skip_if_unavailable=False
