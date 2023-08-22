@@ -20,26 +20,27 @@ BuildRequires: python3-setuptools_scm+toml
 BuildRequires: python3-wheel
 
 # For tests
+BuildRequires: createrepo_c
 BuildRequires: flatpak
 BuildRequires: libappstream-glib
+BuildRequires: libmodulemd
 BuildRequires: librsvg2
 BuildRequires: ostree
 BuildRequires: python3-click
+BuildRequires: python3-gobject-base
 BuildRequires: python3-pytest-cov
 BuildRequires: python3-jinja2
 BuildRequires: python3-koji
-BuildRequires: python3-libmodulemd
 BuildRequires: python3-pytest
+BuildRequires: python3-requests
+BuildRequires: python3-responses
 BuildRequires: python3-rpm
-BuildRequires: python3-six
 BuildRequires: python3-yaml
 
-# Requires: module-build-service >= 2.25.0
 Requires: python3-%{srcname} = %{version}-%{release}
-Requires: python3-click
+Requires: python3-jinja2
 Requires: python3-koji
 Requires: python3-networkx
-Requires: python3-requests
 Requires: python3-requests-toolbelt
 # for pkg_resources
 Requires: python3-setuptools
@@ -58,15 +59,16 @@ Summary: Shared code for building Flatpak applications and runtimes from Fedora 
 # for using this as a library for atomic-reactor. The dependencies here are those
 # needed for library usage, the main package has the remainder.
 
+Requires: createrepo_c
 Requires: flatpak
-Requires: python3-libmodulemd
 # For appstream-compose
 Requires: libappstream-glib
 # for SVG gdk-pixbuf loader
 Requires: librsvg2
 Requires: ostree
-Requires: python3-jinja2
-Requires: python3-six
+Requires: python3-click
+Requires: python3-requests
+Requires: python3-rpm
 Requires: python3-yaml
 
 %description -n python3-%{srcname}

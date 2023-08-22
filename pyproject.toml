@@ -15,6 +15,7 @@ dependencies = [
     "click",
     "pyyaml",
     "requests",
+    "rpm",
 ]
 
 [project.urls]
@@ -29,11 +30,9 @@ cli = [
     "jinja2",
     "koji",
     "networkx",
-    "PyGObject",
     "requests-toolbelt",
-    "rpm",
     "setuptools",
-    "solv"
+    "solv",
 ]
 
 tests = [
