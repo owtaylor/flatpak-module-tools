@@ -46,8 +46,8 @@ tests = [
     "setuptools",
 ]
 
-[tool.setuptools.packages.find]
-where = ["flatpak_module_tools", "tests"]
+[tool.setuptools]
+packages = ["flatpak_module_tools"]
 
 [tool.setuptools_scm]
 version_scheme = "post-release"
