@@ -286,7 +286,9 @@ class MockBuildScheduler(BuildScheduler):
             logpath = self.base_workdir / "createrepo.log"
             with open(logpath, "wb") as logfile:
                 proc = await asyncio.create_subprocess_exec(
-                    "createrepo_c", self.repo_path, stdout=logfile, stderr=logfile
+                    "createrepo_c",
+                    "--general-compress-type=gz",
+                    self.repo_path, stdout=logfile, stderr=logfile
                 )
                 if await proc.wait() != 0:
                     logger.error(

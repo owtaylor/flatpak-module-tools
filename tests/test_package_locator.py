@@ -181,7 +181,7 @@ def test_package_locator_local(tmp_path):
     repo = tmp_path / "repo"
     repo.mkdir()
     build_rpm(repo, name="glib2", version="2.3.4", release="1.fc38")
-    subprocess.check_call(["createrepo_c", repo])
+    subprocess.check_call(["createrepo_c", "--general-compress-type=gz", repo])
 
     locator = PackageLocator()
     locator.add_repo(repo)
