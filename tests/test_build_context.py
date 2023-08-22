@@ -57,9 +57,7 @@ flatpak:
 
 RUNTIME_NVR = "flatpak-runtime-f39-1"
 APP_NVR = "eog-flatpak-44.2-1"
-APP_VERSION_INFO = VersionInfo(
-    epoch="0", name="eog", version="44.2", release="1", arch="ppc64le", priority=1
-)
+APP_VERSION_INFO = VersionInfo(epoch=None, version="44.2", release="1")
 
 
 class ID(int, Enum):

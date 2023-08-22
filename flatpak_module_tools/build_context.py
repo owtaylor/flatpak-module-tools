@@ -233,7 +233,7 @@ class AutoBuildContext(BuildContext):
             if not version_info:
                 raise ClickException(f"Can't find build for {main_package} in {repo['tag_name']}")
 
-            name = self.flatpak_spec.get_component_label(version_info.name)
+            name = self.flatpak_spec.get_component_label(main_package)
             version = version_info.version
             release = 1
 
