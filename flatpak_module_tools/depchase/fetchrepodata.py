@@ -2,7 +2,6 @@
 import copy
 from dataclasses import dataclass
 from enum import Enum
-import gzip
 import logging
 from math import ceil
 import os
@@ -172,72 +171,6 @@ def _download_metadata_files(repo_paths, refresh):
     if len(postdownload) >= (len(predownload) + len(METADATA_SECTIONS)):
         # TODO: Actually prune old metadata files
         pass
-
-
-def _read_packages(repo_paths):
-    log.debug(f"_read_packages({repo_paths!r})")
-    metadata_dir = os.path.join(repo_paths.local_cache_path)
-    repomd_fname = os.path.join(metadata_dir, "repodata", "repomd.xml")
-    repomd_xml = ET.parse(repomd_fname, parser=None)
-    repo_relative_primary = _read_repomd_location(repomd_xml, "primary")
-    assert repo_relative_primary is not None
-    repo_primary_fname = os.path.join(metadata_dir, repo_relative_primary)
-
-    package_dicts = []
-
-    with gzip.open(repo_primary_fname, "rb") as primary_xml_gz:
-        primary_xml = ET.fromstring(primary_xml_gz.read(), parser=None)
-
-        # the default namespace makes accessing things annoying
-        XMLNS = "{http://linux.duke.edu/metadata/common}"
-
-        for pkg in primary_xml.iter(XMLNS + 'package'):
-            pkg_dct = {}
-            ntag = pkg.find(XMLNS + 'name')
-            if ntag is None:
-                log.debug("Skipping package without name.")
-                continue
-            pkg_dct['name'] = name = ntag.text
-
-            if pkg.attrib['type'] != 'rpm':
-                # skip non-RPM content
-                log.debug(f"Skipping non-RPM package {name!r}.")
-                continue
-
-            vtag = pkg.find(XMLNS + 'version')
-            if vtag is None:
-                log.debug(f"Skipping package without version tag {name!r}.")
-                continue
-
-            pkg_dct['epoch'] = epoch = vtag.attrib.get('epoch', '0')
-            pkg_dct['ver'] = ver = vtag.attrib.get('ver')
-            pkg_dct['rel'] = rel = vtag.attrib.get('rel')
-
-            if not ver or not rel:
-                log.debug(f"Skipping package without proper version info {name!r}.")
-                continue
-
-            atag = pkg.find(XMLNS + 'arch')
-            if atag is None:
-                log.debug(f"Skipping package without architecture {name!r}.")
-                continue
-            pkg_dct['arch'] = arch = atag.text
-
-            pkg_dct['nevra'] = nevra = f'{name}-{epoch}:{ver}-{rel}.{arch}'
-
-            stag = pkg.find(XMLNS + 'summary')
-            if stag is not None:
-                pkg_dct['summary'] = stag.text
-
-            dtag = pkg.find(XMLNS + 'description')
-            if dtag is not None:
-                pkg_dct['description'] = dtag.text
-
-            log.debug(f"Found {nevra}.")
-
-            package_dicts.append(pkg_dct)
-
-    return package_dicts
 
 
 def download_repo_metadata(tag, arch, refresh: Refresh):
