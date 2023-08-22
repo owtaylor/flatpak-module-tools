@@ -1,6 +1,7 @@
 from io import BufferedReader, BytesIO, RawIOBase
 import gzip
 import subprocess
+from typing import Optional
 
 import responses
 import pytest
@@ -90,7 +91,7 @@ class RawBytesReader(RawIOBase):
     def read(self, size=-1) -> bytes:
         return self._reader.read(size)
 
-    def readinto(self, __buffer) -> int | None:
+    def readinto(self, __buffer) -> Optional[int]:
         return self._reader.readinto(__buffer)
 
     def readable(self) -> bool:

@@ -6,11 +6,12 @@ import hashlib
 import logging
 import os
 from tempfile import NamedTemporaryFile
-import click
 import pipes
 import subprocess
 import sys
 from typing import IO, Optional, NoReturn, cast
+
+import click
 
 
 def error(msg):
