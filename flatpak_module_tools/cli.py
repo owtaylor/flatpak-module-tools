@@ -229,16 +229,17 @@ def build_rpms(
     spec = make_container_spec(containerspec)
     target = get_target(spec, target)
 
+    if not packages and not auto:
+        info("Nothing to rebuild, specify packages or --auto")
+        return
+
     build_context = AutoBuildContext(
         profile=get_profile(),
         container_spec=spec, local_runtime=local_runtime, target=target
     )
 
     builder = RpmBuilder(build_context)
-    if packages is [] and not auto:
-        info("Nothing to rebuild, specify packages or --auto")
-    else:
-        builder.build_rpms(packages, auto=auto, allow_outdated=allow_outdated)
+    builder.build_rpms(packages, auto=auto, allow_outdated=allow_outdated)
 
 
 @cli.command()
@@ -266,6 +267,10 @@ def build_rpms_local(
 
     spec = make_container_spec(containerspec)
     target = get_target(spec, target)
+
+    if not packages and not auto:
+        info("Nothing to rebuild, specify packages or --auto")
+        return
 
     manual_packages: List[str] = []
     manual_repos: List[Path] = []
