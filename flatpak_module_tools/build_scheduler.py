@@ -143,6 +143,7 @@ class BuildScheduler(ABC):
         self.items[item.name] = item
 
     def update_running_items(self):
+        num_building = 0
         for item in self.items.values():
             if item.state == State.WAITING:
                 after = self.build_after.get(item.name, ())
@@ -156,11 +157,14 @@ class BuildScheduler(ABC):
                 else:
                     item.state = State.READY
                     item.status = "Ready"
+            elif item.state == State.BUILDING:
+                num_building += 1
 
         for item in self.items.values():
-            if len(self.running) < self.parallel_jobs and item.state == State.READY:
+            if num_building < self.parallel_jobs and item.state == State.READY:
                 item.state = State.BUILDING
                 self.running.add(asyncio.create_task(self.run_build_item(item)))
+                num_building += 1
 
         self.display.update_items(self.items.values())
 
@@ -171,7 +175,7 @@ class BuildScheduler(ABC):
                     task: str | None = None,
                     task_children: List[str] | None = None):
 
-        need_update = state == State.DONE and state != item.state
+        need_update = state == (State.DONE or state == State.FAILED) and state != item.state
         if state is not None:
             item.state = state
         if status is not None:
