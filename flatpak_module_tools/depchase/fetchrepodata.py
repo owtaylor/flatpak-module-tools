@@ -158,19 +158,20 @@ def _download_metadata_files(repo_paths, refresh):
         if relative_href is not None:
             files_to_fetch.add(relative_href)
 
-    predownload = set(os.listdir(repo_paths.local_cache_path))
+    written_basenames = set(("repomd.xml",))
     for relative_href in files_to_fetch:
         absolute_href = urljoin(repo_paths.remote_repo_url, relative_href)
-        filename = os.path.join(repo_paths.local_cache_path, relative_href)
+        basename = os.path.basename(relative_href)
+        filename = os.path.join(repo_paths.local_metadata_path, basename)
         # This could be parallelised with concurrent.futures, but
         # probably not worth it (it makes the progress bars trickier)
         _download_one_file(absolute_href, filename)
-    postdownload = set(os.listdir(repo_paths.local_cache_path))
+        written_basenames.add(basename)
 
     # Prune any old metadata files automatically
-    if len(postdownload) >= (len(predownload) + len(METADATA_SECTIONS)):
-        # TODO: Actually prune old metadata files
-        pass
+    for f in os.listdir(repo_paths.local_metadata_path):
+        if f not in written_basenames:
+            os.unlink(os.path.join(repo_paths.local_metadata_path, f))
 
 
 def download_repo_metadata(tag, arch, refresh: Refresh):
