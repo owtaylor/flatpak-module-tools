@@ -264,12 +264,15 @@ class ContainerBuilder:
 
     def _cleanup_tree(self, builder: FlatpakBuilder):
         script = builder.get_cleanup_script()
-        if not script:
+        if not script or script.strip() == "":
             return
 
         installroot = self.executor.installroot
         self.executor.write_file(installroot / "tmp/cleanup.sh", script)
-        self.executor.check_call(["chroot", ".", "/bin/sh", "/tmp/cleanup.sh"], cwd=installroot)
+        self.executor.check_call(
+            ["chroot", ".", "/bin/sh", "-ex", "/tmp/cleanup.sh"],
+            cwd=installroot
+        )
 
     def _copy_manifest_and_config(self, oci_dir: str, outname_base: Path):
         index_json = os.path.join(oci_dir, "index.json")
