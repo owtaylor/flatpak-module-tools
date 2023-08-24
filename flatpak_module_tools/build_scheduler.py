@@ -3,6 +3,7 @@ import asyncio
 import copy
 from dataclasses import dataclass, field
 import functools
+import shlex
 import sys
 import threading
 import click
@@ -350,20 +351,25 @@ class MockBuildScheduler(BuildScheduler):
                         f"failed to find location in 'fedpkg srpm' output, see {logpath}"
                     )
 
-        args = [
-            "-r", self.mock_cfg_path,
+        def make_mock_cmd(*extra_args: str | Path):
+            return (
+                "mock",
+                "-r", self.mock_cfg_path,
+                "--uniqueext", str(slot),
+            ) + extra_args
+
+        build_cmd = make_mock_cmd(
             "--resultdir", workdir,
             "--rebuild",
-            "--uniqueext", str(slot),
             "--no-cleanup-after",
             location
-        ]
+        )
 
         U(status=str(workdir))
 
         with open(workdir / "mock_output.log", "w") as outfile:
             proc = await asyncio.create_subprocess_exec(
-                "mock", *args, stdout=outfile, stderr=outfile
+                *build_cmd, stdout=outfile, stderr=outfile
             )
 
             def update_log_files():
@@ -401,6 +407,17 @@ class MockBuildScheduler(BuildScheduler):
             update_log_files()
 
             if returncode == 0:
+                U(status="cleaning buildroot")
+
+                cleanup_cmd = make_mock_cmd("--clean")
+                cleanup_proc = await asyncio.create_subprocess_exec(
+                    "mock", *cleanup_cmd, stdout=outfile, stderr=outfile
+                )
+                if await cleanup_proc.wait() != 0:
+                    logger.warning(
+                        f"'{' '.join(shlex.quote(str(c)) for c in cleanup_cmd)}' failed"
+                    )
+
                 U(status="moving result RPMS")
                 async with self.repo_lock:
                     for child in workdir.iterdir():
