@@ -293,7 +293,7 @@ class MockBuildScheduler(BuildScheduler):
         if not (self.repo_path / "repodata/repomd.xml").exists():
             asyncio.run(self.createrepo())
 
-        self.base_workdir.mkdir(parents=True, exist_ok=True)
+        self.mock_cfg_path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.mock_cfg_path, "w") as f:
             f.write(self.mock_cfg)
 
