@@ -4,6 +4,7 @@ import copy
 from dataclasses import dataclass, field
 import functools
 import shlex
+import subprocess
 import sys
 import threading
 import click
@@ -41,6 +42,7 @@ class BuildItem():
     log_files: List[Path] = field(default_factory=list)
     task: str | None = None
     task_children: List[str] = field(default_factory=list)
+    debug_messages: List[str] = field(default_factory=list)
 
 
 class RepoWaiter:
@@ -75,7 +77,7 @@ class RepoWaiter:
 
 
 class BuildSchedulerDisplay(LiveDisplay):
-    def __init__(self, items):
+    def __init__(self, items: Dict[str, BuildItem]):
         super().__init__()
         self.items = copy.deepcopy(items)
         self.lock = threading.Lock()
@@ -120,6 +122,8 @@ class BuildSchedulerDisplay(LiveDisplay):
                         print(f"    {item.task}", file=stream)
                     for task_child in item.task_children:
                         print(f"        {task_child}", file=stream)
+                    for debug_message in item.debug_messages:
+                        print(f"    {debug_message}", file=stream)
 
 
 class BuildScheduler(ABC):
@@ -174,7 +178,8 @@ class BuildScheduler(ABC):
                     status: str | None = None,
                     log_files: List[Path] | None = None,
                     task: str | None = None,
-                    task_children: List[str] | None = None):
+                    task_children: List[str] | None = None,
+                    debug_messages: List[str] | None = None):
 
         need_update = state == (State.DONE or state == State.FAILED) and state != item.state
         if state is not None:
@@ -187,6 +192,8 @@ class BuildScheduler(ABC):
             item.task = task
         if task_children is not None:
             item.task_children = task_children
+        if debug_messages is not None:
+            item.debug_messages = debug_messages
 
         if need_update:
             self.update_running_items()
@@ -214,7 +221,12 @@ class BuildScheduler(ABC):
             item.status = "Build method exited in RUNNING state"
             self.update_running_items()
 
-        self.slots[slot] = False
+        if item.state == State.DONE:
+            self.slots[slot] = False
+        else:
+            # We don't want to reuse a slot for a failed job, since (in the local case)
+            # the user may want to examine the buildroot.
+            self.slots.append(False)
 
     async def do_build(self):
         self.update_running_items()
@@ -430,7 +442,16 @@ class MockBuildScheduler(BuildScheduler):
                 await self.createrepo()
                 U(State.DONE, status="Built successfully")
             else:
-                U(State.FAILED, status="Build failed")
+                print_root_cmd = make_mock_cmd("--print-root")
+                root = subprocess.check_output(print_root_cmd, encoding="utf-8").strip()
+
+                shell_cmd = make_mock_cmd("--shell")
+                U(State.FAILED,
+                  status="Build failed",
+                  debug_messages=[
+                      f"chroot: {root}",
+                      f"Enter chroot: {' '.join(shlex.quote(str(c)) for c in shell_cmd)}"
+                  ])
 
 
 @dataclass(init=False)
