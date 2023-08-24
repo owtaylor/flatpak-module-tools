@@ -251,11 +251,18 @@ class RpmBuilder:
     def _get_latest_builds(self, to_build: Collection[str]):
         session = self.profile.source_koji_session
         source_tag = self.profile.get_source_koji_tag(self.context.release)
+
+        def _get_latest_build(package):
+            tagged_builds = session.listTagged(
+                source_tag, package=package, inherit=True, latest=True
+            )
+            if len(tagged_builds) == 0:
+                raise click.ClickException(f"Can't find package '{package}' in {source_tag}")
+            return tagged_builds[0]
+
         with Status("Getting latest builds from koji"):
             return {
-                package: session.listTagged(
-                                source_tag, package=package, inherit=True, latest=True
-                            )[0]
+                package: _get_latest_build(package)
                 for package in sorted(to_build)
             }
 
