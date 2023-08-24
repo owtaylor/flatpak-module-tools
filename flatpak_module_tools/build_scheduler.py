@@ -272,6 +272,7 @@ class MockBuildScheduler(BuildScheduler):
         # The repo will be referenced in the mock config, since it
         # is a build-requirements source as well as a destination,
         # so we need to make sure it valid before we start building
+        self.repo_path.mkdir(parents=True, exist_ok=True)
         if not (self.repo_path / "repodata/repomd.xml").exists():
             asyncio.run(self.createrepo())
 

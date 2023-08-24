@@ -14,7 +14,7 @@ from .flatpak_builder import (FLATPAK_METADATA_ANNOTATIONS,
                               FLATPAK_METADATA_LABELS)
 from .installer import Installer
 from .rpm_builder import RpmBuilder
-from .utils import Arch, die, info
+from .utils import Arch, die, info, warn
 
 
 def make_container_spec(location: str):
@@ -85,15 +85,20 @@ def cli(verbose, config, profile):
               help="Continue even if included packages will have an old version")
 @click.option('--install', is_flag=True,
               help='automatically install Flatpak for the current user')
-def build_container_local(flatpak_metadata, containerspec, local_repo, local_runtime, target,
-                          install: bool, allow_outdated: bool):
+def build_container_local(flatpak_metadata, containerspec,
+                          local_repo: Optional[Path], local_runtime: Optional[Path],
+                          target: str, install: bool, allow_outdated: bool):
     """Build a container from local and remote RPMs"""
 
     container_spec = make_container_spec(containerspec)
     target = get_target(container_spec, target)
 
-    if local_repo is None:
-        local_repo = Path(Arch().rpm) / "rpms"
+    local_repo_specified = bool(local_repo)
+    local_repo = local_repo if local_repo_specified else Path(Arch().rpm) / "rpms"
+    if not (local_repo / "repodata/repomd.xml").exists():
+        if not local_repo_specified:
+            warn("No repository at {local_repo}, ignoring")
+        local_repo = None
 
     build_context = AutoBuildContext(
         profile=get_profile(),
@@ -272,6 +277,8 @@ def build_rpms_local(
             manual_packages.append(pkg)
 
     if local_repo is None:
+        # Unlike for build_container_local(), we want to include the local_repo
+        # even if it doesn't exist, since it's also the place where we store results
         local_repo = Path(Arch().rpm) / "rpms"
 
     build_context = AutoBuildContext(

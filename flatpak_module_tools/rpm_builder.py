@@ -452,7 +452,6 @@ class RpmBuilder:
     ):
         if self.context.local_repo is None:
             raise RuntimeError("context.local_repo must be set for build_rpms_local")
-        self.context.local_repo.mkdir(parents=True, exist_ok=True)
         self.workdir.mkdir(parents=True, exist_ok=True)
 
         self._refresh_metadata()

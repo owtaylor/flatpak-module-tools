@@ -194,7 +194,7 @@ class ContainerBuilder:
 
     @property
     def _inner_local_repo_path(self):
-        if self.local_repo_path:
+        if self.context.local_repo:
             return Path("/mnt/localrepo")
         else:
             return None
@@ -250,11 +250,11 @@ class ContainerBuilder:
             """)
         self.executor.write_file(Path("/tmp/install.sh"), install_sh)
 
-        if self.local_repo_path:
+        if self.context.local_repo:
             inner_local_repo_path = self._inner_local_repo_path
             assert inner_local_repo_path
             mounts = {
-                inner_local_repo_path: self.local_repo_path
+                inner_local_repo_path: self.context.local_repo
             }
         else:
             mounts = None
@@ -305,11 +305,9 @@ class ContainerBuilder:
         info(f"    wrote {outname_base}.rpmlist.json")
 
     def _run_build(self, executor: BuildExecutor, *,
-                   local_repo_path: Optional[Path] = None,
                    workdir: Path, resultdir: Path):
 
         self.executor = executor
-        self.local_repo_path = local_repo_path
 
         if self.context.flatpak_spec.build_runtime:
             runtime_info = None
@@ -434,11 +432,6 @@ class ContainerBuilder:
             runtimever=runtimever
         )
 
-        local_repo_path = archdir / "rpms"
-        if not (local_repo_path / "repodata/repomd.xml").exists():
-            local_repo_path = None
-
         return self._run_build(
-            executor, local_repo_path=local_repo_path,
-            workdir=workdir, resultdir=resultdir
+            executor, workdir=workdir, resultdir=resultdir
         )
