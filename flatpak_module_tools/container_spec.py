@@ -159,7 +159,7 @@ class FlatpakSpec(BaseSpec):
         self.base_image = self._get_str('base_image', None)
         self.branch = self._get_str('branch', 'stable')
         self.build_runtime = self._get_bool('build-runtime', False)
-        self.cleanup_commands = self._get_str('cleanup_commands', None)
+        self.cleanup_commands = self._get_str('cleanup-commands', None)
         self.command = self._get_str('command', None)
         self.component = self._get_str('component', None)
         self.copy_icon = self._get_bool('copy-icon', False)
