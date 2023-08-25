@@ -107,6 +107,7 @@ class RpmBuilder:
         if include_packages:
             packages_file = self.workdir / \
                 f"{self.flatpak_spec.runtime_name}-{self.flatpak_spec.runtime_version}.packages"
+            self.workdir.mkdir(parents=True, exist_ok=True)
             with open(packages_file, "w") as f:
                 for pkg in self.context.runtime_packages:
                     print(pkg, file=f)
@@ -424,9 +425,6 @@ class RpmBuilder:
     ):
         self._refresh_metadata(include_localrepo=False)
 
-        # FIXME - probably should use a temporary workdir in this case
-        self.workdir.mkdir(parents=True, exist_ok=True)
-
         to_build = self._get_rebuild_packages(
             manual_packages, auto=auto, include_localrepo=False, allow_outdated=allow_outdated
         )
@@ -454,7 +452,6 @@ class RpmBuilder:
     ):
         if self.context.local_repo is None:
             raise RuntimeError("context.local_repo must be set for build_rpms_local")
-        self.workdir.mkdir(parents=True, exist_ok=True)
 
         self._refresh_metadata()
 
