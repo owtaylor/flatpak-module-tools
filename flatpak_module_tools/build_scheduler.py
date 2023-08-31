@@ -105,12 +105,13 @@ class BuildSchedulerDisplay(LiveDisplay):
                 elif item.state == State.FAILED:
                     fg = "red"
                 elif item.state == State.BUILDING:
-                    if when in (RenderWhen.INTERRUPTED, RenderWhen.EXCEPTION):
+                    if when == RenderWhen.EXCEPTION:
                         fg = "red"
+                    elif when == RenderWhen.INTERRUPTED:
+                        fg = "yellow"
+                        status = "Interrupted"
                     else:
                         fg = "blue"
-                    if when == RenderWhen.INTERRUPTED:
-                        status = "Interrupted"
                 else:
                     fg = None
                 print(
