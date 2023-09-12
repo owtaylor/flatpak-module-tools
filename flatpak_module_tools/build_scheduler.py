@@ -20,6 +20,7 @@ from koji_cli.lib import activate_session
 
 from .config import ProfileConfig
 from .console_logging import LiveDisplay, RenderWhen
+from .koji_utils import format_task
 from .utils import rpm_name_only
 
 
@@ -501,22 +502,13 @@ class KojiBuildScheduler(BuildScheduler):
         session = self.profile.koji_session
         task_id = session.build(source_url, self.target)
 
-        def format_task(task_info):
-            label = koji.taskLabel(task_info)
-            state = koji.TASK_STATES[task_info["state"]].lower()
-
-            url_base = self.profile.koji_options['weburl']
-            url = f"{url_base}/taskinfo?taskID={task_info['id']}"
-            OSC = "\033]"
-            ST = "\033\\"
-            return f"{OSC}8;;{url}{ST}{task_info['id']}{OSC}8;;{ST} {label}: {state}"
-
         while True:
             task_info = session.getTaskInfo(task_id, request=True)
-            formatted_task = format_task(task_info)
+            formatted_task = format_task(self.profile, task_info)
             state = koji.TASK_STATES[task_info['state']]
             task_children = session.getTaskChildren(task_id, request=True)
-            formatted_task_children = [format_task(task_child) for task_child in task_children]
+            formatted_task_children = [
+                format_task(self.profile, task_child) for task_child in task_children]
 
             if state == "FAILED":
                 U(State.FAILED, status="{weburl}/taskinfo?taskID={task_id} failed")

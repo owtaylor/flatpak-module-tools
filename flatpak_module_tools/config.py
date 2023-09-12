@@ -40,6 +40,7 @@ def get_profile() -> "ProfileConfig":
 
 
 class ProfileConfig:
+    build_source_base: str
     koji_config: Optional[str]
     koji_profile: Optional[str]
     rpm_koji_target: str
@@ -49,6 +50,7 @@ class ProfileConfig:
     source_koji_tag: str
 
     config_keys = [
+        'build_source_base',
         'koji_config',
         'koji_profile',
         'rpm_koji_target',

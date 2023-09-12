@@ -1,9 +1,13 @@
 from dataclasses import dataclass
 import logging
 from pathlib import Path
+import subprocess
+import sys
 from typing import List, Optional
+from urllib.parse import urlparse
 
 import click
+from koji_cli.lib import activate_session
 
 from .build_context import AutoBuildContext, ManualBuildContext
 from .config import add_config_file, set_profile_name, get_profile
@@ -141,6 +145,127 @@ def cli(ctx, verbose, config, profile, path: Optional[Path]):
     else:
         logging.basicConfig(handlers=handlers, level=logging.WARNING)
         logging.getLogger("flatpak_module_tools").setLevel(level=logging.INFO)
+
+
+@cli.command
+@click.option("--allow-outdated", is_flag=True,
+              help="Continue even if included packages will have an old version")
+@click.option("--arch", "arches", metavar="ARCH", type=str, multiple=True,
+              help="Limit a scratch build to an arch. May be provided multiple times")
+@click.option("--background", is_flag=True,
+              help="Run the build at a low priority")
+@click.option("--containerspec", metavar="CONTAINER_YAML", type=Path,
+              help="Path to container.yaml - defaults to <path>/container.yaml")
+@click.option("--nowait", is_flag=True,
+              help="Don't wait on build")
+@click.option("--scratch", is_flag=True,
+              help="Scratch build")
+@click.option("--skip-tag", is_flag=True,
+              help="Do not attempt to tag build")
+@click.option("--target", metavar="KOJI_TARGET",
+              help="Koji target to build against. Determined from runtime_version if missing")
+@click.pass_context
+def build_container(ctx,
+                    allow_outdated: bool,
+                    arches: List[str],
+                    background: bool,
+                    containerspec: Optional[Path],
+                    nowait: bool,
+                    scratch: bool,
+                    skip_tag: bool,
+                    target: str):
+    """Build a container in Koji"""
+
+    paths = CliData.from_context(ctx).paths(containerspec=containerspec)
+    profile = get_profile()
+
+    # Need to be logged in to build
+    activate_session(profile.koji_session, profile.koji_options)
+
+    # Check that all changes are committed and pushed
+
+    branch = subprocess.check_output([
+        "git", "branch", "--show-current"
+    ], cwd=paths.path, encoding="utf-8").strip()
+    if branch == "":
+        raise click.ClickException("No current git branch")
+
+    try:
+        merge = subprocess.check_output([
+            "git", "config", f"branch.{branch}.merge"
+        ], cwd=paths.path, encoding="utf-8").strip()
+    except subprocess.CalledProcessError:
+        raise click.ClickException("Can't find git remote tracking branch")
+
+    if not merge.startswith("refs/heads/"):
+        raise click.ClickException(f"Can't parse git remote tracking branch {merge}")
+
+    merge_name = merge.removeprefix("refs/heads/")
+
+    if subprocess.call([
+        "git", "diff-index", "--quiet", "HEAD", "--"
+    ], cwd=paths.path) != 0:
+        raise click.ClickException("Git repository has uncommitted changes")
+
+    local = subprocess.check_output([
+        "git", "rev-parse", "HEAD"
+    ], cwd=paths.path, encoding="utf-8").strip()
+
+    remote = subprocess.check_output([
+        "git", "rev-parse", f"remotes/origin/{merge_name}"
+    ], cwd=paths.path, encoding="utf-8").strip()
+
+    if local != remote:
+        raise click.ClickException(f"HEAD does not match origin/{merge_name}. Unpushed changes?")
+
+    # Check that necessary dependencies are built
+
+    container_spec = make_container_spec(paths)
+    target = get_target(container_spec, target)
+
+    build_context = AutoBuildContext(
+        profile=profile,
+        container_spec=container_spec,
+        target=target
+    )
+
+    if not container_spec.flatpak.build_runtime:
+        rpm_builder = RpmBuilder(build_context, workdir=paths.workdir)
+        rpm_builder.check(include_localrepo=True, allow_outdated=allow_outdated)
+
+    # Determine the source URL
+
+    origin_url = subprocess.check_output([
+        "git", "remote", "get-url", "origin"
+    ], cwd=paths.path, encoding="utf-8").strip()
+
+    parsed_origin_url = urlparse(origin_url)
+    src = profile.build_source_base + parsed_origin_url.path + "#" + local
+
+    # Process options
+
+    opts = {}
+    if arches != []:
+        if not scratch:
+            die("--arch can only be specified for scratch builds")
+        opts["arch_override"] = " ".join(arches)
+    if scratch:
+        opts["scratch"] = True
+    if skip_tag:
+        opts["skip_tag"] = True
+
+    # Priority is relative to koji.PRIO_DEFAULT
+    priority = 5 if background else None
+
+    # Now build
+
+    click.echo()
+    header("Building")
+
+    task_id = profile.koji_session.flatpakBuild(src, target, opts=opts, priority=priority)
+
+    if not watch_koji_task(profile, task_id):
+        sys.exit(1)
 
 
 @cli.command
