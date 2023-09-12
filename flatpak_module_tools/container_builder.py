@@ -242,7 +242,7 @@ class ContainerBuilder:
         packages = builder.get_install_packages()
         package_str = " ".join(shlex.quote(p) for p in packages)
         install_sh = dedent(f"""\
-            for     i in /proc /sys /dev /var/cache/dnf ; do
+            for i in /proc /sys /dev /var/cache/dnf ; do
                 mkdir -p {installroot}/$i
                 mount --rbind $i {installroot}/$i
             done
