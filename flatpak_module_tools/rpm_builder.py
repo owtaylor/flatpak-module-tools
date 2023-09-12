@@ -236,6 +236,7 @@ class RpmBuilder:
         def pad(str, width):
             return str + " " * (width - len(str))
 
+        click.echo()
         for i, row in enumerate(display_table):
             fg = "red" if not row[0] else None
             click.echo(
@@ -245,6 +246,7 @@ class RpmBuilder:
                 " " + click.style(pad(row[4], widths[4]), fg=fg, bold=i == 0) +
                 " " + click.style(pad(row[5], widths[5]), fg=fg, bold=i == 0)
             )
+        click.echo()
 
         return need_rebuild, details, wait_for_event
 
