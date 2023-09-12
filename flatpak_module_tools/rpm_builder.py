@@ -92,12 +92,12 @@ def check_for_cycles(build_after, build_after_details):
 
 
 class RpmBuilder:
-    def __init__(self, context: BuildContext):
+    def __init__(self, context: BuildContext, workdir: Path):
         self.arch = Arch()
         self.context = context
         self.profile = context.profile
         self.flatpak_spec = context.flatpak_spec
-        self.workdir = Path.cwd() / self.arch.rpm / "work"
+        self.workdir = workdir
 
     def _run_depchase(self, cmd: str, args: List[str], *,
                       include_localrepo: bool,
@@ -488,6 +488,7 @@ class RpmBuilder:
             mock_cfg=mock_cfg,
             profile=self.profile,
             repo_path=self.context.local_repo,
+            workdir=self.workdir,
             build_after=build_after
         )
         for package_name, package in latest_builds.items():

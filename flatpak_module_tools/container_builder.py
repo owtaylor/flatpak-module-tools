@@ -401,21 +401,16 @@ class ContainerBuilder:
 
         self._run_build(executor, workdir=workdir, resultdir=resultdir)
 
-    def build(self):
+    def build(self, workdir: Path, resultdir: Path):
         header('BUILDING CONTAINER')
         important(f'container spec: {self.context.container_spec.path}')
         important('')
 
-        archdir = Path(self.context.arch.rpm)
-
-        workdir = archdir / "work/oci"
         if os.path.exists(workdir):
             info(f"Cleaning old working directory {workdir}")
             self._clean_workdir(workdir)
 
         workdir.mkdir(parents=True, exist_ok=True)
-
-        resultdir = archdir / "result"
         resultdir.mkdir(parents=True, exist_ok=True)
 
         info(f"Writing results to {resultdir}")

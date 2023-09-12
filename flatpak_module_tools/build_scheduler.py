@@ -20,7 +20,7 @@ from koji_cli.lib import activate_session
 
 from .config import ProfileConfig
 from .console_logging import LiveDisplay, RenderWhen
-from .utils import Arch, rpm_name_only
+from .utils import rpm_name_only
 
 
 logger = logging.getLogger(__name__)
@@ -269,11 +269,12 @@ class MockBuildScheduler(BuildScheduler):
         mock_cfg: str,
         profile: ProfileConfig,
         repo_path: Path,
+        workdir: Path,
         build_after: Mapping[str, Collection[str]],
         parallel_jobs: int = 3
     ):
         super().__init__(profile, build_after, parallel_jobs=parallel_jobs)
-        self.base_workdir = Path.cwd() / Arch().rpm / "work/rpms"
+        self.base_workdir = workdir / "rpms"
         self.repo_path = repo_path
         self.mock_cfg = mock_cfg
         self.mock_cfg_path = self.base_workdir / 'mock.cfg'
