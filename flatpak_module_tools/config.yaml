@@ -3,7 +3,7 @@ profiles:
         koji_config: null
         rpm_koji_target: f$release-flatpak-app
         flatpak_koji_target: f$release-flatpak-candidate
-        source_koji_tag: f$release-build
+        source_koji_tag: f$release-updates-testing-pending
     production:
         koji_profile: koji
     staging:
