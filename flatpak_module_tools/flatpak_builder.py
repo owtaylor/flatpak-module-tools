@@ -647,11 +647,11 @@ class FlatpakBuilder:
         else:
             get_target_path = self._get_target_path_app()
 
-        outfile = os.path.join(self.workdir, 'filesystem.tar.gz')
+        outfile = os.path.join(self.workdir, 'filesystem.tar.zstd')
         manifestfile = os.path.join(self.workdir, 'flatpak-build.rpm_qf')
 
         out_fileobj = open(outfile, "wb")
-        compress_process = subprocess.Popen(['gzip', '-c'],
+        compress_process = subprocess.Popen(['zstd', '-c1'],
                                             stdin=subprocess.PIPE,
                                             stdout=out_fileobj)
         assert compress_process.stdin is not None
@@ -725,7 +725,7 @@ class FlatpakBuilder:
             export_stream.close()
         compress_process.stdin.close()
         if compress_process.wait() != 0:
-            raise RuntimeError("gzip failed")
+            raise RuntimeError("zstd failed")
         out_fileobj.close()
 
         return outfile, manifestfile
@@ -857,8 +857,8 @@ class FlatpakBuilder:
             tags=spec.tags
         )
 
-        # with gzip'ed tarball, tar is several seconds faster than tarfile.extractall
-        subprocess.check_call(['tar', 'xvCfz', builddir, tarred_filesystem])
+        # with compressed tarball, tar is several seconds faster than tarfile.extractall
+        subprocess.check_call(['tar', 'xvCf', builddir, tarred_filesystem])
 
         processor = FileTreeProcessor(builddir, spec)
         processor.process()
