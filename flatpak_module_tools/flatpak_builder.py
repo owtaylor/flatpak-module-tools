@@ -760,6 +760,17 @@ class FlatpakBuilder:
 
         subprocess.check_call(['flatpak', 'build-finish'] + finish_args + [builddir])
 
+    def _create_repo(self):
+        repo = os.path.join(self.workdir, "repo")
+
+        subprocess.check_call(['ostree', 'init', '--mode=archive', '--repo', repo])
+        # Prioritize speed by using a lower/faster zlib compression level
+        with open(os.path.join(repo, "config"), "a") as f:
+            f.write("[archive]\n")
+            f.write("zlib-level=1\n")
+
+        return repo
+
     def _create_runtime_oci(self, tarred_filesystem, outfile):
         spec = self.source.spec
 
@@ -769,8 +780,7 @@ class FlatpakBuilder:
         filesdir = os.path.join(builddir, "files")
         os.mkdir(filesdir)
 
-        repo = os.path.join(self.workdir, "repo")
-        subprocess.check_call(['ostree', 'init', '--mode=archive-z2', '--repo', repo])
+        repo = self._create_repo()
 
         id_ = spec.app_id
         runtime_id = spec.runtime or id_
@@ -840,7 +850,7 @@ class FlatpakBuilder:
         builddir = os.path.join(self.workdir, "build")
         os.mkdir(builddir)
 
-        repo = os.path.join(self.workdir, "repo")
+        repo = self._create_repo()
 
         runtime_info = self.source.find_runtime_info()
 
