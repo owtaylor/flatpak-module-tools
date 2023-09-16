@@ -367,12 +367,12 @@ class ContainerBuilder:
         ref_name, oci_dir = builder.build_container(filesystem_tar, tar_outfile=False)
 
         outname_base = resultdir / f"{self.context.nvr}.{self.context.arch.rpm}.oci"
-        local_outname = f"{outname_base}.tar.gz"
+        local_outname = f"{outname_base}.tar"
 
-        info('Compressing result')
+        info('Tarring result')
         with open(local_outname, 'wb') as f:
             files = os.listdir(oci_dir)
-            subprocess.check_call(['tar', '-cznf', '-', *files], stdout=f, cwd=oci_dir)
+            subprocess.check_call(['tar', '-cnf', '-', *files], stdout=f, cwd=oci_dir)
 
         important('Created ' + local_outname)
 

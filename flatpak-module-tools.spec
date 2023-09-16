@@ -71,6 +71,9 @@ Requires: python3-requests
 Requires: python3-rpm
 Requires: python3-yaml
 
+# Output changed from <nvr>.oci.tar.gz to <nvr>.oci.tar
+Conflicts: koji-flatpak <= 0.2
+
 %description -n python3-%{srcname}
 Python3 library for Flatpak handling
 

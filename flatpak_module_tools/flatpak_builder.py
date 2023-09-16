@@ -1026,6 +1026,12 @@ class FlatpakBuilder:
 
     @overload
     def build_container(
+            self, tarred_filesystem: str,
+            ) -> Tuple[str, str, str]:
+        ...
+
+    @overload
+    def build_container(
             self, tarred_filesystem: str, *, tar_outfile: Literal[False]
             ) -> Tuple[str, str]:
         ...
