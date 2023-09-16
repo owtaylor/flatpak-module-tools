@@ -19,7 +19,7 @@ import hashlib
 import json
 import logging
 import os
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Sequence, Tuple, overload
 import re
 import shlex
 import shutil
@@ -1018,7 +1018,19 @@ class FlatpakBuilder:
         with open(os.path.join(outfile, "index.json"), "w") as f:
             json.dump(index_json, f, indent=4)
 
-    def build_container(self, tarred_filesystem):
+    @overload
+    def build_container(
+            self, tarred_filesystem: str, *, tar_outfile: Literal[True]
+            ) -> Tuple[str, str, str]:
+        ...
+
+    @overload
+    def build_container(
+            self, tarred_filesystem: str, *, tar_outfile: Literal[False]
+            ) -> Tuple[str, str]:
+        ...
+
+    def build_container(self, tarred_filesystem: str, tar_outfile: bool = True):
         outfile = os.path.join(self.workdir, 'flatpak-oci-image')
 
         if self.source.runtime:
@@ -1028,9 +1040,12 @@ class FlatpakBuilder:
 
         self._fixup_config(outfile)
 
-        tarred_outfile = outfile + '.tar'
-        with tarfile.TarFile(tarred_outfile, "w") as tf:
-            for f in os.listdir(outfile):
-                tf.add(os.path.join(outfile, f), f)
+        if tar_outfile:
+            tarred_outfile = outfile + '.tar'
+            with tarfile.TarFile(tarred_outfile, "w") as tf:
+                for f in os.listdir(outfile):
+                    tf.add(os.path.join(outfile, f), f)
 
-        return ref_name, outfile, tarred_outfile
+            return ref_name, outfile, tarred_outfile
+        else:
+            return ref_name, outfile

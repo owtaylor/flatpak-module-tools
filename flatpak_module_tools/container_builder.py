@@ -364,14 +364,15 @@ class ContainerBuilder:
         if process.returncode != 0:
             die(f"tar failed (exit status={process.returncode})")
 
-        ref_name, oci_dir, oci_tar = builder.build_container(filesystem_tar)
+        ref_name, oci_dir = builder.build_container(filesystem_tar, tar_outfile=False)
 
         outname_base = resultdir / f"{self.context.nvr}.{self.context.arch.rpm}.oci"
         local_outname = f"{outname_base}.tar.gz"
 
         info('Compressing result')
         with open(local_outname, 'wb') as f:
-            subprocess.check_call(['gzip', '-c', oci_tar], stdout=f)
+            files = os.listdir(oci_dir)
+            subprocess.check_call(['tar', '-cznf', '-', *files], stdout=f, cwd=oci_dir)
 
         important('Created ' + local_outname)
 
