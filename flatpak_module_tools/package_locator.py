@@ -45,7 +45,6 @@ class ExtendedVersionInfo(VersionInfo):
         self.priority = priority
 
     def __lt__(self, other):
-        print(self.priority, other.priority, self.priority > other.priority)
         return (
             self.priority > other.priority or
             (self.priority == other.priority and super().__lt__(other))
