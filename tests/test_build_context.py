@@ -89,10 +89,10 @@ def test_manual_build_context(app_container_spec, profile: ProfileConfig):
                                  app_repo=ID.REPO_F39_FLATPAK_APP_PACKAGES,
                                  arch=Arch.PPC64LE)
 
-    assert context.runtime_package_repo["id"] == ID.REPO_F39_FLATPAK_RUNTIME_PACKAGES
-    assert context.runtime_package_repo["tag_name"] == "f39-flatpak-runtime-packages"
-    assert context.app_package_repo["id"] == ID.REPO_F39_FLATPAK_APP_PACKAGES
-    assert context.app_package_repo["tag_name"] == "f39-flatpak-app-packages"
+    assert context.runtime_package_repo.id == ID.REPO_F39_FLATPAK_RUNTIME_PACKAGES
+    assert context.runtime_package_repo.tag_name == "f39-flatpak-runtime-packages"
+    assert context.app_package_repo.id == ID.REPO_F39_FLATPAK_APP_PACKAGES
+    assert context.app_package_repo.tag_name == "f39-flatpak-app-packages"
 
     assert context.release == "39"
 
@@ -110,18 +110,18 @@ def test_manual_build_context(app_container_spec, profile: ProfileConfig):
             [f39-flatpak-runtime-packages]
             name=f39-flatpak-runtime-packages
             baseurl={frp_baseurl}
-            priority=10
             enabled=1
             skip_if_unavailable=False
+            priority=10
             includepkgs=glibc
             """),
         dedent(f"""\
             [f39-flatpak-app-packages]
             name=f39-flatpak-app-packages
             baseurl={fap_baseurl}
-            priority=20
             enabled=1
             skip_if_unavailable=False
+            priority=20
             """)]
 
     with pytest.raises(NotImplementedError):
@@ -138,10 +138,10 @@ def test_auto_build_context_app(app_container_spec, profile: ProfileConfig):
                return_value=APP_VERSION_INFO):
         assert context.nvr == APP_NVR
 
-    assert context.runtime_package_repo["id"] == "latest"
-    assert context.runtime_package_repo["tag_name"] == "f39-flatpak-runtime-packages"
-    assert context.app_package_repo["id"] == "latest"
-    assert context.app_package_repo["tag_name"] == "f39-flatpak-app-packages"
+    assert context.runtime_package_repo.id == "latest"
+    assert context.runtime_package_repo.tag_name == "f39-flatpak-runtime-packages"
+    assert context.app_package_repo.id == "latest"
+    assert context.app_package_repo.tag_name == "f39-flatpak-app-packages"
 
     assert context.release == "39"
 
@@ -150,18 +150,18 @@ def test_auto_build_context_app(app_container_spec, profile: ProfileConfig):
             [f39-flatpak-runtime-packages]
             name=f39-flatpak-runtime-packages
             baseurl=https://kojifiles.example.com/repos/f39-flatpak-runtime-packages/latest/$basearch/
-            priority=10
             enabled=1
             skip_if_unavailable=False
+            priority=10
             includepkgs=glibc
             """),
         dedent("""\
             [f39-flatpak-app-packages]
             name=f39-flatpak-app-packages
             baseurl=https://kojifiles.example.com/repos/f39-flatpak-app-packages/latest/$basearch/
-            priority=20
             enabled=1
             skip_if_unavailable=False
+            priority=20
             """),
         dedent("""\
             [local]
@@ -178,9 +178,9 @@ def test_auto_build_context_app(app_container_spec, profile: ProfileConfig):
             [f39-flatpak-app-build]
             name=f39-flatpak-app-build
             baseurl=https://kojifiles.example.com/repos/f39-flatpak-app-build/latest/$basearch/
-            priority=20
             enabled=1
             skip_if_unavailable=False
+            priority=20
             """),
         dedent("""\
             [local]
@@ -198,8 +198,8 @@ def test_auto_build_context_runtime(runtime_container_spec, profile: ProfileConf
                                target="f39-flatpak-candidate", arch=Arch.PPC64LE)
 
     assert context.nvr == RUNTIME_NVR
-    assert context.runtime_package_repo["id"] == "latest"
-    assert context.runtime_package_repo["tag_name"] == "f39-flatpak-runtime-packages"
+    assert context.runtime_package_repo.id == "latest"
+    assert context.runtime_package_repo.tag_name == "f39-flatpak-runtime-packages"
 
     assert context.release == "39"
 
@@ -208,9 +208,9 @@ def test_auto_build_context_runtime(runtime_container_spec, profile: ProfileConf
             [f39-flatpak-runtime-packages]
             name=f39-flatpak-runtime-packages
             baseurl=https://kojifiles.example.com/repos/f39-flatpak-runtime-packages/latest/$basearch/
-            priority=10
             enabled=1
             skip_if_unavailable=False
+            priority=10
             """)
     ]
 

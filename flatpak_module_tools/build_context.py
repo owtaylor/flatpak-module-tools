@@ -4,26 +4,16 @@ from functools import cached_property
 import json
 from pathlib import Path
 from textwrap import dedent
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from click import ClickException
-
-import koji
 
 from flatpak_module_tools.package_locator import PackageLocator
 
 from .config import ProfileConfig
 from .container_spec import ContainerSpec, Option
 from .console_logging import Status
+from .koji_utils import KojiRepo
 from .utils import Arch, RuntimeInfo
-
-
-def _baseurl(profile: ProfileConfig, repo: Dict):
-    pathinfo = koji.PathInfo(topdir=profile.koji_options['topurl'])
-
-    if repo["dist"]:
-        return pathinfo.distrepo(repo["id"], repo["tag_name"], None) + "/$basearch/"
-    else:
-        return pathinfo.repo(repo["id"], repo["tag_name"]) + "/$basearch/"
 
 
 class BuildContext(ABC):
@@ -62,27 +52,20 @@ class BuildContext(ABC):
 
     @property
     @abstractmethod
-    def app_package_repo(self) -> Dict:
-        """Dictionary with repository information for container package installation.
-
-        Fields of the dictionary include:
-
-          id: int: repository ID
-          tag_name: str: name of the tag the repository was created from
-          dist: bool: whether repository is a dist rpeo
-        """
+    def app_package_repo(self) -> KojiRepo:
+        """Repository information for app container package installation."""
         ...
 
     @property
     @abstractmethod
-    def app_build_repo(self) -> Dict:
-        """Dictionary with repository tag_name and id for app container package build."""
+    def app_build_repo(self) -> KojiRepo:
+        """Repository information for app container package build."""
         ...
 
     @property
     @abstractmethod
-    def runtime_package_repo(self) -> Dict:
-        """Dictionary with repository tag_name and id for runtime container package installation."""
+    def runtime_package_repo(self) -> KojiRepo:
+        """Repository information for runtime container package installation."""
         ...
 
     def local_runtime_aux_file(self, suffix: str):
@@ -167,32 +150,18 @@ class BuildContext(ABC):
         if local_repo_path is None:
             local_repo_path = self.local_repo
 
-        def koji_repo(repo: Dict, priority: int, includepkgs: Optional[List[str]] = None):
-            result = dedent(f"""\
-                [{repo["tag_name"]}]
-                name={repo["tag_name"]}
-                baseurl={_baseurl(self.profile, repo)}
-                priority={priority}
-                enabled=1
-                skip_if_unavailable=False
-            """)
-            if includepkgs is not None:
-                result += dedent(f"""\
-                    includepkgs={",".join(includepkgs)}
-                """)
-            return result
-
         if for_container:
             if self.flatpak_spec.build_runtime:
-                repos.append(koji_repo(self.runtime_package_repo, 10))
+                repos.append(self.runtime_package_repo.dnf_config(priority=10))
             else:
-                repos.append(koji_repo(self.runtime_package_repo, 10,
-                                       includepkgs=self.runtime_packages))
-                repos.append(koji_repo(self.app_package_repo, 20))
+                repos.append(self.runtime_package_repo.dnf_config(
+                    priority=10, includepkgs=self.runtime_packages
+                ))
+                repos.append(self.app_package_repo.dnf_config(priority=20))
         else:
             if self.flatpak_spec.build_runtime:
                 raise NotImplementedError("Runtime package building is not implemented")
-            repos.append(koji_repo(self.app_build_repo, 20))
+            repos.append(self.app_build_repo.dnf_config(priority=20))
 
         if local_repo_path:
             repos.append(dedent(f"""\
@@ -236,13 +205,13 @@ class AutoBuildContext(BuildContext):
             main_package = self.flatpak_spec.packages[0].name
             repo = self.app_package_repo
             locator = PackageLocator()
-            locator.add_repo(_baseurl(self.profile, repo))
+            locator.add_repo(repo.baseurl)
             if self.local_repo:
                 locator.add_repo(self.local_repo)
             version_info = locator.find_latest_version(main_package, arch=self.arch)
 
             if not version_info:
-                raise ClickException(f"Can't find build for {main_package} in {repo['tag_name']}")
+                raise ClickException(f"Can't find build for {main_package} in {repo.tag_name}")
 
             name = self.flatpak_spec.get_component_label(main_package)
             version = version_info.version
@@ -260,9 +229,9 @@ class AutoBuildContext(BuildContext):
             self._container_target_info["build_tag_name"]
         )
 
-    def _get_container_build_config_extra(self, key, default: Any = Option.REQUIRED):
+    def _get_container_build_config_extra(self, key, default: Any = Option.REQUIRED) -> Any:
         build_config = self._container_build_config
-        value: Optional[str] = build_config['extra'].get(key)
+        value: Union[str, bool, None] = build_config['extra'].get(key)
         if value is None:
             if default == Option.REQUIRED:
                 raise ClickException(f"{build_config['name']} doesn't have {key} set in extra data")
@@ -290,23 +259,25 @@ class AutoBuildContext(BuildContext):
 
     @property
     def runtime_package_repo(self):
-        return {
-            'id': "latest",
-            'tag_name': self._get_container_build_config_extra("flatpak.runtime_package_tag"),
-            'dist': self._get_container_build_config_extra(
+        return KojiRepo(
+            profile=self.profile,
+            id="latest",
+            tag_name=self._get_container_build_config_extra("flatpak.runtime_package_tag"),
+            dist=self._get_container_build_config_extra(
                 "flatpak.runtime_package_dist_repo", False
             )
-        }
+        )
 
     @property
     def app_package_repo(self):
-        return {
-            'id': "latest",
-            'tag_name': self._get_container_build_config_extra("flatpak.app_package_tag"),
-            'dist': self._get_container_build_config_extra(
+        return KojiRepo(
+            profile=self.profile,
+            id="latest",
+            tag_name=self._get_container_build_config_extra("flatpak.app_package_tag"),
+            dist=self._get_container_build_config_extra(
                 "flatpak.app_package_dist_repo", False
             )
-        }
+        )
 
     @cached_property
     def _rpm_target_info(self):
@@ -315,11 +286,12 @@ class AutoBuildContext(BuildContext):
 
     @property
     def app_build_repo(self):
-        return {
-            'id': "latest",
-            'tag_name': self._rpm_target_info["build_tag_name"],
-            'dist': False,
-        }
+        return KojiRepo(
+            profile=self.profile,
+            id="latest",
+            tag_name=self._rpm_target_info["build_tag_name"],
+            dist=False
+        )
 
 
 class ManualBuildContext(BuildContext):
@@ -366,12 +338,12 @@ class ManualBuildContext(BuildContext):
 
     @cached_property
     def runtime_package_repo(self):
-        return self.profile.koji_session.repoInfo(self.runtime_repo)
+        return KojiRepo.from_koji_repo_id(self.profile, self.runtime_repo)
 
     @cached_property
     def app_package_repo(self):
         assert self.app_repo
-        return self.profile.koji_session.repoInfo(self.app_repo)
+        return KojiRepo.from_koji_repo_id(self.profile, self.app_repo)
 
     @property
     def app_build_repo(self):

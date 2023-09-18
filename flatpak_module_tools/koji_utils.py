@@ -1,5 +1,7 @@
+from dataclasses import dataclass
+from textwrap import dedent
 import time
-from typing import TextIO
+from typing import List, Optional, TextIO
 
 import click
 import koji
@@ -7,6 +9,54 @@ import koji
 from .config import ProfileConfig
 from .console_logging import LiveDisplay, RenderWhen
 from .utils import error
+
+
+@dataclass
+class KojiRepo:
+    profile: ProfileConfig
+    id: str
+    tag_name: str
+    dist: bool
+
+    @property
+    def baseurl(self) -> str:
+        pathinfo = koji.PathInfo(topdir=self.profile.koji_options['topurl'])
+
+        if self.dist:
+            return pathinfo.distrepo(self.id, self.tag_name, None) + "/$basearch/"
+        else:
+            return pathinfo.repo(self.id, self.tag_name) + "/$basearch/"
+
+    def dnf_config(self, priority: Optional[int] = None, includepkgs: Optional[List[str]] = None):
+        result = dedent(f"""\
+            [{self.tag_name}]
+            name={self.tag_name}
+            baseurl={self.baseurl}
+            enabled=1
+            skip_if_unavailable=False
+        """)
+
+        if priority is not None:
+            result += dedent(f"""\
+                priority={priority}
+        """)
+
+        if includepkgs is not None:
+            result += dedent(f"""\
+                includepkgs={",".join(includepkgs)}
+            """)
+
+        return result
+
+    @classmethod
+    def from_koji_repo_id(cls, profile: ProfileConfig, repo_id: int):
+        repo_info = profile.koji_session.repoInfo(repo_id)
+        return cls(
+            profile=profile,
+            id=repo_info["id"],
+            tag_name=repo_info["tag_name"],
+            dist=repo_info["dist"]
+        )
 
 
 def _format_link(href, text):

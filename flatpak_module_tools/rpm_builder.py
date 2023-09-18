@@ -120,7 +120,7 @@ class RpmBuilder:
             if (self.context.local_repo / "repodata/repomd.xml").exists():
                 local_repo = [f"--local-repo=local:{self.context.local_repo}"]
 
-        rpm_build_tag = self.context.app_build_repo["tag_name"] if include_tag else "NONE"
+        rpm_build_tag = self.context.app_build_repo.tag_name if include_tag else "NONE"
         return subprocess.check_output(
             ["flatpak-module-depchase",
                 f"--profile={self.profile.name}",
@@ -362,8 +362,8 @@ class RpmBuilder:
             else:
                 raise click.ClickException("Outdated or missing packages, not building")
 
-        package_tag = self.context.app_package_repo["tag_name"]
-        package_dist_repo = self.context.app_package_repo["dist"]
+        package_tag = self.context.app_package_repo.tag_name
+        package_dist_repo = self.context.app_package_repo.dist
 
         if wait_for_event >= 0:
             with Status("Waiting for repository with necessary packages"):
