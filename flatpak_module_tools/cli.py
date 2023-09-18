@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from functools import cached_property
 import logging
 from pathlib import Path
 import subprocess
@@ -28,6 +29,7 @@ class Paths:
     path: Path
     _local_repo: Optional[Path] = None
     _containerspec: Optional[Path] = None
+    ignore_missing_local_repo: bool = False
 
     @property
     def workdir(self):
@@ -44,16 +46,21 @@ class Paths:
         archdir = self.path / Arch().rpm
         return archdir / "result"
 
-    @property
+    @cached_property
     def local_repo(self):
         if self._local_repo is not None:
-            return self.path / self._local_repo
+            result = self.path / self._local_repo
         else:
-            return self.path / Path(Arch().rpm) / "rpms"
+            result = self.path / Path(Arch().rpm) / "rpms"
 
-    @property
-    def local_repo_specified(self):
-        return self._local_repo is not None
+        if self.ignore_missing_local_repo:
+            if not (result / "repodata/repodata.xml").exists():
+                if self._local_repo is not None:
+                    warn(f"No repository at {self.local_repo}, ignoring")
+
+            return None
+
+        return result
 
     @property
     def containerspec(self):
@@ -72,8 +79,20 @@ class CliData:
         assert isinstance(ctx.obj, CliData)
         return ctx.obj
 
-    def paths(self, *, containerspec: Optional[Path] = None, local_repo: Optional[Path] = None):
-        return Paths(path=self.path, _containerspec=containerspec, _local_repo=local_repo)
+    def paths(self, *, containerspec: Optional[Path] = None, local_repo: Optional[Path] = None,
+              ignore_missing_local_repo: bool = True):
+        """Create an appropriate Paths object for global and local options
+
+        :param containerspec: --containerspec option - path to container.yaml
+        :param local-repo: --local-repo option
+        :param ignore_missing_local_repo: if True (the default), if the local
+           repository is missing, ignore it unless --local-repo was specified
+           in which case print a warning. If False, keep the specified or
+           default local_repo value - this is for commands that *create*
+           a local repository at the given location.
+        """
+        return Paths(path=self.path, _containerspec=containerspec, _local_repo=local_repo,
+                     ignore_missing_local_repo=ignore_missing_local_repo)
 
     @property
     def workdir(self):
@@ -298,11 +317,6 @@ def build_container_local(ctx,
     container_spec = make_container_spec(paths)
     target = get_target(container_spec, target)
 
-    if not (paths.local_repo / "repodata/repomd.xml").exists():
-        if not paths.local_repo_specified:
-            warn("No repository at {local_repo}, ignoring")
-        paths._local_repo = None
-
     build_context = AutoBuildContext(
         profile=get_profile(),
         container_spec=container_spec, local_repo=paths.local_repo,
@@ -477,7 +491,8 @@ def build_rpms_local(
 ):
     """Rebuild rpms needed for the container locally"""
 
-    paths = CliData.from_context(ctx).paths(containerspec=containerspec, local_repo=local_repo)
+    paths = CliData.from_context(ctx).paths(containerspec=containerspec, local_repo=local_repo,
+                                            ignore_missing_local_repo=False)
     spec = make_container_spec(paths)
     target = get_target(spec, target)
 
