@@ -1,6 +1,8 @@
 import json
+import os
 from pathlib import Path
 import subprocess
+from tempfile import NamedTemporaryFile
 import time
 from typing import Any, Collection, Dict, List, Tuple
 
@@ -104,16 +106,17 @@ class RpmBuilder:
                       include_tag: bool,
                       include_packages: bool,
                       refresh: str = "missing"):
+        spec = self.flatpak_spec
         if include_packages:
-            packages_file = self.workdir / \
-                f"{self.flatpak_spec.runtime_name}-{self.flatpak_spec.runtime_version}.packages"
-            self.workdir.mkdir(parents=True, exist_ok=True)
-            with open(packages_file, "w") as f:
+            with NamedTemporaryFile(prefix=f"{spec.runtime_name}-{spec.runtime_version}",
+                                    suffix=".packages", mode="w",
+                                    delete=False, encoding="utf-8") as packages_file:
                 for pkg in self.context.runtime_packages:
-                    print(pkg, file=f)
-            packages = ["--preinstalled", packages_file]
+                    print(pkg, file=packages_file)
+                packages = ["--preinstalled", packages_file.name]
         else:
             packages = []
+            packages_file = None
 
         local_repo = []
         if include_localrepo and self.context.local_repo:
@@ -121,14 +124,18 @@ class RpmBuilder:
                 local_repo = [f"--local-repo=local:{self.context.local_repo}"]
 
         rpm_build_tag = self.context.app_build_repo.tag_name if include_tag else "NONE"
-        return subprocess.check_output(
-            ["flatpak-module-depchase",
-                f"--profile={self.profile.name}",
-                f"--arch={self.arch.oci}",
-                f"--tag={rpm_build_tag}",
-                f"--refresh={refresh}"] + local_repo + [cmd] + packages + args,
-            encoding="utf-8"
-        )
+        try:
+            return subprocess.check_output(
+                ["flatpak-module-depchase",
+                    f"--profile={self.profile.name}",
+                    f"--arch={self.arch.oci}",
+                    f"--tag={rpm_build_tag}",
+                    f"--refresh={refresh}"] + local_repo + [cmd] + packages + args,
+                encoding="utf-8"
+            )
+        finally:
+            if packages_file:
+                os.remove(packages_file.name)
 
     def _refresh_metadata(self, include_localrepo: bool = True):
         self._run_depchase(
@@ -483,6 +490,7 @@ class RpmBuilder:
             runtimever=self.context.runtime_info.version
         )
 
+        self.workdir.mkdir(parents=True, exist_ok=True)
         builder = MockBuildScheduler(
             mock_cfg=mock_cfg,
             profile=self.profile,
