@@ -117,18 +117,31 @@ def make_container_spec(paths: Paths):
         raise click.ClickException(str(e))
 
 
-def get_target(container_spec: ContainerSpec,
+def get_target(paths: Paths,
+               container_spec: ContainerSpec,
                target_option: Optional[str]) -> str:
     if target_option:
         return target_option
     else:
-        if container_spec.flatpak.runtime_version is None:
-            die("--target must be specified "
-                "if flatpak:runtime_version is not set in container.yaml")
         profile = get_profile()
-        release = profile.release_from_runtime_version(
-            container_spec.flatpak.runtime_version
-        )
+
+        if container_spec.flatpak.runtime_version:
+            release = profile.release_from_runtime_version(
+                container_spec.flatpak.runtime_version
+            )
+        else:
+            try:
+                merge_branch = GitRepository(paths.path).merge_branch
+            except click.ClickException:
+                die("Can't determine git merge branch. "
+                    "Must set flatpak:runtime_version in container.yaml "
+                    "or specify --target")
+
+            release = profile.release_from_runtime_version(merge_branch)
+            if release == "":
+                die(f"Cannot determine release from branch '{merge_branch}'. "
+                    "Must set flatpak:runtime_version in container.yaml "
+                    "or specify --target")
 
         return profile.get_flatpak_koji_target(release)
 
@@ -209,7 +222,7 @@ def build_container(ctx,
     # Check that necessary dependencies are built
 
     container_spec = make_container_spec(paths)
-    target = get_target(container_spec, target)
+    target = get_target(paths, container_spec, target)
 
     build_context = AutoBuildContext(
         profile=profile,
@@ -280,7 +293,7 @@ def build_container_local(ctx,
 
     paths = CliData.from_context(ctx).paths(containerspec=containerspec, local_repo=local_repo)
     container_spec = make_container_spec(paths)
-    target = get_target(container_spec, target)
+    target = get_target(paths, container_spec, target)
 
     build_context = AutoBuildContext(
         profile=get_profile(),
@@ -360,7 +373,7 @@ def assemble(
         )
 
     else:
-        target = get_target(container_spec, target)
+        target = get_target(paths, container_spec, target)
         build_context = AutoBuildContext(
             profile=get_profile(), container_spec=container_spec, target=target
         )
@@ -416,7 +429,7 @@ def build_rpms(
     paths = CliData.from_context(ctx).paths(containerspec=containerspec)
 
     spec = make_container_spec(paths)
-    target = get_target(spec, target)
+    target = get_target(paths, spec, target)
 
     if not packages and not auto:
         info("Nothing to rebuild, specify packages or --auto")
@@ -459,7 +472,7 @@ def build_rpms_local(
     paths = CliData.from_context(ctx).paths(containerspec=containerspec, local_repo=local_repo,
                                             ignore_missing_local_repo=False)
     spec = make_container_spec(paths)
-    target = get_target(spec, target)
+    target = get_target(paths, spec, target)
 
     if not packages and not auto:
         info("Nothing to rebuild, specify packages or --auto")
