@@ -1,14 +1,14 @@
 from dataclasses import dataclass
-from functools import cached_property
 import logging
 from pathlib import Path
-import subprocess
 import sys
 from typing import List, Optional
 from urllib.parse import urlparse
 
 import click
 from koji_cli.lib import activate_session
+
+from flatpak_module_tools.git_utils import GitRepository
 
 from .build_context import AutoBuildContext, ManualBuildContext
 from .config import add_config_file, set_profile_name, get_profile
@@ -46,7 +46,7 @@ class Paths:
         archdir = self.path / Arch().rpm
         return archdir / "result"
 
-    @cached_property
+    @property
     def local_repo(self):
         if self._local_repo is not None:
             result = self.path / self._local_repo
@@ -203,39 +203,8 @@ def build_container(ctx,
 
     # Check that all changes are committed and pushed
 
-    branch = subprocess.check_output([
-        "git", "branch", "--show-current"
-    ], cwd=paths.path, encoding="utf-8").strip()
-    if branch == "":
-        raise click.ClickException("No current git branch")
-
-    try:
-        merge = subprocess.check_output([
-            "git", "config", f"branch.{branch}.merge"
-        ], cwd=paths.path, encoding="utf-8").strip()
-    except subprocess.CalledProcessError:
-        raise click.ClickException("Can't find git remote tracking branch")
-
-    if not merge.startswith("refs/heads/"):
-        raise click.ClickException(f"Can't parse git remote tracking branch {merge}")
-
-    merge_name = merge.removeprefix("refs/heads/")
-
-    if subprocess.call([
-        "git", "diff-index", "--quiet", "HEAD", "--"
-    ], cwd=paths.path) != 0:
-        raise click.ClickException("Git repository has uncommitted changes")
-
-    local = subprocess.check_output([
-        "git", "rev-parse", "HEAD"
-    ], cwd=paths.path, encoding="utf-8").strip()
-
-    remote = subprocess.check_output([
-        "git", "rev-parse", f"remotes/origin/{merge_name}"
-    ], cwd=paths.path, encoding="utf-8").strip()
-
-    if local != remote:
-        raise click.ClickException(f"HEAD does not match origin/{merge_name}. Unpushed changes?")
+    repository = GitRepository(paths.path)
+    repository.check_clean()
 
     # Check that necessary dependencies are built
 
@@ -254,12 +223,8 @@ def build_container(ctx,
 
     # Determine the source URL
 
-    origin_url = subprocess.check_output([
-        "git", "remote", "get-url", "origin"
-    ], cwd=paths.path, encoding="utf-8").strip()
-
-    parsed_origin_url = urlparse(origin_url)
-    src = profile.build_source_base + parsed_origin_url.path + "#" + local
+    parsed_origin_url = urlparse(repository.origin_url)
+    src = profile.build_source_base + parsed_origin_url.path + "#" + repository.head_revision
 
     # Process options
 
