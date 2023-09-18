@@ -9,8 +9,6 @@ import subprocess
 from textwrap import dedent
 from typing import Dict, Optional, Sequence, Union
 
-import koji
-
 from .build_context import BuildContext
 from .flatpak_builder import (
     FlatpakBuilder,
@@ -62,25 +60,9 @@ class MockExecutor(BuildExecutor):
     @property
     def _bootstrap_koji_repo(self):
         # We need a repository to install the basic buildroot tools
-        # (dnf, mount, tar, etc) from. For now, use the repository for
-        # source_koji_tag, which defaults to f38-build.
-        #
-        # There's no requirement that source_koji_tag is a build tag, so we might
-        # want to define something else (or add runtime_rpm_koji_target,
-        # and use the build_tag for that. The build_tag for app_rpm_koji_target
-        # isn't appropriate, since it might have stuff built with prefix=/app.
+        # (dnf, mount, tar, etc) from. The runtime package repo works.
 
-        pathinfo = koji.PathInfo(topdir=self.context.profile.source_koji_options['topurl'])
-        tag_name = self.context.profile.get_source_koji_tag(release=self.context.release)
-        baseurl = pathinfo.repo("latest", tag_name) + "/$basearch/"
-
-        return dedent(f"""\
-            [{tag_name}]
-            name={tag_name}
-            baseurl={baseurl}
-            enabled=1
-            skip_if_unavailable=False
-            """)
+        return self.context.runtime_package_repo.dnf_config()
 
     def init(self):
         self.mock_cfg_path = self.workdir / "mock.cfg"
