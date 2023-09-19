@@ -87,7 +87,7 @@ def watch_koji_task(profile: ProfileConfig, task_id: int):
 
             url_base = profile.koji_options['weburl']
             url = f"{url_base}/buildinfo?buildID={build['build_id']}"
-            click.echo(f"Building {_format_link(url, build["nvr"])} succeeded!")
+            click.echo(f"Building {_format_link(url, build['nvr'])} succeeded!")
         else:
             click.echo("Build succeeded!")
 
