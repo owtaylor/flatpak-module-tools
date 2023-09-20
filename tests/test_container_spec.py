@@ -231,6 +231,10 @@ def test_app_container_spec_modules(tmp_path):
      """),
      r"unexpected end of stream"),
     (dedent("""
+     foo
+     """),
+     r"container.yaml: toplevel content must be a mapping"),
+    (dedent("""
      """),
      r"No flatpak section in '"),
     (dedent("""

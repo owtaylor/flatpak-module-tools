@@ -222,6 +222,9 @@ class ContainerSpec(BaseSpec):
 
         super().__init__(path, container_yaml)
 
+        if container_yaml and not isinstance(container_yaml, dict):
+            raise ValidationError(f"{path}: toplevel content must be a mapping")
+
         flatpak_yaml = container_yaml and container_yaml.get('flatpak', None)
         if not flatpak_yaml:
             raise ValidationError(f"No flatpak section in '{path}'")
