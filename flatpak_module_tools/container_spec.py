@@ -26,10 +26,7 @@ class BaseSpec:
             else:
                 return default
         else:
-            try:
-                return type_convert(val)
-            except ValueError as e:
-                raise ValidationError(f"{self.path}, {key} {e}")
+            return type_convert(val)
 
     @overload
     def _get_str(self, key: str, default: Literal[Option.REQUIRED]) -> str:
