@@ -154,6 +154,8 @@ class FlatpakSpec(BaseSpec):
         self.app_id = self._get_str("id")
         self.appdata_license = self._get_str('appdata-license', None)
         self.appstream_compose = self._get_bool('appstream-compose', True)
+        # base_image instead of base-image because that's what OSBS/atomic-reactor
+        # has been using.
         self.base_image = self._get_str('base_image', None)
         self.branch = self._get_str('branch', 'stable')
         self.build_runtime = self._get_bool('build-runtime', False)
