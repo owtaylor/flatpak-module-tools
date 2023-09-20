@@ -242,7 +242,7 @@ def build_container(ctx,
     # Process options
 
     opts = {}
-    if arches != []:
+    if arches:
         if not scratch:
             die("--arch can only be specified for scratch builds")
         opts["arch_override"] = " ".join(arches)

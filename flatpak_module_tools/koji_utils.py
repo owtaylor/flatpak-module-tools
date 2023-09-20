@@ -131,7 +131,7 @@ def watch_koji_task(profile: ProfileConfig, task_id: int):
         error("Build was cancelled")
         return False
     elif state == "CLOSED":
-        builds = profile.koji_session.listBuilds(taskID=task_id)[0]
+        builds = profile.koji_session.listBuilds(taskID=task_id)
         if builds:  # no builds for scratch build
             build = builds[0]
 
