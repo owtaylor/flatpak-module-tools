@@ -228,7 +228,7 @@ class ContainerSpec(BaseSpec):
         compose_yaml = container_yaml.get('compose', {})
         self.compose = ComposeSpec(f"{path}:compose", compose_yaml)
 
-        platforms_yaml = container_yaml.get('compose', {})
+        platforms_yaml = container_yaml.get('platforms', {})
         self.platforms = PlatformsSpec(f"{path}:platforms", platforms_yaml)
 
         NEW_STYLE_ATTRS = ["packages", "runtime_name", "runtime_version"]
