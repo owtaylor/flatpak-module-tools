@@ -261,6 +261,9 @@ def build_container(ctx,
 
     task_id = profile.koji_session.flatpakBuild(src, target, opts=opts, priority=priority)
 
+    if nowait:
+        return
+
     if not watch_koji_task(profile, task_id):
         sys.exit(1)
 
