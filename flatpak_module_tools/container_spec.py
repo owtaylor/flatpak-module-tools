@@ -219,7 +219,7 @@ class ContainerSpec(BaseSpec):
 
         super().__init__(path, container_yaml)
 
-        flatpak_yaml = container_yaml.get('flatpak', None)
+        flatpak_yaml = container_yaml and container_yaml.get('flatpak', None)
         if not flatpak_yaml:
             raise ValidationError(f"No flatpak section in '{path}'")
 
