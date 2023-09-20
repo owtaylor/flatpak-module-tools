@@ -215,7 +215,10 @@ class ComposeSpec(BaseSpec):
 class ContainerSpec(BaseSpec):
     def __init__(self, path):
         with open(path) as f:
-            container_yaml = yaml.safe_load(f)
+            try:
+                container_yaml = yaml.safe_load(f)
+            except yaml.YAMLError as e:
+                raise ValidationError(str(e)) from e
 
         super().__init__(path, container_yaml)
 

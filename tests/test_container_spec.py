@@ -227,6 +227,10 @@ def test_app_container_spec_modules(tmp_path):
      """),
      r"container.yaml:flatpak: packages must be a list of strings and mappings"),
     (dedent("""
+     foo: "
+     """),
+     r"unexpected end of stream"),
+    (dedent("""
      """),
      r"No flatpak section in '"),
     (dedent("""
