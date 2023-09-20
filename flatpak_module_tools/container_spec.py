@@ -22,7 +22,7 @@ class BaseSpec:
         val = self._yaml_dict.get(key)
         if val is None:
             if default == Option.REQUIRED:
-                raise ValidationError(f"{self.path}, {key} is missing")
+                raise ValidationError(f"{self.path}: {key} is missing")
             else:
                 return default
         else:
@@ -51,7 +51,7 @@ class BaseSpec:
             if isinstance(val, (str, int, float)):
                 return str(val)
             else:
-                raise ValidationError(f"{self.path}, {key} must be a string")
+                raise ValidationError(f"{self.path}: {key} must be a string")
 
         return self._get(key, type_convert, default)
 
@@ -74,7 +74,7 @@ class BaseSpec:
             if isinstance(val, bool):
                 return val
             else:
-                raise ValidationError(f"{self.path}, {key} must be a boolean")
+                raise ValidationError(f"{self.path}: {key} must be a boolean")
 
         return self._get(key, type_convert, default)
 
@@ -103,7 +103,7 @@ class BaseSpec:
             elif allow_scalar and isinstance(val, (int, float, str)):
                 return [str(val)]
             else:
-                raise ValidationError(f"{self.path}, {key} must be a list of strings")
+                raise ValidationError(f"{self.path}: {key} must be a list of strings")
 
         return self._get(key, type_convert, default)
 
@@ -143,7 +143,7 @@ class FlatpakSpec(BaseSpec):
                     PackageSpec(f"{self.path}/{i}", v) for i, v in enumerate(val)
                 ]
             else:
-                raise ValidationError(f"{self.path}, {key} must be a list of strings and mappings")
+                raise ValidationError(f"{self.path}: {key} must be a list of strings and mappings")
 
         return self._get(key, type_convert, default)
 
