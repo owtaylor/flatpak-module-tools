@@ -56,7 +56,8 @@ write_to_template = "{version}"
 
 [tool.coverage.report]
 exclude_also = [
-    "@abstractmethod"
+    "@abstractmethod",
+    "@overload"
 ]
 
 [tool.pytest.ini_options]
