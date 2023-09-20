@@ -45,7 +45,7 @@ class BaseSpec:
         ...
 
     def _get_str(
-            self, key: str, default: Union[Literal[Option.REQUIRED], str, None] = None
+            self, key: str, default: Union[Literal[Option.REQUIRED], str, None] = Option.REQUIRED
     ) -> Optional[str]:
         def type_convert(val):
             if isinstance(val, (str, int, float)):
@@ -68,7 +68,7 @@ class BaseSpec:
         ...
 
     def _get_bool(
-            self, key: str, default: Union[Literal[Option.REQUIRED], bool, None]
+            self, key: str, default: Union[Literal[Option.REQUIRED], bool, None] = Option.REQUIRED
     ) -> Optional[bool]:
         def type_convert(val):
             if isinstance(val, bool):
@@ -92,7 +92,8 @@ class BaseSpec:
         ...
 
     def _get_str_list(
-            self, key: str, default: Union[Literal[Option.REQUIRED], List[str], None],
+            self, key: str,
+            default: Union[Literal[Option.REQUIRED], List[str], None] = Option.REQUIRED,
             allow_scalar=False
     ) -> Optional[List[str]]:
         def type_convert(val):
