@@ -59,7 +59,7 @@ class KojiRepo:
         )
 
 
-def _format_link(href, text):
+def format_link(href, text):
     OSC = "\033]"
     ST = "\033\\"
     return f"{OSC}8;;{href}{ST}{text}{OSC}8;;{ST}"
@@ -82,7 +82,7 @@ def format_task(profile: ProfileConfig, task_info):
 
     url_base = profile.koji_options['weburl']
     url = f"{url_base}/taskinfo?taskID={task_info['id']}"
-    return f"{_format_link(url, task_info['id'])} {label}: {formatted_state}"
+    return f"{format_link(url, task_info['id'])} {label}: {formatted_state}"
 
 
 class WatcherDisplay(LiveDisplay):
@@ -137,7 +137,7 @@ def watch_koji_task(profile: ProfileConfig, task_id: int):
 
             url_base = profile.koji_options['weburl']
             url = f"{url_base}/buildinfo?buildID={build['build_id']}"
-            click.echo(f"Building {_format_link(url, build['nvr'])} succeeded!")
+            click.echo(f"Building {format_link(url, build['nvr'])} succeeded!")
         else:
             click.echo("Build succeeded!")
 

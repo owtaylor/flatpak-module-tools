@@ -20,7 +20,7 @@ from koji_cli.lib import activate_session
 
 from .config import ProfileConfig
 from .console_logging import LiveDisplay, RenderWhen
-from .koji_utils import format_task
+from .koji_utils import format_link, format_task
 from .utils import rpm_name_only
 
 
@@ -502,6 +502,8 @@ class KojiBuildScheduler(BuildScheduler):
         U(status="Starting build")
         session = self.profile.koji_session
         task_id = session.build(source_url, self.target)
+        url_base = self.profile.koji_options['weburl']
+        taskurl=f"{url_base}/taskinfo?taskID={task_id}"
 
         while True:
             task_info = session.getTaskInfo(task_id, request=True)
@@ -512,10 +514,10 @@ class KojiBuildScheduler(BuildScheduler):
                 format_task(self.profile, task_child) for task_child in task_children]
 
             if state == "FAILED":
-                U(State.FAILED, status="{weburl}/taskinfo?taskID={task_id} failed")
+                U(State.FAILED, status=f"task {format_link(taskurl, task_id)} failed")
                 return
             elif state == "CANCELED":
-                U(State.FAILED, status=" {weburl}/taskinfo?taskID={task_id} was canceled")
+                U(State.FAILED, status=f"task {format_link(taskurl, task_id)} was canceled")
                 return
             elif state == "CLOSED":
                 break
