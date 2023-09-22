@@ -120,7 +120,7 @@ def get_target(paths: Paths,
             try:
                 merge_branch = GitRepository(paths.path).merge_branch
             except click.ClickException:
-                die("Can't determine git merge branch. "
+                die("Cannot determine git merge branch. "
                     "Must set flatpak:runtime_version in container.yaml "
                     "or specify --target")
 
