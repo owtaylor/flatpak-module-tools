@@ -219,7 +219,7 @@ def build_container(ctx,
 
     if not container_spec.flatpak.build_runtime:
         rpm_builder = RpmBuilder(build_context, workdir=paths.workdir)
-        rpm_builder.check(include_localrepo=True, allow_outdated=allow_outdated)
+        rpm_builder.check(include_localrepo=False, allow_outdated=allow_outdated)
 
     # Determine the source URL
 
