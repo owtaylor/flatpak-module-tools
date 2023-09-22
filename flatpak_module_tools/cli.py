@@ -350,7 +350,7 @@ def assemble(
             if not nvr or not runtime_repo:
                 die("--nvr and --runtime-repo must be specified for runtimes")
             if runtime_nvr or app_repo:
-                die("--nvr and --runtime-repo must not be specified for runtimes")
+                die("--runtime-nvr and --app-repo must not be specified for runtimes")
 
         else:
             if not nvr or not runtime_nvr or not runtime_repo or not app_repo:
