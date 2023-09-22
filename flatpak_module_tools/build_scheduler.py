@@ -13,7 +13,7 @@ import logging
 from pathlib import Path
 import re
 import shutil
-from typing import Collection, Dict, Iterable, List, Mapping, Set, TextIO
+from typing import Collection, Dict, Iterable, List, Mapping, Optional, Set, TextIO, Union
 
 import koji
 from koji_cli.lib import activate_session
@@ -41,7 +41,7 @@ class BuildItem():
     state: State = State.WAITING
     status: str = ""
     log_files: List[Path] = field(default_factory=list)
-    task: str | None = None
+    task: Optional[str] = None
     task_children: List[str] = field(default_factory=list)
     debug_messages: List[str] = field(default_factory=list)
 
@@ -176,12 +176,12 @@ class BuildScheduler(ABC):
         self.display.update_items(self.items.values())
 
     def update_item(self, item: BuildItem,
-                    state: State | None = None,
-                    status: str | None = None,
-                    log_files: List[Path] | None = None,
-                    task: str | None = None,
-                    task_children: List[str] | None = None,
-                    debug_messages: List[str] | None = None):
+                    state: Optional[State] = None,
+                    status: Optional[str] = None,
+                    log_files: Optional[List[Path]] = None,
+                    task: Optional[str] = None,
+                    task_children: Optional[List[str]] = None,
+                    debug_messages: Optional[List[str]] = None):
 
         need_update = state == (State.DONE or state == State.FAILED) and state != item.state
         if state is not None:
@@ -366,7 +366,7 @@ class MockBuildScheduler(BuildScheduler):
                         f"failed to find location in 'fedpkg srpm' output, see {logpath}"
                     )
 
-        def make_mock_cmd(*extra_args: str | Path):
+        def make_mock_cmd(*extra_args: Union[str, Path]):
             return (
                 "mock",
                 "-r", self.mock_cfg_path,
