@@ -484,9 +484,6 @@ def build_rpms_local(
     )
 
     builder = RpmBuilder(build_context, workdir=paths.workdir)
-    if packages is [] and not auto:
-        info("Nothing to rebuild, specify packages or --all-missing")
-    else:
-        builder.build_rpms_local(
-            manual_packages, manual_repos, auto=auto, allow_outdated=allow_outdated
-        )
+    builder.build_rpms_local(
+        manual_packages, manual_repos, auto=auto, allow_outdated=allow_outdated
+    )
