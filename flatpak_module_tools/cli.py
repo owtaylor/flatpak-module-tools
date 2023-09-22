@@ -100,6 +100,8 @@ def make_container_spec(paths: Paths):
         return ContainerSpec(paths.containerspec)
     except ValidationError as e:
         raise click.ClickException(str(e))
+    except OSError as e:
+        raise click.ClickException(str(e))
 
 
 def get_target(paths: Paths,
