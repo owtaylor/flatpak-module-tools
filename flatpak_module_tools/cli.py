@@ -54,11 +54,11 @@ class Paths:
             result = self.path / Path(Arch().rpm) / "rpms"
 
         if self.ignore_missing_local_repo:
-            if not (result / "repodata/repodata.xml").exists():
+            if not (result / "repodata/repomd.xml").exists():
                 if self._local_repo is not None:
-                    warn(f"No repository at {self.local_repo}, ignoring")
+                    warn(f"No repository at {self._local_repo}, ignoring")
 
-            return None
+                return None
 
         return result
 
