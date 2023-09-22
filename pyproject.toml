@@ -37,7 +37,9 @@ cli = [
 
 tests = [
     "flake8",
+    "jinja2",
     "koji",
+    "networkx",
     "PyGObject",
     "pytest",
     "pytest-cov",
