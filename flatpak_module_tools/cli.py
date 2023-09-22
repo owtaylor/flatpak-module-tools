@@ -94,21 +94,6 @@ class CliData:
         return Paths(path=self.path, _containerspec=containerspec, _local_repo=local_repo,
                      ignore_missing_local_repo=ignore_missing_local_repo)
 
-    @property
-    def workdir(self):
-        archdir = self.path / Arch().rpm
-        return archdir / "work"
-
-    @property
-    def oci_workdir(self):
-        archdir = self.path / Arch().rpm
-        return archdir / "work/oci"
-
-    @property
-    def resultdir(self):
-        archdir = self.path / Arch().rpm
-        return archdir / "result"
-
 
 def make_container_spec(paths: Paths):
     try:
