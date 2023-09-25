@@ -503,7 +503,7 @@ class KojiBuildScheduler(BuildScheduler):
         session = self.profile.koji_session
         task_id = session.build(source_url, self.target)
         url_base = self.profile.koji_options['weburl']
-        taskurl=f"{url_base}/taskinfo?taskID={task_id}"
+        taskurl = f"{url_base}/taskinfo?taskID={task_id}"
 
         while True:
             task_info = session.getTaskInfo(task_id, request=True)
