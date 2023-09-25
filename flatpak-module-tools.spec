@@ -31,6 +31,7 @@ BuildRequires: python3-gobject-base
 BuildRequires: python3-pytest-cov
 BuildRequires: python3-jinja2
 BuildRequires: python3-koji
+BuildRequires: python3-networkx
 BuildRequires: python3-pytest
 BuildRequires: python3-requests
 BuildRequires: python3-responses
