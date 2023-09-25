@@ -16,6 +16,8 @@ def source_repo_path(tmp_path_factory) -> Path:
         f.write("Content!\n")
 
     repo._git_output(["init", "-b", "rawhide"])
+    repo._git_output(["config", "user.name", "Jenny Doe"])
+    repo._git_output(["config", "user.email", "jenny.doe@example.com"])
     repo._git_output(["add", "README.md"])
     repo._git_output(["commit", "-m", "Initial import"])
 
@@ -36,6 +38,8 @@ def test_git_repository_branch(repo: GitRepository):
 def test_git_repository_branch_none(repo: GitRepository):
     with open(repo.path / "README.md", "w") as f:
         f.write("New contents")
+    repo._git_output(["config", "user.name", "Jenny Doe"])
+    repo._git_output(["config", "user.email", "jenny.doe@example.com"])
     repo._git_output(["commit", "-a", "-m", "Update README"])
     repo._git_output(["checkout", "HEAD^"])
 
@@ -79,6 +83,8 @@ def test_git_repository_check_clean(repo: GitRepository):
                        match=r"Git repository has uncommitted changes"):
         repo.check_clean()
 
+    repo._git_output(["config", "user.name", "Jenny Doe"])
+    repo._git_output(["config", "user.email", "jenny.doe@example.com"])
     repo._git_output(["commit", "-a", "-m", "Update README"])
 
     repo = GitRepository(repo.path)  # reset cached properties

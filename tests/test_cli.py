@@ -15,7 +15,6 @@ from flatpak_module_tools.build_context import AutoBuildContext
 from flatpak_module_tools.cli import cli
 import flatpak_module_tools.config
 from flatpak_module_tools.flatpak_builder import FLATPAK_METADATA_BOTH, FLATPAK_METADATA_LABELS
-from flatpak_module_tools.utils import Arch
 
 from .mock_koji import make_config
 
@@ -76,6 +75,8 @@ def repo_path_git(tmp_path: Path, repo_path: Path):
         subprocess.check_call(args, cwd=repo_path)
 
     CC("git", "init", "-b", "stable")
+    CC("git", "config", "user.name", "Jenny Doe")
+    CC("git", "config", "user.email", "jenny.doe@example.com")
     CC("git", "add", "container.yaml")
     CC("git", "commit", "-m", "Initial import")
 

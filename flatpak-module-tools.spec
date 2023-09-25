@@ -22,6 +22,7 @@ BuildRequires: python3-wheel
 # For tests
 BuildRequires: createrepo_c
 BuildRequires: flatpak
+BuildRequires: git-core
 BuildRequires: libappstream-glib
 BuildRequires: libmodulemd
 BuildRequires: librsvg2
