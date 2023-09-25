@@ -86,6 +86,12 @@ def repo_path_git(tmp_path: Path, repo_path: Path):
 
 
 @pytest.fixture
+def fixed_arch():
+    with mock.patch("flatpak_module_tools.utils._get_rpm_arch", return_value="ppc64le"):
+        yield
+
+
+@pytest.fixture
 def rpm_builder_mock():
     with mock.patch("flatpak_module_tools.cli.RpmBuilder", spec_set=True) as m:
         yield m
@@ -298,6 +304,7 @@ def test_target_git_branch_nonnumeric(rpm_builder_mock, repo_path_git):
     (["--arch=x86_64"], ["invalid_arch"]),
     (["--skip-tag"], []),
 ])
+@pytest.mark.usefixtures("fixed_arch")
 @mock.patch("flatpak_module_tools.cli.watch_koji_task", spec_set=True)
 def test_build_container(watch_koji_task_mock: mock.Mock,
                          rpm_builder_mock: mock.Mock,
@@ -328,7 +335,7 @@ def test_build_container(watch_koji_task_mock: mock.Mock,
 
         rpm_builder_mock.assert_called_once_with(
             mock.ANY,
-            workdir=repo_path_git / Arch().rpm / "work"
+            workdir=repo_path_git / "ppc64le/work"
         )
         rpm_builder_mock.return_value.check.assert_called_once_with(
             include_localrepo=False, allow_outdated=False
@@ -352,6 +359,7 @@ def test_build_container(watch_koji_task_mock: mock.Mock,
             watch_koji_task_mock.assert_called_with(mock.ANY, 42)
 
 
+@pytest.mark.usefixtures("fixed_arch")
 def test_build_container_local(rpm_builder_mock, container_builder_mock, installer_mock, repo_path):
     container_builder_mock.return_value.build.return_value = "./foo.oci.tar"
 
@@ -359,7 +367,7 @@ def test_build_container_local(rpm_builder_mock, container_builder_mock, install
 
     rpm_builder_mock.assert_called_once_with(
         mock.ANY,
-        workdir=repo_path / Arch().rpm / "work"
+        workdir=repo_path / "ppc64le/work"
     )
     rpm_builder_mock.return_value.check.assert_called_once_with(
         include_localrepo=True, allow_outdated=False
@@ -369,8 +377,8 @@ def test_build_container_local(rpm_builder_mock, container_builder_mock, install
         mock.ANY, flatpak_metadata=FLATPAK_METADATA_BOTH
     )
     container_builder_mock.return_value.build.assert_called_once_with(
-        workdir=repo_path / Arch().rpm / "work/oci",
-        resultdir=repo_path / Arch().rpm / "result"
+        workdir=repo_path / "ppc64le/work/oci",
+        resultdir=repo_path / "ppc64le/result"
     )
 
     installer_mock.return_value.set_source_path.assert_called_once_with("./foo.oci.tar")
@@ -456,10 +464,11 @@ def test_installer(installer_mock):
     installer_mock.reset_mock()
 
 
+@pytest.mark.usefixtures("fixed_arch")
 def test_build_rpms(rpm_builder_mock, repo_path):
     expect_success(["--path", repo_path, "build-rpms", "eog", "--auto"])
 
-    workdir = repo_path / Arch().rpm / "work"
+    workdir = repo_path / "ppc64le/work"
     rpm_builder_mock.assert_called_once_with(mock.ANY, workdir=workdir)
 
     context = rpm_builder_mock.call_args.args[0]
@@ -471,10 +480,11 @@ def test_build_rpms(rpm_builder_mock, repo_path):
     build_rpms.assert_called_once_with(("eog",), auto=True, allow_outdated=False)
 
 
+@pytest.mark.usefixtures("fixed_arch")
 def test_build_rpms_local(rpm_builder_mock, repo_path):
     expect_success(["--path", repo_path, "build-rpms-local", "eog", "../libtastypng", "--auto"])
 
-    workdir = repo_path / Arch().rpm / "work"
+    workdir = repo_path / "ppc64le/work"
     rpm_builder_mock.assert_called_once_with(mock.ANY, workdir=workdir)
 
     build_rpms_local = rpm_builder_mock.return_value.build_rpms_local
