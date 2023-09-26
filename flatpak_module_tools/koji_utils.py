@@ -109,7 +109,7 @@ class WatcherDisplay(LiveDisplay):
             print("    " + format_task(self.profile, child), file=stream)
 
 
-def watch_koji_task(profile: ProfileConfig, task_id: int):
+def watch_koji_task(profile: ProfileConfig, task_id: int, *, nowait: bool):
     with WatcherDisplay(profile, task_id) as display:
         while True:
             display.query()
@@ -118,13 +118,15 @@ def watch_koji_task(profile: ProfileConfig, task_id: int):
             assert display.task_info
             state = koji.TASK_STATES[display.task_info['state']]
 
-            if state == "FAILED" or state == "CANCELLED" or state == "CLOSED":
+            if nowait or state == "FAILED" or state == "CANCELLED" or state == "CLOSED":
                 break
 
             time.sleep(20)
 
     click.echo()
-    if state == "FAILED":
+    if nowait:
+        return True
+    elif state == "FAILED":
         error("Build failed")
         return False
     elif state == "CANCELLED":

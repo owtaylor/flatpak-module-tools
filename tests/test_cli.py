@@ -351,13 +351,11 @@ def test_build_container(watch_koji_task_mock: mock.Mock,
         if "--skip-tag" in cli_options:
             opts["skip_tag"] = True
         priority = 5 if "--background" in cli_options else None
+        nowait = "--nowait" in cli_options
 
         flatpak_build_mock.assert_called_with(src, target, opts=opts, priority=priority)
 
-        if "--nowait" in cli_options:
-            watch_koji_task_mock.assert_not_called()
-        else:
-            watch_koji_task_mock.assert_called_with(mock.ANY, 42)
+        watch_koji_task_mock.assert_called_with(mock.ANY, 42, nowait=nowait)
 
 
 @pytest.mark.usefixtures("fixed_arch")
