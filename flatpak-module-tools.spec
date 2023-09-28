@@ -38,6 +38,7 @@ BuildRequires: python3-requests
 BuildRequires: python3-responses
 BuildRequires: python3-rpm
 BuildRequires: python3-yaml
+BuildRequires: zstd
 
 Requires: python3-%{srcname} = %{version}-%{release}
 Requires: python3-jinja2
@@ -72,6 +73,7 @@ Requires: python3-click
 Requires: python3-requests
 Requires: python3-rpm
 Requires: python3-yaml
+Requires: zstd
 
 # Output changed from <nvr>.oci.tar.gz to <nvr>.oci.tar
 Conflicts: koji-flatpak <= 0.2
