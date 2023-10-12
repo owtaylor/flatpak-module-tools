@@ -1,0 +1,16 @@
+{
+  "id": "org.gnome.eog",
+  "runtime": "org.gnome.Platform",
+  "runtime-version": "3.30",
+  "sdk": "org.gnome.Sdk",
+  "branch": "stable",
+  "command": "eog",
+  "rename-desktop-file": "eog.desktop",
+  "rename-appdata-file": "eog.appdata.xml",
+  "rename-icon": "eog",
+  "copy-icon": true,
+  "finish-args":
+  /* X11 + XShm access */
+  ["--share=ipc",
+   "--socket=x11"]
+}

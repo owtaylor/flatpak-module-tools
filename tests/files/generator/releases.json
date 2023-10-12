@@ -1,0 +1,30 @@
+{
+  "releases": [
+    {
+      "name": "F38F",
+      "long_name": "Fedora 38 Flatpaks",
+      "version": "38",
+      "id_prefix": "FEDORA-FLATPAK",
+      "branch": "f38",
+      "dist_tag": "f38-flatpak",
+      "stable_tag": "f38-flatpak-updates",
+      "testing_tag": "f38-flatpak-updates-testing",
+      "candidate_tag": "f38-flatpak-updates-candidate",
+      "pending_signing_tag": "",
+      "pending_testing_tag": "f38-flatpak-updates-testing-pending",
+      "pending_stable_tag": "f38-flatpak-updates-pending",
+      "override_tag": "f38-flatpak-override",
+      "mail_template": "fedora_errata_template",
+      "state": "current",
+      "composed_by_bodhi": true,
+      "create_automatic_updates": false,
+      "package_manager": "unspecified",
+      "testing_repository": null,
+      "eol": null
+    }
+  ],
+  "page": 1,
+  "pages": 1,
+  "rows_per_page": 20,
+  "total": 1
+}

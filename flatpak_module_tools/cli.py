@@ -18,6 +18,7 @@ from .console_logging import ConsoleHandler
 from .flatpak_builder import (FLATPAK_METADATA_ANNOTATIONS,
                               FLATPAK_METADATA_BOTH,
                               FLATPAK_METADATA_LABELS)
+from .flatpak_generator import FlatpakGenerator
 from .koji_utils import watch_koji_task
 from .installer import Installer
 from .rpm_builder import RpmBuilder
@@ -484,3 +485,31 @@ def build_rpms_local(
     builder.build_rpms_local(
         manual_packages, manual_repos, auto=auto, allow_outdated=allow_outdated
     )
+
+
+@cli.command()
+@click.option("--flathub", metavar="ID_OR_SEARCH_TERM",
+              help="Initialize from a Flathub Flatpak.")
+@click.option("--runtime-name", metavar="RUNTIME",
+              help="Specify runtime-name, defaults to 'flatpak-runtime'")
+@click.option("--runtime-version", metavar="VERSION",
+              help="Specify runtime-version, defaults to latest stable release")
+@click.option("--output-containerspec", metavar="FILE",
+              help="Write container specification to FILE"
+                   " instead of container.yaml.")
+@click.option("--force", "-f", is_flag=True,
+              help="Overwriting existing output files")
+@click.argument("package", metavar='PACKAGE', required=True)
+@click.pass_context
+def init(
+    ctx,
+    output_containerspec: Optional[Path],
+    flathub: Optional[str],
+    force: bool,
+    runtime_name: Optional[str],
+    runtime_version: Optional[str],
+    package: List[str]
+):
+    """Generate container.yaml from an RPM"""
+    fg = FlatpakGenerator(package)
+    fg.run(output_containerspec, force=force, flathub=flathub, runtime_name=runtime_name, runtime_version=runtime_version)
