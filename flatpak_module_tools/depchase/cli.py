@@ -205,7 +205,10 @@ def collate_packages(
     for package in packages.values():
         if not requested_packages or package.name not in requested_packages:
             package.explanation = get_explanation(package.name)
-            assert package.explanation is not None
+            if not package.explanation:
+                raise RuntimeError(
+                    f"{package.name} dependency cannot be resolved, may be missing from runtime"
+                )
             package.explanation.append(package.name)
 
     return packages
