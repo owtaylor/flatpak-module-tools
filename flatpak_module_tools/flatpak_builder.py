@@ -529,6 +529,11 @@ class PackageFlatpakSourceInfo(BaseFlatpakSourceInfo):
         return list(components)
 
 
+class FileMappingError(Exception):
+    def __str__(self):
+        return f"{self.args[1]}: {self.args[0]}"
+
+
 class FlatpakBuilder:
     def __init__(
             self, source: BaseFlatpakSourceInfo, workdir, root,
@@ -602,11 +607,17 @@ class FlatpakBuilder:
             for source, target, is_exact_match in patterns:
                 if is_exact_match:
                     if source == path:
-                        return target
+                        if isinstance(target, FileMappingError):
+                            raise FileMappingError(target.args[0], path)
+                        else:
+                            return target
                 else:
                     m = source.match(path)
                     if m:
-                        return os.path.join(target, m.group(1))
+                        if isinstance(target, FileMappingError):
+                            raise FileMappingError(target.args[0], path)
+                        else:
+                            return os.path.join(target, m.group(1)) if target else None
 
             return None
 
@@ -628,9 +639,10 @@ class FlatpakBuilder:
             ("ROOT/usr", None),
 
             # We map ROOT/usr => files and ROOT/etc => files/etc. This creates
-            # A conflict between ROOT/usr/etc and /ROOT/etc. Just assume there
-            # is nothing useful in /ROOT/usr/etc.
-            ("ROOT/usr/etc/", None),
+            # A conflict between ROOT/usr/etc and /ROOT/etc. Error out if we
+            # find files /usr/etc/
+            ("ROOT/usr/etc", None),
+            ("ROOT/usr/etc/", FileMappingError("/usr/etc should be empty")),
 
             ("ROOT/usr/", "files"),
             ("ROOT/etc/", "files/etc")

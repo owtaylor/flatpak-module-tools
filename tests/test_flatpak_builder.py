@@ -10,7 +10,7 @@ import pytest
 import yaml
 
 from flatpak_module_tools.flatpak_builder import (
-    FlatpakBuilder, FlatpakSourceInfo, FLATPAK_METADATA_BOTH, ModuleInfo
+    FileMappingError, FlatpakBuilder, FlatpakSourceInfo, FLATPAK_METADATA_BOTH, ModuleInfo
 )
 
 import gi
@@ -495,3 +495,36 @@ def test_export_long_filenames(testapp_source, tmpdir, arch):
     binfiles = sorted(os.listdir(tmpdir / "processed/files/bin"))
     assert binfiles == ["testapp", verylongname, veryverylongname,
                         "zzzlink", "zzzlink2", "zzzlink3"]
+
+
+@pytest.mark.parametrize("add_file", (True, False))
+def test_usr_etc(runtime_source, tmpdir, arch, add_file):
+    """
+    Test that we error out cleanly if a file is found in /usr/etc
+    """
+
+    os.makedirs(tmpdir / "root/usr/etc")
+    if add_file:
+        with open(tmpdir / "root/usr/etc/hello.txt", "w") as f:
+            os.fchmod(f.fileno(), 0o0755)
+
+    check_call(["tar", "cfv", "export.tar", "-H", "pax", "--sort=name",
+                "root"], cwd=tmpdir)
+
+    workdir = str(tmpdir / "work")
+    os.mkdir(workdir)
+
+    builder = FlatpakBuilder(runtime_source, workdir, "root",
+                             oci_arch=arch.oci)
+
+    def export():
+        with open(tmpdir / "export.tar", "rb") as f:
+            outfile, manifest_file = (builder._export_from_stream(f, close_stream=False))
+
+    if add_file:
+        with pytest.raises(FileMappingError,
+                           match=r"root/usr/etc/hello.txt: /usr/etc should be empty"):
+            export()
+    else:
+        # An empty /usr/etc is fine
+        export()
