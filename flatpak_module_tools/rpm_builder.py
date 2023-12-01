@@ -351,7 +351,12 @@ class RpmBuilder:
         )
         package_versions = {}
         for r in json.loads(rpm_list_json):
-            package_versions[r["package_name"]] = StrippedVersionInfo.from_dict(r)
+            # We currently always have the source RPM in the repositories we generate;
+            # if we stopped building source RPMs, we'd need to include the source package
+            # NEVR in the response, since binary subpackages can have versions that
+            # don't match the version of the source package.
+            if r["arch"] == "src":
+                package_versions[r["package_name"]] = StrippedVersionInfo.from_dict(r)
 
         return package_versions
 
