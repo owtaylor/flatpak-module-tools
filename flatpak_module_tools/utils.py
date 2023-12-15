@@ -6,7 +6,7 @@ import hashlib
 import logging
 import os
 from tempfile import NamedTemporaryFile
-import pipes
+import shlex
 import subprocess
 import sys
 from typing import IO, Optional, NoReturn, cast
@@ -51,7 +51,7 @@ def header(msg):
 
 def log_call(args):
     click.secho('running: ', fg='blue', bold=True, err=True, nl=False)
-    click.echo(' '.join(pipes.quote(str(a)) for a in args), err=True)
+    click.echo(' '.join(shlex.quote(str(a)) for a in args), err=True)
 
 
 def check_call(args, cwd=None, stdout=None):
