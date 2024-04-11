@@ -76,8 +76,12 @@ def rpmroot(tmp_path_factory):
 
 
 def test_create_rpm_manifest(rpmroot: Path):
-    assert [x.name for x in (rpmroot / "app/share/doc").iterdir()] == ['testrpm', 'testrpm-epoch']
-    assert [x.name for x in (rpmroot / "usr/share/doc").iterdir()] == ['testrpm-usr']
+    assert sorted([
+        x.name for x in (rpmroot / "app/share/doc").iterdir()
+    ]) == ['testrpm', 'testrpm-epoch']
+    assert sorted([
+        x.name for x in (rpmroot / "usr/share/doc").iterdir()
+    ]) == ['testrpm-usr']
 
     rpmlist = create_rpm_manifest(rpmroot)
 
