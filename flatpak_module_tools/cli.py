@@ -310,7 +310,7 @@ def build_container_local(ctx,
 @click.option('--nvr', metavar='NVR',
               help='name-version-release for built container')
 @click.option('--runtime-nvr', metavar='NVR',
-              help='name-version-release for runtime to build againset (apps only)')
+              help='name-version-release for runtime to build against (apps only)')
 @click.option('--runtime-repo', metavar='REPO_ID', type=int,
               help='Koji repository ID for runtime packages')
 @click.option('--app-repo', metavar='REPO_ID', type=int,
