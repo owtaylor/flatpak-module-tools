@@ -67,7 +67,7 @@ def format_link(href, text):
 
 def format_task(profile: ProfileConfig, task_info):
     label = koji.taskLabel(task_info)
-    state = koji.TASK_STATES[task_info["state"]].lower()
+    state = koji.TASK_STATES[task_info["state"]].lower()  # type: ignore
 
     if state == "failed" or state == "canceled":
         fg = "red"
