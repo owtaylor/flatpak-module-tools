@@ -3,6 +3,7 @@
 import logging
 import os
 import tempfile
+from typing import Any, Literal, Optional, overload
 
 from click.testing import CliRunner
 import pytest
@@ -29,7 +30,20 @@ with open(os.path.join(testfiles_dir, 'releases.json')) as f:
     RELEASES_JSON = f.read()
 
 
-def _generate_flatpak(rpm, flathub=None, runtime_name=None, runtime_version=None, expected_error_output=None):
+@overload
+def _generate_flatpak(rpm, flathub=None, runtime_name=None, runtime_version=None,
+                      expected_error_output: Literal[None] = None) -> Any:
+    ...
+
+
+@overload
+def _generate_flatpak(rpm, flathub=None, runtime_name=None, runtime_version=None,
+                      expected_error_output: str = "") -> None:
+    ...
+
+
+def _generate_flatpak(rpm, flathub=None, runtime_name=None, runtime_version=None,
+                      expected_error_output: Optional[str] = None):
     cmd = ['init']
     cmd.append(rpm)
     if flathub:
@@ -64,7 +78,7 @@ class TestFlatpak(object):
     @pytest.mark.filterwarnings('ignore::PendingDeprecationWarning:koji')
     @pytest.mark.needs_metadata
     def test_generated_flatpak_files(self):
-        container_yaml = _generate_flatpak('eog')
+        _generate_flatpak('eog')
 
     @responses.activate
     @pytest.mark.needs_metadata
@@ -105,8 +119,7 @@ class TestFlatpak(object):
         if expected_error is None:
             container_yaml = \
                 _generate_flatpak('eog',
-                                  flathub=search_term,
-                                  expected_error_output=expected_error)
+                                  flathub=search_term)
 
             f = container_yaml['flatpak']
 
@@ -122,4 +135,4 @@ class TestFlatpak(object):
             assert f['packages'][0] == 'eog'
         else:
             _generate_flatpak('eog', flathub=search_term,
-                                  expected_error_output=expected_error)
+                              expected_error_output=expected_error)
