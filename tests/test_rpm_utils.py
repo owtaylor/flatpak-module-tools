@@ -4,7 +4,9 @@ from unittest.mock import ANY
 
 import pytest
 
-from flatpak_module_tools.rpm_utils import StrippedVersionInfo, VersionInfo, create_rpm_manifest
+from flatpak_module_tools.rpm_utils import (
+    StrippedVersionInfo, VersionInfo, create_rpm_manifest, get_package_version
+)
 
 from .build_rpm import build_rpm
 
@@ -51,6 +53,9 @@ def rpmroot(tmp_path_factory):
     testrpm = build_rpm(
         parent, name="testrpm", version="1", release="1", prefix="/app"
     )
+    testrpm_old = build_rpm(
+        parent, name="testrpm", version="1", release="0", prefix="/app"
+    )
     testrpm_epoch = build_rpm(
         parent, name="testrpm-epoch", version="1", release="1", prefix="/app", epoch="1"
     )
@@ -60,6 +65,11 @@ def rpmroot(tmp_path_factory):
 
     subprocess.check_call([
         "rpm", "--root", root, "-Uvh", testrpm, testrpm_epoch, testrpm_usr
+    ])
+
+    # As an edge case, a package could be installed multiple times (multiarch, kernels, etc)
+    subprocess.check_call([
+        "rpm", "--root", root, "--force", "-ivh", testrpm_old
     ])
 
     # We don't necessarily expect GPG keys to be imported into the roots we
@@ -86,6 +96,14 @@ def test_create_rpm_manifest(rpmroot: Path):
     rpmlist = create_rpm_manifest(rpmroot)
 
     assert rpmlist == [{
+        'name': 'testrpm',
+        'version': "1",
+        'release': "0",
+        'arch': "noarch",
+        'payloadhash': ANY,
+        'size': ANY,
+        'buildtime': ANY
+    }, {
         'name': 'testrpm',
         'version': "1",
         'release': "1",
@@ -118,7 +136,18 @@ def test_create_rpm_manifest(rpmroot: Path):
     assert isinstance(rpmlist[0]['buildtime'], int)
 
     rpmlist = create_rpm_manifest(rpmroot, restrict_to=rpmroot / "app")
-    assert [i['name'] for i in rpmlist] == ['testrpm', 'testrpm-epoch']
+    assert [i['name'] for i in rpmlist] == ['testrpm', 'testrpm', 'testrpm-epoch']
+
+
+def test_get_package_version(rpmroot: Path):
+    version_info = get_package_version(rpmroot, "testrpm-epoch")
+    assert version_info == VersionInfo(epoch="1", version="1", release="1")
+
+    with pytest.raises(RuntimeError, match=r"Multiple installed copies of testrpm in "):
+        get_package_version(rpmroot, "testrpm")
+
+    with pytest.raises(RuntimeError, match=r"No installed copy of testrpm-notthere in "):
+        get_package_version(rpmroot, "testrpm-notthere")
 
 
 def test_version_info():
