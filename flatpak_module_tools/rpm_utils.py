@@ -45,8 +45,26 @@ def create_rpm_manifest(root: Path, restrict_to: Optional[Path] = None):
 
             matched.append(item)
 
-    matched.sort(key=lambda i: (i['name'], i['arch']))
+    matched.sort(key=lambda i: (i['name'], i['version'], i['release'], i['arch']))
     return matched
+
+
+def get_package_version(root: Path, name: str):
+    ts = _get_ts(root)
+
+    mi = ts.dbMatch('name', name)
+    result = None
+
+    for h in mi:
+        if result:
+            raise RuntimeError(f"Multiple installed copies of {name} in {root}")
+
+        result = VersionInfo.from_dict(h)
+
+    if result is None:
+        raise RuntimeError(f"No installed copy of {name} in {root}")
+
+    return result
 
 
 @total_ordering
