@@ -512,4 +512,5 @@ def init(
 ):
     """Generate container.yaml from an RPM"""
     fg = FlatpakGenerator(package)
-    fg.run(output_containerspec, force=force, flathub=flathub, runtime_name=runtime_name, runtime_version=runtime_version)
+    fg.run(output_containerspec, force=force, flathub=flathub,
+           runtime_name=runtime_name, runtime_version=runtime_version)
