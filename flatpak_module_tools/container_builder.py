@@ -240,6 +240,14 @@ class ContainerBuilder:
 
         (installroot / "tmp").mkdir(mode=0o1777, parents=True)
 
+        cleanup_script = self.builder.get_cleanup_script()
+        if cleanup_script and cleanup_script.strip() != "":
+            self.executor.write_file(installroot / "tmp/cleanup.sh", cleanup_script)
+            install_sh += dedent(f"""\
+            cd {installroot}
+            chroot . /bin/sh -ex /tmp/cleanup.sh
+            """)
+
         self.executor.write_file(Path("/tmp/install.sh"), install_sh)
 
         if self.context.local_repo:
@@ -251,17 +259,9 @@ class ContainerBuilder:
         else:
             mounts = None
 
-        self.executor.check_call(["/bin/bash", "-ex", "/tmp/install.sh"],
+        self.executor.check_call(["unshare", "-m", "--map-users=all", "--map-groups=all",
+                                  "/bin/bash", "-ex", "/tmp/install.sh"],
                                  mounts=mounts, enable_network=True)
-
-        cleanup_script = self.builder.get_cleanup_script()
-        if cleanup_script and cleanup_script.strip() != "":
-            installroot = self.executor.installroot
-            self.executor.write_file(installroot / "tmp/cleanup.sh", cleanup_script)
-            self.executor.check_call(
-                ["chroot", ".", "/bin/sh", "-ex", "/tmp/cleanup.sh"],
-                cwd=installroot
-            )
 
     def _copy_manifest_and_config(self, oci_dir: str, outname_base: Path):
         index_json = os.path.join(oci_dir, "index.json")
