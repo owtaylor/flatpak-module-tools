@@ -922,6 +922,7 @@ class FlatpakBuilder:
                     '--unshare-net',
                     '--unshare-pid',
                     '--bind', '/', '/',
+                    '--proc', '/proc',
                     'true'
                 ], stdout=devnull, stderr=devnull) == 0
             except OSError as e:
