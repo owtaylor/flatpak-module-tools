@@ -539,7 +539,8 @@ class FlatpakBuilder:
             self, source: BaseFlatpakSourceInfo, workdir, root,
             parse_manifest: Optional[Callable[[Iterable[str]], Sequence[dict]]] = None,
             flatpak_metadata: str = FLATPAK_METADATA_ANNOTATIONS,
-            oci_arch: Optional[str] = None
+            oci_arch: Optional[str] = None,
+            install_runtime_config: bool = True
     ):
         self.source = source
         self.workdir = workdir
@@ -551,6 +552,7 @@ class FlatpakBuilder:
                                     FLATPAK_METADATA_BOTH):
             raise ValueError(f"Bad flatpak_metadata value {flatpak_metadata}")
         self.flatpak_metadata = flatpak_metadata
+        self.install_runtime_config = install_runtime_config
 
         self.arch = Arch(oci=oci_arch)
 
@@ -571,7 +573,7 @@ class FlatpakBuilder:
 
     def get_install_packages(self):
         packages = self.source.get_install_packages(self.arch)
-        if not self.source.runtime:
+        if not self.source.runtime and self.install_runtime_config:
             # The flatpak-runtime-config package is needed when building an application
             # Flatpak because it includes file triggers for files in /app. (Including just
             # this package avoids having to install the entire runtime package set; if
