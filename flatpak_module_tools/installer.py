@@ -156,7 +156,8 @@ class Installer:
                     ocidir, "blobs", "sha256", descriptor["digest"][len("sha256:"):]
                 )
 
-            digest = index_json['manifests'][0]['digest']
+            manifest_descriptor = index_json['manifests'][0]
+            digest = manifest_descriptor['digest']
             assert digest.startswith("sha256:")
 
             with open(get_path_from_descriptor(index_json['manifests'][0])) as f:
@@ -177,6 +178,15 @@ class Installer:
                 raise RuntimeError(
                     "org.flatpak.ref not found in annotations or labels - is this a Flatpak?"
                 )
+
+            # Now we need to write the ref back to the index.json to make flatpak happy
+            if "annotations" not in manifest_descriptor:
+                manifest_descriptor["annotations"] = {}
+
+            manifest_descriptor["annotations"]["org.opencontainers.image.ref.name"] = ref
+
+            with open(os.path.join(ocidir, 'index.json'), "w") as f:
+                json.dump(index_json, f)
 
             check_call(['flatpak', 'build-import-bundle',
                         '--update-appstream', '--oci',
