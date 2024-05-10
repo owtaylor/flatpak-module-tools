@@ -179,7 +179,7 @@ class Installer:
                     "org.flatpak.ref not found in annotations or labels - is this a Flatpak?"
                 )
 
-            # Now we need to write the ref back to the index.json to make flatpak happyu
+            # Now we need to write the ref back to the index.json to make flatpak happy
             if "annotations" not in manifest_descriptor:
                 manifest_descriptor["annotations"] = {}
 
