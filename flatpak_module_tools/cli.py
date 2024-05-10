@@ -10,7 +10,7 @@ from koji_cli.lib import activate_session
 
 from flatpak_module_tools.git_utils import GitRepository
 
-from .build_context import AutoBuildContext, ManualBuildContext
+from .build_context import AutoBuildContext, BuildahBuildContext, ManualBuildContext
 from .config import add_config_file, set_profile_name, get_profile
 from .container_builder import ContainerBuilder
 from .container_spec import ContainerSpec, ValidationError
@@ -372,6 +372,79 @@ def assemble(
     )
     container_builder.assemble(
         installroot=installroot, workdir=workdir, resultdir=resultdir
+    )
+
+
+@cli.command(name="container-install")
+@click.option('--containerspec', metavar='CONTAINER_YAML', type=Path,
+              help='Path to container.yaml - defaults to <path>/container.yaml')
+@click.option('--installroot', metavar='DIR', type=Path, default="/contents",
+              help="Location to install packages")
+@click.option('--workdir', metavar='DIR', type=Path, default="/tmp",
+              help="Location to create temporary files")
+@click.pass_context
+def container_install(
+    ctx,
+    containerspec: Optional[Path],
+    installroot: Path,
+    workdir: Path,
+):
+    """Run as root inside a container to create directory tree"""
+
+    paths = CliData.from_context(ctx).paths(containerspec=containerspec)
+    container_spec = make_container_spec(paths)
+
+    build_context = BuildahBuildContext(
+        profile=get_profile(), container_spec=container_spec,
+        installroot=installroot
+    )
+
+    container_builder = ContainerBuilder(
+        context=build_context,
+        flatpak_metadata=FLATPAK_METADATA_LABELS
+    )
+
+    container_builder.install_contents(
+        installroot=installroot, workdir=workdir, write_dnf_conf=False,
+        install_runtime_config=build_context.flatpak_spec.build_runtime
+    )
+
+
+@cli.command(name="container-export")
+@click.option('--containerspec', metavar='CONTAINER_YAML', type=Path,
+              help='Path to container.yaml - defaults to <path>/container.yaml')
+@click.option('--installroot', metavar='DIR', type=Path, default="/contents",
+              help="Location to install packages")
+@click.option('--workdir', metavar='DIR', type=Path, default="/tmp",
+              help="Location to create temporary files")
+@click.option('--resultdir', metavar='DIR', type=Path, default=".",
+              help="Location to write output")
+@click.pass_context
+def container_export(
+    ctx,
+    containerspec: Optional[Path],
+    installroot: Path,
+    workdir: Path,
+    resultdir: Path,
+):
+    """Run as root inside a container to create directory tree"""
+
+    paths = CliData.from_context(ctx).paths(containerspec=containerspec)
+    container_spec = make_container_spec(paths)
+
+    build_context = BuildahBuildContext(
+        profile=get_profile(), container_spec=container_spec,
+        installroot=installroot
+    )
+
+    container_builder = ContainerBuilder(
+        context=build_context,
+        flatpak_metadata=FLATPAK_METADATA_LABELS
+    )
+
+    container_builder.export_container(
+        installroot=installroot, workdir=workdir, resultdir=resultdir,
+        result_filename="out.ociarchive", write_aux_files=False
     )
 
 
