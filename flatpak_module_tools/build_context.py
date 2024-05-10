@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Union
 from click import ClickException
 
 from flatpak_module_tools.package_locator import PackageLocator
+from flatpak_module_tools.rpm_utils import get_package_version
 
 from .config import ProfileConfig
 from .container_spec import ContainerSpec, Option
@@ -101,6 +102,17 @@ class BuildContext(ABC):
 
         return sorted(rpm["name"] for rpm in rpms)
 
+    def _runtime_info_from_metadata(self, cp: RawConfigParser):
+        runtime = cp.get("Runtime", "runtime")
+        assert isinstance(runtime, str)
+        runtime_id, runtime_arch, runtime_version = runtime.split("/")
+
+        sdk = cp.get("Runtime", "sdk")
+        assert isinstance(sdk, str)
+        sdk_id, sdk_arch, sdk_version = sdk.split("/")
+
+        return RuntimeInfo(runtime_id=runtime_id, sdk_id=sdk_id, version=runtime_version)
+
     @cached_property
     def runtime_info(self):
         """RuntimeInfo object with information about the runtime we are building against"""
@@ -115,15 +127,7 @@ class BuildContext(ABC):
         cp = RawConfigParser()
         cp.read_string(labels["org.flatpak.metadata"])
 
-        runtime = cp.get("Runtime", "runtime")
-        assert isinstance(runtime, str)
-        runtime_id, runtime_arch, runtime_version = runtime.split("/")
-
-        sdk = cp.get("Runtime", "sdk")
-        assert isinstance(sdk, str)
-        sdk_id, sdk_arch, sdk_version = sdk.split("/")
-
-        return RuntimeInfo(runtime_id=runtime_id, sdk_id=sdk_id, version=runtime_version)
+        return self._runtime_info_from_metadata(cp)
 
     @property
     def release(self):
@@ -347,4 +351,63 @@ class ManualBuildContext(BuildContext):
 
     @property
     def app_build_repo(self):
-        raise NotImplementedError("ManualBuildSource can only be used for container builds")
+        raise NotImplementedError("ManualBuildContext can only be used for container builds")
+
+
+class BuildahBuildContext(BuildContext):
+    """BuildContext subclass for building inside a Containerfile
+
+    This context is used when were are invoked by a Containerfile when the
+    packages for a runtime or application have already been installed.
+    """
+    def __init__(self, *, profile: ProfileConfig, container_spec: ContainerSpec,
+                 installroot: Path,
+                 arch: Optional[Arch] = None):
+        """
+        :param profile: the configuration profile
+        :param container_spec: the parsed container.yaml
+        """
+        self.installroot = installroot
+
+        super().__init__(profile=profile, arch=arch, container_spec=container_spec)
+
+    @property
+    def nvr(self):
+        if self.flatpak_spec.build_runtime:
+            name = self.container_spec.flatpak.component or self.container_spec.flatpak.name
+            return f"{name}-{self.container_spec.flatpak.branch}-1"
+        else:
+            main_package = self.flatpak_spec.packages[0].name
+            version_info = get_package_version(self.installroot, main_package)
+
+            name = self.flatpak_spec.get_component_label(main_package)
+            version = version_info.version
+            release = 1
+
+            return f"{name}-{version}-{release}"
+
+    @cached_property
+    def runtime_info(self):
+        cp = RawConfigParser()
+        cp.read(self.installroot / "metadata")
+
+        return self._runtime_info_from_metadata(cp)
+
+    @cached_property
+    def runtime_archive(self):
+        assert False, "runtime_archive() should not be called for BuildahBuildContext"
+
+    @cached_property
+    def runtime_package_repo(self):
+        assert False, "runtime_package_repo() should not be called for BuildahBuildContext"
+
+    @cached_property
+    def app_package_repo(self):
+        assert False, "app_package_repo() should not be called for BuildahBuildContext"
+
+    @property
+    def app_build_repo(self):
+        assert False, "BuildahBuildContext can only be used for container builds"
+
+    def get_repos(self, *, for_container: bool, local_repo_path: Optional[Path] = None):
+        assert False, "get_repos() should not be called for BuildahBuildContext"
