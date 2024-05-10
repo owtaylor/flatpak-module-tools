@@ -315,7 +315,9 @@ class ContainerBuilder:
         info('Installing packages and cleaning tree')
         self._install_packages()
 
-    def _export_container(self, *, resultdir: Path):
+    def _export_container(self, *, resultdir: Path,
+                          result_filename: str | None = None,
+                          write_aux_files: bool = False):
         name, version, release = self.context.nvr.rsplit('-', 2)
         self._add_labels_to_builder(name, version, release)
 
@@ -349,23 +351,28 @@ class ContainerBuilder:
 
         ref_name, oci_dir = self.builder.build_container(filesystem_tar, tar_outfile=False)
 
-        outname_base = resultdir / f"{self.context.nvr}.{self.context.arch.rpm}.oci"
-        local_outname = f"{outname_base}.tar"
+        if result_filename:
+            outname_base = resultdir / result_filename
+            result_path = outname_base
+        else:
+            outname_base = resultdir / f"{self.context.nvr}.{self.context.arch.rpm}.oci"
+            result_path = f"{outname_base}.tar"
 
         info('Tarring result')
-        with open(local_outname, 'wb') as f:
+        with open(result_path, 'wb') as f:
             files = os.listdir(oci_dir)
             subprocess.check_call(['tar', '-cnf', '-', *files], stdout=f, cwd=oci_dir)
 
-        important('Created ' + local_outname)
+        important(f"Created {result_path}")
 
-        info('Creating RPM manifest')
-        self._create_rpm_manifest(outname_base)
+        if write_aux_files:
+            info('Creating RPM manifest')
+            self._create_rpm_manifest(outname_base)
 
-        info('Extracting container manifest and config')
-        self._copy_manifest_and_config(oci_dir, outname_base)
+            info('Extracting container manifest and config')
+            self._copy_manifest_and_config(oci_dir, outname_base)
 
-        return local_outname
+        return str(result_path)
 
     def assemble(self, *,
                  installroot: Path, workdir: Path, resultdir: Path):
@@ -385,6 +392,40 @@ class ContainerBuilder:
 
         self._install_contents()
         self._export_container(resultdir=resultdir)
+
+    def install_contents(self, *,
+                         installroot: Path, workdir: Path,
+                         write_dnf_conf: bool = True,
+                         install_runtime_config: bool = True):
+        self.executor = InnerExcutor(
+            context=self.context,
+            installroot=installroot,
+            workdir=workdir,
+            releasever=self.context.release,
+            runtimever=self._runtimever
+        )
+        self.executor.init()
+        self.builder = self._create_builder(workdir=workdir,
+                                            install_runtime_config=install_runtime_config)
+
+        self._install_contents(write_dnf_conf=write_dnf_conf)
+
+    def export_container(self, *,
+                         installroot: Path, workdir: Path, resultdir: Path,
+                         result_filename: str | None = None,
+                         write_aux_files: bool = True):
+        self.executor = InnerExcutor(
+            context=self.context,
+            installroot=installroot,
+            workdir=workdir,
+            releasever=self.context.release,
+            runtimever=self._runtimever
+        )
+        self.executor.init()
+        self.builder = self._create_builder(workdir=workdir)
+
+        self._export_container(resultdir=resultdir, result_filename=result_filename,
+                               write_aux_files=write_aux_files)
 
     def build(self, workdir: Path, resultdir: Path):
         header('BUILDING CONTAINER')
