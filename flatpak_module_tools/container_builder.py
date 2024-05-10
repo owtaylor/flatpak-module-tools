@@ -166,13 +166,13 @@ class ContainerBuilder:
         self.context = context
         self.flatpak_metadata = flatpak_metadata
 
-    def _add_labels_to_builder(self, builder, name, version, release):
+    def _add_labels_to_builder(self, name, version, release):
         component_label = name
         name_label = self.context.container_spec.flatpak.get_name_label(component_label)
-        builder.add_labels({'name': name_label,
-                            'com.redhat.component': component_label,
-                            'version': version,
-                            'release': release})
+        self.builder.add_labels({'name': name_label,
+                                 'com.redhat.component': component_label,
+                                 'version': version,
+                                 'release': release})
 
     @property
     def _inner_local_repo_path(self):
@@ -180,6 +180,13 @@ class ContainerBuilder:
             return Path("/mnt/localrepo")
         else:
             return None
+
+    @property
+    def _runtimever(self):
+        if self.context.flatpak_spec.build_runtime:
+            return self.context.nvr.rsplit('-', 2)[1]
+        else:
+            return self.context.runtime_info.version
 
     def _clean_workdir(self, workdir: Path):
         for child in workdir.iterdir():
@@ -219,9 +226,9 @@ class ContainerBuilder:
         )
         self.executor.write_file(dnfdir / "dnf.conf", dnf_conf)
 
-    def _install_packages(self, builder: FlatpakBuilder):
+    def _install_packages(self):
         installroot = self.executor.installroot
-        packages = builder.get_install_packages()
+        packages = self.builder.get_install_packages()
         package_str = " ".join(shlex.quote(p) for p in packages)
         install_sh = dedent(f"""\
             for i in /proc /sys /dev /var/cache/dnf ; do
@@ -230,6 +237,9 @@ class ContainerBuilder:
             done
             dnf --installroot={installroot} install -y {package_str}
             """)
+
+        (installroot / "tmp").mkdir(mode=0o1777, parents=True)
+
         self.executor.write_file(Path("/tmp/install.sh"), install_sh)
 
         if self.context.local_repo:
@@ -244,17 +254,14 @@ class ContainerBuilder:
         self.executor.check_call(["/bin/bash", "-ex", "/tmp/install.sh"],
                                  mounts=mounts, enable_network=True)
 
-    def _cleanup_tree(self, builder: FlatpakBuilder):
-        script = builder.get_cleanup_script()
-        if not script or script.strip() == "":
-            return
-
-        installroot = self.executor.installroot
-        self.executor.write_file(installroot / "tmp/cleanup.sh", script)
-        self.executor.check_call(
-            ["chroot", ".", "/bin/sh", "-ex", "/tmp/cleanup.sh"],
-            cwd=installroot
-        )
+        cleanup_script = self.builder.get_cleanup_script()
+        if cleanup_script and cleanup_script.strip() != "":
+            installroot = self.executor.installroot
+            self.executor.write_file(installroot / "tmp/cleanup.sh", cleanup_script)
+            self.executor.check_call(
+                ["chroot", ".", "/bin/sh", "-ex", "/tmp/cleanup.sh"],
+                cwd=installroot
+            )
 
     def _copy_manifest_and_config(self, oci_dir: str, outname_base: Path):
         index_json = os.path.join(oci_dir, "index.json")
@@ -289,11 +296,7 @@ class ContainerBuilder:
 
         info(f"    wrote {outname_base}.rpmlist.json")
 
-    def _run_build(self, executor: BuildExecutor, *,
-                   workdir: Path, resultdir: Path):
-
-        self.executor = executor
-
+    def _create_builder(self, *, workdir: Path, install_runtime_config: bool = True):
         if self.context.flatpak_spec.build_runtime:
             runtime_info = None
         else:
@@ -301,22 +304,20 @@ class ContainerBuilder:
 
         source = PackageFlatpakSourceInfo(self.context.flatpak_spec, runtime_info)
 
-        builder = FlatpakBuilder(source, workdir, ".", flatpak_metadata=self.flatpak_metadata)
+        return FlatpakBuilder(source, workdir, ".", flatpak_metadata=self.flatpak_metadata,
+                              install_runtime_config=install_runtime_config)
 
+    def _install_contents(self, write_dnf_conf: bool = True):
+        if write_dnf_conf:
+            info('Writing dnf.conf')
+            self._write_dnf_conf()
+
+        info('Installing packages and cleaning tree')
+        self._install_packages()
+
+    def _export_container(self, *, resultdir: Path):
         name, version, release = self.context.nvr.rsplit('-', 2)
-        self._add_labels_to_builder(builder, name, version, release)
-
-        info('Initializing installation path')
-        self.executor.init()
-
-        info('Writing dnf.conf')
-        self._write_dnf_conf()
-
-        info('Installing packages')
-        self._install_packages(builder)
-
-        info('Cleaning tree')
-        self._cleanup_tree(builder)
+        self._add_labels_to_builder(name, version, release)
 
         info('Exporting tree')
         tar_args = [
@@ -338,7 +339,7 @@ class ContainerBuilder:
         # stream is closed before it exits, even if the child of systemd-nspawn isn't
         # writing anything.
         # https://github.com/systemd/systemd/issues/11533
-        filesystem_tar, manifestfile = builder._export_from_stream(
+        filesystem_tar, manifestfile = self.builder._export_from_stream(
             process.stdout, close_stream=False
         )
         process.wait()
@@ -346,7 +347,7 @@ class ContainerBuilder:
         if process.returncode != 0:
             die(f"tar failed (exit status={process.returncode})")
 
-        ref_name, oci_dir = builder.build_container(filesystem_tar, tar_outfile=False)
+        ref_name, oci_dir = self.builder.build_container(filesystem_tar, tar_outfile=False)
 
         outname_base = resultdir / f"{self.context.nvr}.{self.context.arch.rpm}.oci"
         local_outname = f"{outname_base}.tar"
@@ -369,20 +370,21 @@ class ContainerBuilder:
     def assemble(self, *,
                  installroot: Path, workdir: Path, resultdir: Path):
 
-        if self.context.flatpak_spec.build_runtime:
-            runtimever = self.context.nvr.rsplit('-', 2)[1]
-        else:
-            runtimever = self.context.runtime_info.version
-
-        executor = InnerExcutor(
+        self.executor = InnerExcutor(
             context=self.context,
             installroot=installroot,
             workdir=workdir,
             releasever=self.context.release,
-            runtimever=runtimever
+            runtimever=self._runtimever
         )
 
-        self._run_build(executor, workdir=workdir, resultdir=resultdir)
+        info('Initializing installation path')
+        self.executor.init()
+
+        self.builder = self._create_builder(workdir=workdir)
+
+        self._install_contents()
+        self._export_container(resultdir=resultdir)
 
     def build(self, workdir: Path, resultdir: Path):
         header('BUILDING CONTAINER')
@@ -400,19 +402,15 @@ class ContainerBuilder:
 
         installroot = Path("/contents")
 
-        if self.context.flatpak_spec.build_runtime:
-            runtimever = self.context.nvr.rsplit('-', 2)[1]
-        else:
-            runtimever = self.context.runtime_info.version
-
-        executor = MockExecutor(
+        self.executor = MockExecutor(
             context=self.context,
             installroot=installroot,
             workdir=workdir,
             releasever=self.context.release,
-            runtimever=runtimever
+            runtimever=self._runtimever
         )
+        self.executor.init()
+        self.builder = self._create_builder(workdir=workdir)
 
-        return self._run_build(
-            executor, workdir=workdir, resultdir=resultdir
-        )
+        self._install_contents()
+        return self._export_container(resultdir=resultdir)
