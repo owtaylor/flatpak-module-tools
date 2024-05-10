@@ -731,6 +731,20 @@ class FlatpakBuilder:
                 f = in_tf.extractfile(member)
                 out_tf.addfile(member, fileobj=f)
 
+        if self.source.runtime:
+            def add_symlink(target, link_path):
+                tf = tarfile.TarInfo(link_path)
+                tf.type = tarfile.SYMTYPE
+                tf.linkname = target
+                out_tf.addfile(tf)
+
+            add_symlink("files", "usr")
+            add_symlink("files/bin", "bin")
+            add_symlink("files/etc", "etc")
+            add_symlink("files/lib", "lib")
+            add_symlink("files/lib64", "lib64")
+            add_symlink("files/sbin", "sbin")
+
         in_tf.close()
         out_tf.close()
         if close_stream:
