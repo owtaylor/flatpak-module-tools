@@ -1027,6 +1027,14 @@ class FlatpakBuilder:
         update_descriptor(manifest_json["config"], config_json)
         update_descriptor(index_json["manifests"][0], manifest_json)
 
+        for manifest in index_json["manifests"]:
+            # The containers/storage handling of oci directories takes
+            # org.opencontainers.image.ref.name to be a "tag" and applies
+            # the oci distribution validation rules to it, which fail
+            # for a Flatpak ref name like org.gnome.Maps/x86_64/stable
+            if "annotations" in manifest:
+                del manifest["annotations"]["org.opencontainers.image.ref.name"]
+
         with open(os.path.join(outfile, "index.json"), "w") as f:
             json.dump(index_json, f, indent=4)
 
