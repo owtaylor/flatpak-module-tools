@@ -645,6 +645,10 @@ class FlatpakBuilder:
             ("ROOT/usr/etc/", FileMappingError("/usr/etc should be empty")),
 
             ("ROOT/usr/", "files"),
+            # We assume that the yum.repos.d for installing application content
+            # will be provided by the build environment, and that the
+            # yum.repos.d from the runtime environment are not relevant.
+            ("ROOT/etc/yum.repos.d/", None),
             ("ROOT/etc/", "files/etc")
         ])
 
