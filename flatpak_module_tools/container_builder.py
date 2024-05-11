@@ -230,11 +230,28 @@ class ContainerBuilder:
         installroot = self.executor.installroot
         packages = self.builder.get_install_packages()
         package_str = " ".join(shlex.quote(p) for p in packages)
-        install_sh = dedent(f"""\
-            for i in /proc /sys /dev /var/cache/dnf ; do
-                mkdir -p {installroot}/$i
-                mount --rbind $i {installroot}/$i
-            done
+
+        # If {installroot}/dev/null exists, we assume that /proc, /dev, etc
+        # are already set up as well they can be can we can't do anything more,
+        # otherwise we create bind mounts to the corresponding directories
+        # in the outer environment.
+        #
+        # The /var/cache/dnf bind mount allows mounting a persistent
+        # cache directory into the outer environment and having it be
+        # used across builds.
+
+        need_bind_mounts = not (installroot / "dev/null").exists()
+        install_sh = ""
+
+        if need_bind_mounts:
+            install_sh += dedent(f"""\
+                for i in /proc /sys /dev /var/cache/dnf ; do
+                    mkdir -p {installroot}/$i
+                    mount --rbind $i {installroot}/$i
+                done
+                """)
+
+        install_sh += dedent(f"""\
             dnf --installroot={installroot} install -y {package_str}
             """)
 
@@ -259,9 +276,12 @@ class ContainerBuilder:
         else:
             mounts = None
 
-        self.executor.check_call(["unshare", "-m", "--map-users=all", "--map-groups=all",
-                                  "/bin/bash", "-ex", "/tmp/install.sh"],
-                                 mounts=mounts, enable_network=True)
+        install_command = []
+        if need_bind_mounts:
+            install_command += ["unshare", "-m", "--map-users=all", "--map-groups=all", "--"]
+
+        install_command += ["/bin/bash", "-ex", "/tmp/install.sh"]
+        self.executor.check_call(install_command,  mounts=mounts, enable_network=True)
 
     def _copy_manifest_and_config(self, oci_dir: str, outname_base: Path):
         index_json = os.path.join(oci_dir, "index.json")
