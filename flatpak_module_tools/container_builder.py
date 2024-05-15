@@ -87,44 +87,10 @@ class ContainerBuilder:
 
     def _install_packages(self):
         installroot = self.executor.installroot
+        chroot = Chroot(self.executor)
+        chroot.prepare()
+
         packages = self.builder.get_install_packages()
-        package_str = " ".join(shlex.quote(p) for p in packages)
-
-        # If {installroot}/dev/null exists, we assume that /proc, /dev, etc
-        # are already set up as well they can be can we can't do anything more,
-        # otherwise we create bind mounts to the corresponding directories
-        # in the outer environment.
-        #
-        # The /var/cache/dnf bind mount allows mounting a persistent
-        # cache directory into the outer environment and having it be
-        # used across builds.
-
-        need_bind_mounts = not (installroot / "dev/null").exists()
-        install_sh = ""
-
-        if need_bind_mounts:
-            install_sh += dedent(f"""\
-                for i in /proc /sys /dev /var/cache/dnf ; do
-                    mkdir -p {installroot}/$i
-                    mount --rbind $i {installroot}/$i
-                done
-                """)
-
-        install_sh += dedent(f"""\
-            dnf --installroot={installroot} install -y {package_str}
-            """)
-
-        (installroot / "tmp").mkdir(mode=0o1777, parents=True)
-
-        cleanup_script = self.builder.get_cleanup_script()
-        if cleanup_script and cleanup_script.strip() != "":
-            self.executor.write_file(installroot / "tmp/cleanup.sh", cleanup_script)
-            install_sh += dedent(f"""\
-            cd {installroot}
-            chroot . /bin/sh -ex /tmp/cleanup.sh
-            """)
-
-        self.executor.write_file(Path("/tmp/install.sh"), install_sh)
 
         if self.context.local_repo:
             inner_local_repo_path = self._inner_local_repo_path
@@ -135,12 +101,17 @@ class ContainerBuilder:
         else:
             mounts = None
 
-        install_command = []
-        if need_bind_mounts:
-            install_command += ["unshare", "-m", "--map-users=all", "--map-groups=all", "--"]
+        chroot.check_call([
+                "dnf", f"--installroot={installroot}", "install", "-y"
+            ] + packages,
+            mounts=mounts)
 
-        install_command += ["/bin/bash", "-ex", "/tmp/install.sh"]
-        self.executor.check_call(install_command,  mounts=mounts, enable_network=True)
+        cleanup_script = self.builder.get_cleanup_script()
+        if cleanup_script and cleanup_script.strip() != "":
+            self.executor.write_file(installroot / "tmp/cleanup.sh", cleanup_script)
+            chroot.check_call([
+                "chroot", ".", "/bin/sh", "-ex", "/tmp/cleanup.sh"
+            ])
 
     def _copy_manifest_and_config(self, oci_dir: str, outname_base: Path):
         index_json = os.path.join(oci_dir, "index.json")
