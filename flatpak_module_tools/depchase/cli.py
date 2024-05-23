@@ -1,7 +1,9 @@
 from collections import defaultdict
 from dataclasses import dataclass
+from functools import cached_property
 import json
 import logging
+import os
 import sys
 from typing import DefaultDict, Dict, List, Tuple
 
@@ -10,6 +12,7 @@ import click
 from ..config import add_config_file, set_profile_name, get_profile
 from ..utils import Arch, die, rpm_name_only
 from . import depchase, fetchrepodata
+from .repo_definition import RepoPaths
 
 
 def read_preinstalled_packages(runtime_profile):
@@ -34,19 +37,26 @@ class CliData:
         assert isinstance(ctx.obj, CliData)
         return ctx.obj
 
+    @cached_property
+    def repo_definitions(self):
+        repos: List[RepoPaths] = []
+
+        if self.tag != "NONE":
+            repos.append(RepoPaths.for_koji_tag(self.tag, arch=self.arch))
+
+        for localrepo in self.local_repos:
+            name, path = localrepo.split(":", 1)
+            repos.append(RepoPaths(name=name, url=f"file:{path}", arch=self.arch))
+
+        return repos
+
     def download_repo_metadata(self):
         if self.tag != "NONE":
-            fetchrepodata.download_repo_metadata(self.tag, self.arch, self.refresh)
-
-    def get_metadata_location(self):
-        if self.tag != "NONE":
-            return fetchrepodata.get_metadata_location(self.tag, self.arch)
-        else:
-            return ""
+            fetchrepodata.download_repo_metadata(self.repo_definitions, self.refresh)
 
     def make_pool(self):
         self.download_repo_metadata()
-        return depchase.make_pool(self.tag, self.arch, self.local_repos)
+        return depchase.setup_pool(self.arch, self.repo_definitions)
 
 
 @click.group()
@@ -85,6 +95,16 @@ def cli(ctx, verbose, config, profile, tag, arch, refresh, local_repo):
         get_profile()
     except KeyError:
         die(f"Unknown profile '{profile}'")
+
+    for lr in local_repo:
+        parts = lr.split(":", 1)
+        if len(parts) != 2:
+            raise click.ClickException("--local-repo must be of the form NAME:REPO_PATH")
+        repomd_xml_path = os.path.join(parts[1], "repodata/repomd.xml")
+        if not os.path.exists(repomd_xml_path):
+            raise click.ClickException(
+                f"{repomd_xml_path} doesn't exist - do you need to run createrepo_c?"
+            )
 
     refresh = fetchrepodata.Refresh[refresh.upper()]
     ctx.obj = CliData(
@@ -395,7 +415,7 @@ def flatpak_report(ctx, pkgs, runtime_profile, quiet=False):
 @cli.command
 @click.option(
     "--print-location", is_flag=True, default=False,
-    help="Output dependencies in JSON format"
+    help="Print location of downloaded metadata"
 )
 @click.pass_context
 def fetch_metadata(ctx, print_location):
@@ -405,7 +425,9 @@ def fetch_metadata(ctx, print_location):
 
     cli_data.download_repo_metadata()
     if print_location:
-        print(cli_data.get_metadata_location())
+        for definition in cli_data.repo_definitions:
+            if not definition.is_local:
+                print(f"{definition.local_metadata_path}")
 
 
 @cli.command

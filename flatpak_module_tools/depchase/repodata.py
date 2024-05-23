@@ -3,11 +3,10 @@ import logging
 import os.path
 import sys
 import tempfile
-from typing import List
 
 import solv
 
-from .fetchrepodata import load_cached_repodata, CACHEDIR
+from .repo_definition import RepoPaths, CACHEDIR
 from ..utils import die
 
 
@@ -15,10 +14,17 @@ log = logging.getLogger(__name__)
 
 
 class Repo(object):
-    def __init__(self, name, metadata_path, cachedir):
-        self.name = name
-        self.metadata_path = metadata_path
-        self.cachedir = cachedir
+    def __init__(self, definition: RepoPaths):
+        # Sanity-check that the repo exists
+        repomd_fname = os.path.join(definition.local_cache_path, "repodata", "repomd.xml")
+        if not os.path.exists(repomd_fname):
+            raise RuntimeError(
+                f"Cached repodata for {definition.name} not found at {definition.local_cache_path}"
+            )
+
+        self.name = definition.name
+        self.metadata_path = definition.local_cache_path
+        self.cachedir = CACHEDIR
         self._handle: solv.Repo | None = None
         self.cookie = None
         self.extcookie = None
@@ -269,19 +275,3 @@ def load_stub(repodata):
     if repo:
         return repo.load_ext(repodata)
     return False
-
-
-def setup_repos(tag, arch, local_repos):
-    repos: List[Repo] = []
-
-    if tag != "NONE":
-        cached_repodata = load_cached_repodata(tag, arch)
-
-        for reponame, cache_path in cached_repodata.repo_cache_paths.items():
-            repos.append(Repo(reponame, cache_path, cached_repodata.cache_dir))
-
-    for localrepo in local_repos:
-        name, path = localrepo.split(":", 1)
-        repos.append(Repo(name, os.path.abspath(path), CACHEDIR))
-
-    return repos

@@ -11,13 +11,16 @@ from typing import Iterable, List
 import solv
 
 from . import repodata
+from .repo_definition import RepoPaths
 from .repodata import Repo
 from ..utils import Arch
 
 log = logging.getLogger(__name__)
 
 
-def setup_pool(arch: Arch, repos: Iterable[Repo]):
+def setup_pool(arch: Arch, repo_definitions: Iterable[RepoPaths]):
+    repos = [Repo(rd) for rd in repo_definitions]
+
     pool = solv.Pool()
     # pool.set_debuglevel(2)
     pool.setarch(arch.rpm)
@@ -95,10 +98,6 @@ def _dependency_is_conditional(dependency):
 
 FullInfo = collections.namedtuple('FullInfo',
                                   ['name', 'rpm', 'srpm', 'repo', 'requires'])
-
-
-def make_pool(tag: str, arch: Arch, local_repos: List[str]) -> solv.Pool:
-    return setup_pool(arch, repodata.setup_repos(tag, arch, local_repos))
 
 
 _DEFAULT_HINTS = ("glibc-minimal-langpack",)

@@ -1,27 +1,21 @@
 """_fetchrepodata: Map yum/dnf repo metadata to local lookup caches"""
 import copy
-from dataclasses import dataclass
 from enum import Enum
 import logging
 from math import ceil
 import os
 import time
-from typing import Dict
+from typing import List
 from urllib.parse import urljoin
 
 import click
 from xml.etree import ElementTree as ET
-import koji
 import requests
 from requests_toolbelt.downloadutils.tee import tee_to_file
 
-from ..config import get_profile
-from ..utils import Arch, info, verbose
+from .repo_definition import RepoPaths
+from ..utils import info, verbose
 
-
-XDG_CACHE_HOME = (os.environ.get("XDG_CACHE_HOME")
-                  or os.path.expanduser("~/.cache"))
-CACHEDIR = os.path.join(XDG_CACHE_HOME, "flatpak-module-tools")
 
 log = logging.getLogger(__name__)
 
@@ -30,53 +24,6 @@ class Refresh(Enum):
     MISSING = 1
     ALWAYS = 2
     AUTO = 3
-
-
-@dataclass
-class RepoPaths:
-    remote_repo_url: str
-    local_cache_path: str
-
-    @property
-    def remote_metadata_url(self):
-        return urljoin(self.remote_repo_url, 'repodata/')
-
-    @remote_metadata_url.setter
-    def remote_metadata_url(self, url):
-        if not url.endswith('/repodata/'):
-            raise ValueError("'url' must end with '/repodata/'")
-
-        self.remote_repo_url = url[:-9]  # with 'repodata/' stripped
-
-    @property
-    def local_metadata_path(self):
-        return os.path.join(self.local_cache_path, 'repodata/')
-
-    @local_metadata_path.setter
-    def local_metadata_path(self, path):
-        self.local_cache_path = path[:-9]  # with 'repodata/' stripped
-
-
-def _define_repo(remote_repo_url: str, local_cache_name: str, arch: Arch):
-    local_cache_path = os.path.join(CACHEDIR, "repos", local_cache_name, arch.rpm)
-
-    return RepoPaths(remote_repo_url, local_cache_path)
-
-
-class DistroPaths:
-    def __init__(self, tag: str, arch: Arch):
-        profile = get_profile()
-
-        pathinfo = koji.PathInfo(topdir=profile.koji_options['topurl'])
-        baseurl = pathinfo.repo("latest", tag) + "/" + arch.rpm + "/"
-
-        self.repo_paths_by_name = {
-            tag: _define_repo(baseurl, tag, arch)
-        }
-
-
-def _get_distro_paths(release, arch):
-    return DistroPaths(release, arch)
 
 
 METADATA_SECTIONS = ("filelists", "primary")
@@ -114,7 +61,7 @@ def _download_one_file(remote_url, filename):
     info(f"  Added {filename} to cache")
 
 
-def _download_metadata_files(repo_paths, refresh):
+def _download_metadata_files(repo_paths: RepoPaths, refresh):
     os.makedirs(repo_paths.local_metadata_path, exist_ok=True)
 
     repomd_filename = os.path.join(repo_paths.local_metadata_path,
@@ -160,7 +107,7 @@ def _download_metadata_files(repo_paths, refresh):
 
     written_basenames = set(("repomd.xml",))
     for relative_href in files_to_fetch:
-        absolute_href = urljoin(repo_paths.remote_repo_url, relative_href)
+        absolute_href = urljoin(repo_paths.url, relative_href)
         basename = os.path.basename(relative_href)
         filename = os.path.join(repo_paths.local_metadata_path, basename)
         # This could be parallelised with concurrent.futures, but
@@ -174,41 +121,9 @@ def _download_metadata_files(repo_paths, refresh):
             os.unlink(os.path.join(repo_paths.local_metadata_path, f))
 
 
-def download_repo_metadata(tag, arch, refresh: Refresh):
+def download_repo_metadata(repo_definitions: List[RepoPaths], refresh: Refresh):
     """Downloads the latest repo metadata"""
 
-    paths = _get_distro_paths(tag, arch)
-    for repo_definition in paths.repo_paths_by_name.values():
-        _download_metadata_files(repo_definition, refresh)
-
-
-def get_metadata_location(tag, arch):
-    paths = _get_distro_paths(tag, arch)
-    return paths.repo_paths_by_name[tag].local_metadata_path
-
-
-@dataclass
-class LocalMetadataCache:
-    cache_dir: str
-    repo_cache_paths: Dict[str, str]
-
-
-def load_cached_repodata(tag: str, arch: Arch):
-    paths = _get_distro_paths(tag, arch)
-
-    # Sanity-check that all the repos we expect exist
-    for repo_name, repo_path in paths.repo_paths_by_name.items():
-        metadata_dir = os.path.join(repo_path.local_cache_path)
-        repomd_fname = os.path.join(metadata_dir, "repodata", "repomd.xml")
-
-        if not os.path.exists(repomd_fname):
-            raise RuntimeError(f"Cached repodata for {repo_name} not found at {repo_path}")
-
-    # Load the metadata
-    return LocalMetadataCache(
-        cache_dir=CACHEDIR,
-        repo_cache_paths={
-            n: c.local_cache_path
-            for n, c in paths.repo_paths_by_name.items()
-        }
-    )
+    for repo_definition in repo_definitions:
+        if not repo_definition.is_local:
+            _download_metadata_files(repo_definition, refresh)
