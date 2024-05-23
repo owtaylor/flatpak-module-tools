@@ -118,19 +118,26 @@ class RpmBuilder:
             packages = []
             packages_file = None
 
-        local_repo = []
+        tag_arg = []
+        if include_tag:
+            tag_arg = ["--tag={self.context.app_build_repo.tag_name}"]
+
+        local_repo_arg = []
         if include_localrepo and self.context.local_repo:
             if (self.context.local_repo / "repodata/repomd.xml").exists():
-                local_repo = [f"--local-repo=local:{self.context.local_repo}"]
+                local_repo_arg = [f"--local-repo=local:{self.context.local_repo}"]
 
-        rpm_build_tag = self.context.app_build_repo.tag_name if include_tag else "NONE"
         try:
             return subprocess.check_output(
                 ["flatpak-module-depchase",
                     f"--profile={self.profile.name}",
-                    f"--arch={self.arch.oci}",
-                    f"--tag={rpm_build_tag}",
-                    f"--refresh={refresh}"] + local_repo + [cmd] + packages + args,
+                    f"--arch={self.arch.oci}"] +
+                tag_arg +
+                [f"--refresh={refresh}"] +
+                local_repo_arg +
+                [cmd] +
+                packages +
+                args,
                 encoding="utf-8"
             )
         finally:

@@ -27,10 +27,11 @@ def read_preinstalled_packages(runtime_profile):
 
 @dataclass
 class CliData:
-    tag: str
+    tag: str | None
     arch: Arch
     refresh: fetchrepodata.Refresh
     local_repos: List[str]
+    remote_repos: List[str]
 
     @staticmethod
     def from_context(ctx: click.Context):
@@ -41,18 +42,55 @@ class CliData:
     def repo_definitions(self):
         repos: List[RepoDefinition] = []
 
-        if self.tag != "NONE":
+        def substitute_basearch(value: str):
+            return value.replace("$basearch", self.arch.rpm)
+
+        def validate_local_repo(path: str):
+            repomd_xml_path = os.path.join(path, "repodata/repomd.xml")
+            if not os.path.exists(repomd_xml_path):
+                raise click.ClickException(
+                    f"{repomd_xml_path} doesn't exist - do you need to run createrepo_c?"
+                )
+
+        if self.tag:
             repos.append(RepoDefinition.for_koji_tag(self.tag, arch=self.arch))
 
-        for localrepo in self.local_repos:
-            name, path = localrepo.split(":", 1)
+        for lr in self.local_repos:
+            parts = lr.split(":", 1)
+            if len(parts) != 2:
+                raise click.ClickException("--local-repo must be of the form NAME:REPO_PATH")
+
+            name = parts[0]
+            path = substitute_basearch(parts[1])
+
+            validate_local_repo(path)
+
             repos.append(RepoDefinition(name=name, url=f"file:{path}", arch=self.arch))
+
+        for lr in self.remote_repos:
+            parts = lr.split(":", 1)
+            if len(parts) != 2:
+                raise click.ClickException("--repo must be of the form NAME:URL")
+
+            name = parts[0]
+            url = substitute_basearch(parts[1])
+
+            if url.startswith("file:"):
+                validate_local_repo(parts[1][5:])
+            elif url.startswith("http:") or parts[1].startswith("https:"):
+                pass
+            else:
+                raise click.ClickException(f"{url} doesn't look like a valid URL")
+
+            repos.append(RepoDefinition(name=name, url=url, arch=self.arch))
+
+        if len(repos) == 0:
+            raise click.ClickException("No --tag, --local-repo, or --repo argument provided")
 
         return repos
 
     def download_repo_metadata(self):
-        if self.tag != "NONE":
-            fetchrepodata.download_repo_metadata(self.repo_definitions, self.refresh)
+        fetchrepodata.download_repo_metadata(self.repo_definitions, self.refresh)
 
     def make_pool(self):
         self.download_repo_metadata()
@@ -73,7 +111,7 @@ class CliData:
     help='Alternate configuration profile to use'
 )
 @click.option(
-    '-t', '--tag', metavar='KOJI_TAG', required=True,
+    '-t', '--tag', metavar='KOJI_TAG', required=False,
     help='Koji build tag to use as package source. NONE for local repositories only'
 )
 @click.option('-a', '--arch', help='Architecture')
@@ -85,8 +123,12 @@ class CliData:
     '-l', '--local-repo', metavar='NAME:REPO_PATH', multiple=True,
     help="Add a local repository as a source for package resolution"
 )
+@click.option(
+    '-r', '--repo', metavar='NAME:REPO_URL', multiple=True,
+    help="Add a repository as a source for package resolution"
+)
 @click.pass_context
-def cli(ctx, verbose, config, profile, tag, arch, refresh, local_repo):
+def cli(ctx, verbose, config, profile, tag, arch, refresh, local_repo, repo):
     for c in reversed(config):
         add_config_file(c)
 
@@ -96,19 +138,9 @@ def cli(ctx, verbose, config, profile, tag, arch, refresh, local_repo):
     except KeyError:
         die(f"Unknown profile '{profile}'")
 
-    for lr in local_repo:
-        parts = lr.split(":", 1)
-        if len(parts) != 2:
-            raise click.ClickException("--local-repo must be of the form NAME:REPO_PATH")
-        repomd_xml_path = os.path.join(parts[1], "repodata/repomd.xml")
-        if not os.path.exists(repomd_xml_path):
-            raise click.ClickException(
-                f"{repomd_xml_path} doesn't exist - do you need to run createrepo_c?"
-            )
-
     refresh = fetchrepodata.Refresh[refresh.upper()]
     ctx.obj = CliData(
-        arch=Arch(oci=arch), tag=tag, refresh=refresh, local_repos=local_repo
+        arch=Arch(oci=arch), tag=tag, refresh=refresh, local_repos=local_repo, remote_repos=repo
     )
 
     if verbose:
@@ -415,7 +447,7 @@ def flatpak_report(ctx, pkgs, runtime_profile, quiet=False):
 @cli.command
 @click.option(
     "--print-location", is_flag=True, default=False,
-    help="Print location of downloaded metadata"
+    help="Print locations of downloaded metadata"
 )
 @click.pass_context
 def fetch_metadata(ctx, print_location):
@@ -427,7 +459,7 @@ def fetch_metadata(ctx, print_location):
     if print_location:
         for definition in cli_data.repo_definitions:
             if not definition.is_local:
-                print(f"{definition.local_metadata_path}")
+                print(f"{definition.name}\t{definition.local_metadata_path}")
 
 
 @cli.command
