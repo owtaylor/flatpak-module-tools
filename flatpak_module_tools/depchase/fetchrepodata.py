@@ -13,7 +13,7 @@ from xml.etree import ElementTree as ET
 import requests
 from requests_toolbelt.downloadutils.tee import tee_to_file
 
-from .repo_definition import RepoPaths
+from .repo_definition import RepoDefinition
 from ..utils import info, verbose
 
 
@@ -61,10 +61,10 @@ def _download_one_file(remote_url, filename):
     info(f"  Added {filename} to cache")
 
 
-def _download_metadata_files(repo_paths: RepoPaths, refresh):
-    os.makedirs(repo_paths.local_metadata_path, exist_ok=True)
+def _download_metadata_files(repo_definition: RepoDefinition, refresh):
+    os.makedirs(repo_definition.local_metadata_path, exist_ok=True)
 
-    repomd_filename = os.path.join(repo_paths.local_metadata_path,
+    repomd_filename = os.path.join(repo_definition.local_metadata_path,
                                    "repomd.xml")
 
     need_refresh = True
@@ -81,15 +81,15 @@ def _download_metadata_files(repo_paths: RepoPaths, refresh):
                 need_refresh = False
 
     if need_refresh:
-        repomd_url = urljoin(repo_paths.remote_metadata_url, "repomd.xml")
+        repomd_url = urljoin(repo_definition.remote_metadata_url, "repomd.xml")
 
         info(f"Remote metadata: {repomd_url}")
         response = requests.get(repomd_url)
         if response.history:
             repomd_url = response.history[-1].headers['location']
             # avoid modifying external object
-            repo_paths = copy.copy(repo_paths)
-            repo_paths.remote_metadata_url = urljoin(repomd_url, ".")
+            repo_definition = copy.copy(repo_definition)
+            repo_definition.remote_metadata_url = urljoin(repomd_url, ".")
             info(f" -> redirected: {repomd_url}")
         response.raise_for_status()
 
@@ -107,21 +107,21 @@ def _download_metadata_files(repo_paths: RepoPaths, refresh):
 
     written_basenames = set(("repomd.xml",))
     for relative_href in files_to_fetch:
-        absolute_href = urljoin(repo_paths.url, relative_href)
+        absolute_href = urljoin(repo_definition.url, relative_href)
         basename = os.path.basename(relative_href)
-        filename = os.path.join(repo_paths.local_metadata_path, basename)
+        filename = os.path.join(repo_definition.local_metadata_path, basename)
         # This could be parallelised with concurrent.futures, but
         # probably not worth it (it makes the progress bars trickier)
         _download_one_file(absolute_href, filename)
         written_basenames.add(basename)
 
     # Prune any old metadata files automatically
-    for f in os.listdir(repo_paths.local_metadata_path):
+    for f in os.listdir(repo_definition.local_metadata_path):
         if f not in written_basenames:
-            os.unlink(os.path.join(repo_paths.local_metadata_path, f))
+            os.unlink(os.path.join(repo_definition.local_metadata_path, f))
 
 
-def download_repo_metadata(repo_definitions: List[RepoPaths], refresh: Refresh):
+def download_repo_metadata(repo_definitions: List[RepoDefinition], refresh: Refresh):
     """Downloads the latest repo metadata"""
 
     for repo_definition in repo_definitions:

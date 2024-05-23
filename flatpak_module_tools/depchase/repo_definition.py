@@ -14,7 +14,7 @@ CACHEDIR = os.path.join(XDG_CACHE_HOME, "flatpak-module-tools")
 
 
 @dataclass
-class RepoPaths:
+class RepoDefinition:
     name: str
     url: str
     arch: Arch
@@ -52,6 +52,6 @@ class RepoPaths:
         pathinfo = koji.PathInfo(topdir=profile.koji_options['topurl'])
         baseurl = pathinfo.repo("latest", tag) + "/" + arch.rpm + "/"
 
-        return RepoPaths(name=tag,
-                         url=baseurl,
-                         arch=arch)
+        return RepoDefinition(name=tag,
+                              url=baseurl,
+                              arch=arch)

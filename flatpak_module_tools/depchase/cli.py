@@ -12,7 +12,7 @@ import click
 from ..config import add_config_file, set_profile_name, get_profile
 from ..utils import Arch, die, rpm_name_only
 from . import depchase, fetchrepodata
-from .repo_definition import RepoPaths
+from .repo_definition import RepoDefinition
 
 
 def read_preinstalled_packages(runtime_profile):
@@ -39,14 +39,14 @@ class CliData:
 
     @cached_property
     def repo_definitions(self):
-        repos: List[RepoPaths] = []
+        repos: List[RepoDefinition] = []
 
         if self.tag != "NONE":
-            repos.append(RepoPaths.for_koji_tag(self.tag, arch=self.arch))
+            repos.append(RepoDefinition.for_koji_tag(self.tag, arch=self.arch))
 
         for localrepo in self.local_repos:
             name, path = localrepo.split(":", 1)
-            repos.append(RepoPaths(name=name, url=f"file:{path}", arch=self.arch))
+            repos.append(RepoDefinition(name=name, url=f"file:{path}", arch=self.arch))
 
         return repos
 

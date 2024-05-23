@@ -6,7 +6,7 @@ import tempfile
 
 import solv
 
-from .repo_definition import RepoPaths, CACHEDIR
+from .repo_definition import RepoDefinition, CACHEDIR
 from ..utils import die
 
 
@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 
 
 class Repo(object):
-    def __init__(self, definition: RepoPaths):
+    def __init__(self, definition: RepoDefinition):
         # Sanity-check that the repo exists
         repomd_fname = os.path.join(definition.local_cache_path, "repodata", "repomd.xml")
         if not os.path.exists(repomd_fname):

@@ -11,14 +11,14 @@ from typing import Iterable, List
 import solv
 
 from . import repodata
-from .repo_definition import RepoPaths
+from .repo_definition import RepoDefinition
 from .repodata import Repo
 from ..utils import Arch
 
 log = logging.getLogger(__name__)
 
 
-def setup_pool(arch: Arch, repo_definitions: Iterable[RepoPaths]):
+def setup_pool(arch: Arch, repo_definitions: Iterable[RepoDefinition]):
     repos = [Repo(rd) for rd in repo_definitions]
 
     pool = solv.Pool()
