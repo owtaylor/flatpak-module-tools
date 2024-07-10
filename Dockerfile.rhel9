@@ -31,6 +31,10 @@ COPY pyproject.toml LICENSE LICENSE.gplv3 MANIFEST.in /opt/app-root/src/
 RUN chown -R 1001 /opt/app-root/src/
 
 USER 1001
-
 RUN mkdir /tmp/wheel && pip3 install build && python3 -m build . --outdir=/tmp/wheel && pip3 install $(echo /tmp/wheel/*.whl)'[cli,tests]'
+
+# Tests need to run as root, since they do a rpm --root, and doing that unprivileged
+# is not compatible with 'buildah --isolation=chroot'
+USER root
 RUN pytest tests
+USER 1001
