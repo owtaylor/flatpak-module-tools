@@ -1,0 +1,36 @@
+# Keep in sync with Dockerfile.rhel9
+
+FROM quay.io/sclorg/python-39-c9s
+
+USER root
+
+RUN dnf \
+    --enablerepo=crb \
+    -y install \
+    cairo-devel \
+    cairo-gobject-devel \
+    createrepo_c \
+    flatpak \
+    git-core \
+    gobject-introspection-devel \
+    libappstream-glib \
+    ostree \
+    python3-rpm \
+    rpm-build
+
+WORKDIR /opt/app-root/src
+
+COPY .git/ /opt/app-root/src/.git
+COPY flatpak_module_tools/ /opt/app-root/src/flatpak_module_tools
+COPY tests/ /opt/app-root/src/tests
+COPY pyproject.toml LICENSE LICENSE.gplv3 MANIFEST.in /opt/app-root/src/
+RUN chown -R 1001 /opt/app-root/src/
+
+USER 1001
+RUN mkdir /tmp/wheel && pip3 install build && python3 -m build . --outdir=/tmp/wheel && pip3 install $(echo /tmp/wheel/*.whl)'[cli,tests]'
+
+# Tests need to run as root, since they do a rpm --root, and doing that unprivileged
+# is not compatible with 'buildah --isolation=chroot'
+USER root
+RUN pytest tests
+USER 1001
