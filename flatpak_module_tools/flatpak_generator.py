@@ -1,7 +1,6 @@
 import json
 import os
 import re
-import sys
 from textwrap import dedent
 
 import click
@@ -155,9 +154,13 @@ class FlatpakGenerator(str):
 
     def _write_container_yaml(self, output_fname, flathub_manifest, runtime_name, runtime_version):
         if flathub_manifest:
-            container_yaml = self._flathub_container_yaml(flathub_manifest, runtime_name, runtime_version)
+            container_yaml = self._flathub_container_yaml(
+                flathub_manifest, runtime_name, runtime_version
+            )
         else:
-            container_yaml = self._default_container_yaml(runtime_name, runtime_version)
+            container_yaml = self._default_container_yaml(
+                runtime_name, runtime_version
+            )
 
         with open(output_fname, 'w') as f:
             f.write(container_yaml)
@@ -190,4 +193,6 @@ class FlatpakGenerator(str):
                     if r["id_prefix"] == "FEDORA-FLATPAK"
             )
 
-        self._write_container_yaml(output_containerspec, flathub_manifest, runtime_name, runtime_version)
+        self._write_container_yaml(
+            output_containerspec, flathub_manifest, runtime_name, runtime_version
+        )
