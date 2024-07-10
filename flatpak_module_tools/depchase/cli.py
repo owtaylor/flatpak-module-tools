@@ -5,7 +5,7 @@ import json
 import logging
 import os
 import sys
-from typing import DefaultDict, Dict, List, Tuple
+from typing import DefaultDict, Dict, List, Optional, Tuple
 
 import click
 
@@ -27,7 +27,7 @@ def read_preinstalled_packages(runtime_profile):
 
 @dataclass
 class CliData:
-    tag: str | None
+    tag: Optional[str]
     arch: Arch
     refresh: fetchrepodata.Refresh
     local_repos: List[str]
@@ -155,7 +155,7 @@ class PackageInfo:
         self.nvra = None
         self.repo = None
         self.source = None
-        self.explanation: List[str] | None = None
+        self.explanation: Optional[List[str]] = None
         self.required_by: List[Tuple[str, str]] = []
 
     def print_explanation(self, prefix):

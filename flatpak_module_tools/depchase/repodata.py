@@ -3,6 +3,7 @@ import logging
 import os.path
 import sys
 import tempfile
+from typing import Optional
 
 import solv
 
@@ -25,7 +26,7 @@ class Repo(object):
         self.name = definition.name
         self.metadata_path = definition.local_cache_path
         self.cachedir = CACHEDIR
-        self._handle: solv.Repo | None = None
+        self._handle: Optional[solv.Repo] = None
         self.cookie = None
         self.extcookie = None
 
@@ -98,7 +99,7 @@ class Repo(object):
             return False
         return True
 
-    def writecachedrepo(self, ext, repodata: solv.XRepodata | None = None):
+    def writecachedrepo(self, ext, repodata: Optional[solv.XRepodata] = None):
         tmpname = None
         try:
             fd, tmpname = tempfile.mkstemp(prefix=".newsolv-",

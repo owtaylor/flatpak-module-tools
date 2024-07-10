@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 from textwrap import dedent
+from typing import Optional
 
 from flatpak_module_tools.chroot import Chroot
 
@@ -166,7 +167,7 @@ class ContainerBuilder:
         self._install_packages()
 
     def _export_container(self, *, resultdir: Path,
-                          result_filename: str | None = None,
+                          result_filename: Optional[str] = None,
                           write_aux_files: bool = False):
         name, version, release = self.context.nvr.rsplit('-', 2)
         self._add_labels_to_builder(name, version, release)
@@ -262,7 +263,7 @@ class ContainerBuilder:
 
     def export_container(self, *,
                          installroot: Path, workdir: Path, resultdir: Path,
-                         result_filename: str | None = None,
+                         result_filename: Optional[str] = None,
                          write_aux_files: bool = True):
         self.executor = InnerExcutor(
             context=self.context,

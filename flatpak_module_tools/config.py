@@ -65,7 +65,7 @@ class ProfileConfig:
         for k in self.config_keys:
             setattr(self, k, None)
 
-        self._koji_session: koji.ClientSession | None = None
+        self._koji_session: Optional[koji.ClientSession] = None
 
     def merge(self, yml):
         for k in self.config_keys:
