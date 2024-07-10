@@ -8,7 +8,14 @@ import rpm
 
 
 def _get_ts(root: Path):
-    rpm.addMacro('_dbpath', str(root / "usr/lib/sysimage/rpm"))  # type: ignore
+    # https://fedoraproject.org/wiki/Changes/RelocateRPMToUsr
+    for dbpath in (root / "usr/lib/sysimage/rpm", root / "var/lib/rpm"):
+        if dbpath.exists():
+            break
+    else:
+        raise RuntimeError("Can't find rpmdb")
+
+    rpm.addMacro('_dbpath', str(dbpath))  # type: ignore
     ts = rpm.TransactionSet()  # type: ignore
     ts.openDB()
     rpm.delMacro('_dbpath')  # type: ignore

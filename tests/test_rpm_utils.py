@@ -149,6 +149,10 @@ def test_get_package_version(rpmroot: Path):
     with pytest.raises(RuntimeError, match=r"No installed copy of testrpm-notthere in "):
         get_package_version(rpmroot, "testrpm-notthere")
 
+    (rpmroot / "empty").mkdir()
+    with pytest.raises(RuntimeError, match=r"Can't find rpmdb"):
+        get_package_version(rpmroot / "empty", "testrpm-notthere")
+
 
 def test_version_info():
     v1 = VersionInfo(None, "1.2", "3.fc28")
